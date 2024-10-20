@@ -49,7 +49,6 @@ class NovaDaxClient:
     
     def create_order(self):
         brl = self.get_brl_avaliable()
-        brl = 120
         if brl < MIN_VALUE_PER_SYMBOL:
             return {"Saldo insuficiente para abrir ordens": round(brl, 2)}
         
