@@ -1,6 +1,5 @@
 from novadax import RequestClient as NovaClient
 from datetime import datetime
-import csv
 import connection
 
 # Constantes
