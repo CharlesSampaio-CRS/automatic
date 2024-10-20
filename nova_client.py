@@ -87,15 +87,6 @@ class NovaDaxClient:
         except Exception as e:
             print(f"Erro ao salvar no banco de dados: {e}")
 
-
-    def save_to_csv(self, symbol, value, date, variation):
-        with open(CSV_FILE_NAME, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([symbol, value, date, variation])
-
-    def date_update(self):
-        return datetime.now().strftime("%d/%m/%Y %H:%M")
-
     def create_and_send_order(self, asset, symbol):
         self.client.create_order(
             symbol=symbol, 
