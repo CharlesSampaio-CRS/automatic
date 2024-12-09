@@ -29,7 +29,8 @@ class NovaDaxClient:
         try:
             assets = self.client.get_account_balance_current()['data']['assets']
             brl_asset = next((asset for asset in assets if asset['currency'] == 'BRL'), None)
-            return float(brl_asset['available']) if brl_asset else 0
+            avaliable = float(brl_asset['available']) if brl_asset else 0
+            return round(avaliable,2)
         except Exception as e:
             print(f"{ERROR_BALANCE_FETCH}: {e}")
             return 0
@@ -59,8 +60,10 @@ class NovaDaxClient:
                 else:
                     total_in_brl += self.convert_to_brl(currency, balance)
 
-            print(f"Total dos ativos em BRL: R$ {total_in_brl:.2f}")
-            return total_in_brl
+                avaliable = self.get_brl_available()
+ 
+            return {"total_assets_brl":round(total_in_brl - avaliable,2),"avaliable_brl": avaliable,"total_brl":round(total_in_brl + avaliable,2),"date":datetime.now().astimezone()}
+        
         except Exception as e:
             print(f"Erro ao calcular total dos ativos: {e}")
             return 0
@@ -116,9 +119,7 @@ class NovaDaxClient:
 
         self.allocate_funds_to_orders(brl_balance, symbol_orders)
         self.execute_orders(symbol_orders)
-
-        remaining_balance = self.get_brl_available()
-        return {"assets": symbol_orders, "restMoney": round(remaining_balance, 2)}
+        print("Order executed.")
 
     # 4. MÉTODOS AUXILIARES PARA ORDENS
     def initialize_symbol_orders(self, symbol_variations):
@@ -157,7 +158,7 @@ class NovaDaxClient:
         order_data = {"symbol": symbol, "value": value, "date": date, "variation": variation, "status": status}
         try:
             db.orders.insert_one(order_data)
-            print(f"Order saved to database: {order_data}")
+            return "Order saved to database: {order_data}"
         except Exception as e:
             print(f"{ERROR_DB_SAVE}: {e}")
 
