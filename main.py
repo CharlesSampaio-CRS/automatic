@@ -6,8 +6,8 @@ import threading
 from datetime import datetime
 
 # Constantes de API
-API_KEY = '5c5a2fa1-8419-4a99-aef7-87a3baef5fec'  # Local no commit
-API_SECRET = 'WMqML2GNdchmtyGCkJ3aANrVQ35vIT9R'   # Local no commit
+API_KEY = 'key' # Local no commit
+API_SECRET = 'secret' # Local no commit
 
 # Constantes de Agendamento
 BUSINESS_HOURS_START = 9      # 9 AM
