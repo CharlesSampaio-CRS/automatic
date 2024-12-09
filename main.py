@@ -4,22 +4,23 @@ from nova_client import NovaDaxClient
 import time
 import threading
 from datetime import datetime
-import csv
 
-# Constantes
-API_KEY = 'XXX'
-API_SECRET = 'xxx'
-BUSINESS_HOURS_START = 9  # 9 AM
-BUSINESS_HOURS_END = 23   # 11 PM
-SCHEDULE_INTERVAL_HOURS = 2
-COUNTDOWN_INTERVAL_SECONDS = 43200  # 12 hours
+# Constantes de API
+API_KEY = 'key'  # Local no commit
+API_SECRET = 'secret'   # Local no commit
+
+# Constantes de Agendamento
+BUSINESS_HOURS_START = 9      # 9 AM
+BUSINESS_HOURS_END = 23       # 11 PM
+SCHEDULE_INTERVAL_HOURS = 2  #2 Hours
+COUNTDOWN_INTERVAL_SECONDS = 43200  # 12 Hours
+
+# Mensagens
+MSG_API_RUNNING = "API is running!"
+MSG_OUTSIDE_BUSINESS_HOURS = "Outside of business hours. Scheduled order not executed."
+MSG_SCHEDULED_ORDER_EXECUTED = "Scheduled order executed:"
 
 app = Flask(__name__)
-
-def save_log_to_csv(message, status):
-    with open('execution_log.csv', mode='a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow([datetime.now().strftime("%d/%m/%Y %H:%M:%S"), message, status])
 
 def scheduled_order():
     current_hour = datetime.now().hour
@@ -27,13 +28,9 @@ def scheduled_order():
     if BUSINESS_HOURS_START <= current_hour < BUSINESS_HOURS_END:
         nova_client = NovaDaxClient(API_KEY, API_SECRET)
         data = nova_client.create_order()
-        log_message = f"Scheduled order executed: {data}"
-        save_log_to_csv(log_message, "Executed")
-        print(log_message)
+        print(f"{MSG_SCHEDULED_ORDER_EXECUTED} {data}")
     else:
-        log_message = "Outside of business hours. Scheduled order not executed."
-        save_log_to_csv(log_message, "Not Executed")
-        print(log_message)
+        print(MSG_OUTSIDE_BUSINESS_HOURS)
 
 def countdown_timer(interval):
     while True:
@@ -46,8 +43,8 @@ def countdown_timer(interval):
 @app.route("/balance")
 def balance():
     nova_client = NovaDaxClient(API_KEY, API_SECRET)
-    data = nova_client.get_non_zero_sorted_assets()
-    return {'assets': data}
+    data = nova_client.get_total_assets_in_brl()
+    return {'balance': data,'date': datetime.now()}
 
 @app.route("/order")
 def order():
@@ -55,14 +52,13 @@ def order():
     data = nova_client.create_order()
     return data
 
-# Configuração do scheduler
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=scheduled_order, trigger="interval", hours=SCHEDULE_INTERVAL_HOURS)
 scheduler.start()
 
 @app.route("/")
 def home():
-    return "API is running!"
+    return MSG_API_RUNNING
 
 if __name__ == "__main__":
     timer_thread = threading.Thread(target=countdown_timer, args=(COUNTDOWN_INTERVAL_SECONDS,))
