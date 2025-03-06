@@ -53,8 +53,9 @@ class NovaDaxClient:
                     total_in_brl += self.convert_to_brl(currency, balance)
 
                 available = self.get_brl_available()
+                assets_coin = self.get_non_zero_sorted_assets()
 
-            return {"total_assets_brl": round(total_in_brl - available, 2), "available_brl": available, "total_brl": round(total_in_brl + available, 2), "date": datetime.now().astimezone()}
+            return {"total_assets_brl": round(total_in_brl - available, 2), "available_brl": available, "total_brl": round(total_in_brl + available, 2), "date": datetime.now().astimezone(), "tokens": assets_coin}
         
         except Exception as e:
             print(f"Error calculating total assets: {e}")
