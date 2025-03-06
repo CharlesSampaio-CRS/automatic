@@ -2,6 +2,7 @@ from novadax import RequestClient as NovaClient
 from datetime import datetime
 import database.connection as connection
 
+MIN_VALUE_PER_CREATE_ORDER = 100
 MIN_VALUE_PER_SYMBOL = 50
 SYMBOLS = ["NC_BRL", "GROK_BRL"]
 
@@ -96,7 +97,7 @@ class NovaDaxClient:
 
     def create_order(self):
         brl_balance = self.get_brl_available()
-        if brl_balance < MIN_VALUE_PER_SYMBOL:
+        if brl_balance < MIN_VALUE_PER_CREATE_ORDER:
             error_message = f"{ERROR_INSUFFICIENT_FUNDS}: Available balance: R$ {brl_balance:.2f}"
             print(error_message)
             return {"error": ERROR_INSUFFICIENT_FUNDS, "available_balance": round(brl_balance, 2)}
