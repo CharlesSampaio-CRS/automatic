@@ -1,20 +1,20 @@
 import os
+import pytz
+import time
+import threading
+from datetime import datetime, timedelta
 from flask import Flask, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.base import ConflictingIdError
 from client.nova_client import NovaDaxClient
-import time
-import threading
-from datetime import datetime
-import pytz
 
 API_KEY = os.getenv('API_KEY')
 API_SECRET = os.getenv('API_SECRET')
 
 BUSINESS_HOURS_START = 9
 BUSINESS_HOURS_END = 23
-SCHEDULE_INTERVAL_HOURS = 2
-COUNTDOWN_INTERVAL_SECONDS = 43200
+SCHEDULE_INTERVAL_HOURS = 2  # Alterado para rodar a cada 2 horas
+COUNTDOWN_INTERVAL_SECONDS = SCHEDULE_INTERVAL_HOURS * 3600
 
 MSG_API_RUNNING = "API is running!"
 MSG_OUTSIDE_BUSINESS_HOURS = "Outside business hours. Order not executed."
@@ -40,11 +40,14 @@ def scheduled_order():
 
 def countdown_timer(interval):
     while True:
-        time_left = interval - (time.time() % interval)
-        hours, remainder = divmod(time_left, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        print(f'Time until next order: {int(hours)}:{int(minutes):02}:{int(seconds):02}', end='\r')
-        time.sleep(1)
+        next_run_time = datetime.now() + timedelta(seconds=interval)
+        while datetime.now() < next_run_time:
+            time_left = (next_run_time - datetime.now()).total_seconds()
+            hours, remainder = divmod(int(time_left), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            log_message = f'Time until next order: {hours:02}:{minutes:02}:{seconds:02}'
+            print(log_message, end='\r')
+            time.sleep(1)
 
 @app.route("/balance")
 def balance():
