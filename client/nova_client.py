@@ -2,8 +2,8 @@ from novadax import RequestClient as NovaClient
 from datetime import datetime
 import database.connection as connection
 
-MIN_VALUE_PER_CREATE_ORDER = 100
-MIN_VALUE_PER_SYMBOL = 50
+MIN_VALUE_PER_CREATE_ORDER = 80
+MIN_VALUE_PER_SYMBOL = 25
 SYMBOLS = ["NC_BRL", "GROK_BRL"]
 
 STATUS_SUCCESS = "SUCCESS"

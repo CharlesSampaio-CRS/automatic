@@ -13,8 +13,8 @@ API_SECRET = os.getenv('API_SECRET')
 
 BUSINESS_HOURS_START = 9
 BUSINESS_HOURS_END = 23
-SCHEDULE_INTERVAL_HOURS = 2  # Alterado para rodar a cada 2 horas
-COUNTDOWN_INTERVAL_SECONDS = SCHEDULE_INTERVAL_HOURS * 3600
+SCHEDULE_INTERVAL_MINUTES = 6  # Alterado para rodar a cada 6 minutos
+COUNTDOWN_INTERVAL_SECONDS = SCHEDULE_INTERVAL_MINUTES * 60
 
 MSG_API_RUNNING = "API is running!"
 MSG_OUTSIDE_BUSINESS_HOURS = "Outside business hours. Order not executed."
@@ -67,7 +67,7 @@ def home():
 
 if __name__ == "__main__":
     try:
-        scheduler.add_job(scheduled_order, "interval", hours=SCHEDULE_INTERVAL_HOURS)
+        scheduler.add_job(scheduled_order, "interval", minutes=SCHEDULE_INTERVAL_MINUTES)
         scheduler.start()
     except ConflictingIdError:
         print("Job already exists. Continuing execution...")
