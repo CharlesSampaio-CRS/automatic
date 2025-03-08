@@ -13,8 +13,8 @@ API_SECRET = os.getenv('API_SECRET')
 
 BUSINESS_HOURS_START = 9
 BUSINESS_HOURS_END = 23
-SCHEDULE_INTERVAL_MINUTES = 6  # Alterado para rodar a cada 6 minutos
-COUNTDOWN_INTERVAL_SECONDS = SCHEDULE_INTERVAL_MINUTES * 60
+SCHEDULE_INTERVAL_HOURS = 2  # Alterado para rodar a cada 2 horas
+COUNTDOWN_INTERVAL_SECONDS = SCHEDULE_INTERVAL_HOURS * 3600
 
 MSG_API_RUNNING = "API is running!"
 MSG_OUTSIDE_BUSINESS_HOURS = "Outside business hours. Order not executed."
@@ -40,14 +40,7 @@ def scheduled_order():
 
 def countdown_timer(interval):
     while True:
-        next_run_time = datetime.now() + timedelta(seconds=interval)
-        while datetime.now() < next_run_time:
-            time_left = (next_run_time - datetime.now()).total_seconds()
-            hours, remainder = divmod(int(time_left), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            log_message = f'Time until next order: {hours:02}:{minutes:02}:{seconds:02}'
-            print(log_message, end='\r')
-            time.sleep(1)
+        time.sleep(interval)
 
 @app.route("/balance")
 def balance():
@@ -67,7 +60,7 @@ def home():
 
 if __name__ == "__main__":
     try:
-        scheduler.add_job(scheduled_order, "interval", minutes=SCHEDULE_INTERVAL_MINUTES)
+        scheduler.add_job(scheduled_order, "interval", hours=SCHEDULE_INTERVAL_HOURS)
         scheduler.start()
     except ConflictingIdError:
         print("Job already exists. Continuing execution...")
