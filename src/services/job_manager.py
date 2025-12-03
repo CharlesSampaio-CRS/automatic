@@ -68,7 +68,34 @@ class DynamicJobManager:
             
             # Executa ordem 24/7 (sem restrição de horário)
             try:
-                print(f"\n[JOB] {pair} | {datetime.now(TZ).strftime('%H:%M:%S')}")
+                now = datetime.now(TZ)
+                
+                # Busca intervalo do job para calcular próxima execução
+                schedule_config = config.get('schedule', {})
+                interval_minutes = schedule_config.get('interval_minutes')
+                interval_hours = schedule_config.get('interval_hours')
+                
+                if interval_minutes:
+                    interval_display = f"{interval_minutes} min"
+                    from datetime import timedelta
+                    next_run = now + timedelta(minutes=interval_minutes)
+                elif interval_hours:
+                    interval_display = f"{interval_hours}h"
+                    from datetime import timedelta
+                    next_run = now + timedelta(hours=interval_hours)
+                else:
+                    interval_display = "?"
+                    next_run = None
+                
+                # Log simples e claro
+                print(f"\n{'='*60}")
+                print(f"🤖 JOB EXECUTADO")
+                print(f"{'='*60}")
+                print(f"📊 Par: {pair}")
+                print(f"⏰ Agora: {now.strftime('%d/%m/%Y %H:%M:%S')}")
+                if next_run:
+                    print(f"⏭️  Próxima: {next_run.strftime('%d/%m/%Y %H:%M:%S')} (em {interval_display})")
+                print(f"{'='*60}\n")
                 
                 # Cria cliente com configuração do MongoDB
                 mexc_client = MexcClient(self.api_key, self.api_secret, config)
