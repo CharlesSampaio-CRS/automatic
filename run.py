@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script de inicialização do bot de trading
+Script de inicialização do bot de Tranding
 """
 import sys
 import os

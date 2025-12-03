@@ -15,7 +15,7 @@ from src.database.mongodb_connection import connection_mongo
 from src.models.config_schema import validate_config, EXAMPLE_CONFIG
 
 # Collection de configurações
-CONFIG_COLLECTION = "bot_configs"
+CONFIG_COLLECTION = "BotConfigs"
 
 
 class ConfigService:

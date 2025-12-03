@@ -30,7 +30,7 @@ SYMBOL_CONFIG_SCHEMA = {
     },
     
     # Estratégia de compra específica
-    "trading_strategy": {
+    "Tranding_strategy": {
         "buy_on_dip": "boolean",
         "buy_strategy_type": "string",  # "gradual_dip", "fixed", etc
         "buy_levels": [
@@ -58,6 +58,25 @@ SYMBOL_CONFIG_SCHEMA = {
         "check_interval_minutes": "number",
         "auto_execute": "boolean",
         "notify_on_target": "boolean"
+    },
+    
+    # Estratégia de 1 hora (Scalping)
+    "strategy_1h": {
+        "enabled": "boolean",  # Ativa/desativa estratégia de 1h
+        "levels": [
+            {
+                "name": "string",
+                "variation_threshold": "number",    # Ex: -2.0 para -2%
+                "percentage_of_balance": "number",  # Ex: 5 para 5%
+                "description": "string"
+            }
+        ],
+        "risk_management": {
+            "stop_loss_percent": "number",          # Ex: -3.0 para -3%
+            "cooldown_minutes": "number",           # Ex: 15 minutos
+            "max_trades_per_hour": "number",        # Ex: 3 trades
+            "max_position_size_percent": "number"   # Ex: 10 para 10%
+        }
     },
     
     # Metadados
@@ -89,7 +108,7 @@ EXAMPLE_CONFIG = {
         "allocation_percentage": 50
     },
     
-    "trading_strategy": {
+    "Tranding_strategy": {
         "buy_on_dip": True,
         "buy_strategy_type": "gradual_dip",
         "buy_levels": [
@@ -148,6 +167,36 @@ EXAMPLE_CONFIG = {
         "notify_on_target": True
     },
     
+    "strategy_1h": {
+        "enabled": False,  # Desabilitado por padrão
+        "levels": [
+            {
+                "name": "Scalp Leve",
+                "variation_threshold": -2.0,
+                "percentage_of_balance": 5,
+                "description": "Compra pequena em queda rápida de 2%"
+            },
+            {
+                "name": "Scalp Moderado",
+                "variation_threshold": -3.0,
+                "percentage_of_balance": 7,
+                "description": "Compra média em queda de 3%"
+            },
+            {
+                "name": "Scalp Forte",
+                "variation_threshold": -5.0,
+                "percentage_of_balance": 10,
+                "description": "Compra forte em queda brusca de 5%"
+            }
+        ],
+        "risk_management": {
+            "stop_loss_percent": -3.0,
+            "cooldown_minutes": 15,
+            "max_trades_per_hour": 3,
+            "max_position_size_percent": 10.0
+        }
+    },
+    
     "metadata": {
         "last_execution": None,
         "total_orders": 0,
@@ -163,7 +212,7 @@ def validate_config(config: Dict) -> tuple[bool, Optional[str]]:
     Returns:
         (is_valid, error_message)
     """
-    required_fields = ["pair", "enabled", "schedule", "limits", "trading_strategy"]
+    required_fields = ["pair", "enabled", "schedule", "limits", "Tranding_strategy"]
     
     for field in required_fields:
         if field not in config:
@@ -187,5 +236,34 @@ def validate_config(config: Dict) -> tuple[bool, Optional[str]]:
     
     if not (0 < limits.get("allocation_percentage", 0) <= 100):
         return False, "allocation_percentage deve estar entre 0 e 100"
+    
+    # Valida strategy_1h (se existir)
+    if "strategy_1h" in config:
+        strategy_1h = config["strategy_1h"]
+        
+        # Valida levels
+        if "levels" in strategy_1h and strategy_1h["levels"]:
+            for level in strategy_1h["levels"]:
+                if level.get("variation_threshold", 0) >= 0:
+                    return False, "variation_threshold deve ser negativo (ex: -2.0)"
+                
+                if not (0 < level.get("percentage_of_balance", 0) <= 100):
+                    return False, "percentage_of_balance deve estar entre 0 e 100"
+        
+        # Valida risk_management
+        if "risk_management" in strategy_1h:
+            risk_mgmt = strategy_1h["risk_management"]
+            
+            if risk_mgmt.get("stop_loss_percent", 0) >= 0:
+                return False, "stop_loss_percent deve ser negativo (ex: -3.0)"
+            
+            if risk_mgmt.get("cooldown_minutes", 0) < 0:
+                return False, "cooldown_minutes deve ser >= 0"
+            
+            if risk_mgmt.get("max_trades_per_hour", 0) < 1:
+                return False, "max_trades_per_hour deve ser >= 1"
+            
+            if not (0 < risk_mgmt.get("max_position_size_percent", 0) <= 100):
+                return False, "max_position_size_percent deve estar entre 0 e 100"
     
     return True, None

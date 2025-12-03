@@ -1,10 +1,10 @@
-# 📮 Postman Collection - Bot Trading MEXC v2.0
+# 📮 Postman Collection - Bot Tranding MEXC v2.0
 
 ## 🚀 Como Importar
 
 1. Abra o Postman
 2. Clique em **Import**
-3. Selecione o arquivo `Bot_Trading.postman_collection.json`
+3. Selecione o arquivo `Bot_Tranding.postman_collection.json`
 4. A collection será importada com todos os endpoints organizados
 
 ---
@@ -114,7 +114,7 @@ Body: {"action": "reload"}
     "min_value_per_order": 20,
     "allocation_percentage": 30
   },
-  "trading_strategy": {
+  "Tranding_strategy": {
     "type": "buy_levels",
     "min_price_variation": 1.0,
     "levels": [

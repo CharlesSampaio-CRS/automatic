@@ -10,14 +10,22 @@ import sys
 from datetime import datetime
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.jobstores.base import ConflictingIdError, JobLookupError
+from apscheduler.jobstores.base import JobLookupError
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from src.services.config_service import config_service
 from src.clients.exchange import MexcClient
+from src.database.mongodb_connection import connection_mongo
+from src.utils.number_formatter import format_usdt
 
 TZ = pytz.timezone("America/Sao_Paulo")
+
+# Conecta ao MongoDB para logs de execução
+try:
+    execution_logs_db = connection_mongo("ExecutionLogs")
+except Exception:
+    execution_logs_db = None
 
 
 class DynamicJobManager:
@@ -72,7 +80,7 @@ class DynamicJobManager:
                 # Atualiza metadata
                 metadata_updates = {
                     "last_execution": datetime.now(),
-                    "status": "active"
+                    "status": "active" if result.get('status') == 'success' else "skipped"
                 }
                 
                 if result.get('status') == 'success':
@@ -88,6 +96,149 @@ class DynamicJobManager:
                 
                 config_service.update_metadata(pair, metadata_updates)
                 
+                # ✅ SEMPRE SALVA LOG (sucesso, skipped ou erro)
+                if execution_logs_db is not None:
+                    try:
+                        # Busca informações de mercado do par
+                        market_info = None
+                        try:
+                            ticker = mexc_client.client.fetch_ticker(pair)
+                            if ticker:
+                                last_price = float(ticker.get('last', 0))
+                                bid_price = float(ticker.get('bid', 0))
+                                ask_price = float(ticker.get('ask', 0))
+                                high_24h = float(ticker.get('high', 0))
+                                low_24h = float(ticker.get('low', 0))
+                                open_24h = float(ticker.get('open', 0))
+                                volume_24h = float(ticker.get('quoteVolume', 0))
+                                
+                                # Calcula variações
+                                change_24h = last_price - open_24h if open_24h > 0 else 0
+                                change_percent_24h = (change_24h / open_24h * 100) if open_24h > 0 else 0
+                                
+                                # Busca variação 1h
+                                variation_1h = mexc_client.get_variation_1h(pair)
+                                
+                                # Calcula spread
+                                spread_value = ask_price - bid_price if (ask_price and bid_price) else 0
+                                spread_percent = (spread_value / bid_price * 100) if bid_price > 0 else 0
+                                
+                                # Calcula volatilidade
+                                volatility = ((high_24h - low_24h) / low_24h * 100) if low_24h > 0 else 0
+                                
+                                # Status do spread
+                                if spread_percent < 0.3:
+                                    spread_status = "🟢 Baixo"
+                                elif spread_percent < 1.0:
+                                    spread_status = "🟡 Médio"
+                                else:
+                                    spread_status = "🔴 Alto"
+                                
+                                # Análise de tendência
+                                if change_percent_24h > 2:
+                                    trend = "📈 Alta"
+                                elif change_percent_24h < -2:
+                                    trend = "📉 Queda"
+                                else:
+                                    trend = "➡️ Lateral"
+                                
+                                # Análise de momentum
+                                if abs(change_percent_24h) > 10:
+                                    momentum = "🚀 Forte"
+                                elif abs(change_percent_24h) > 5:
+                                    momentum = "⚡ Moderado"
+                                else:
+                                    momentum = "😴 Fraco"
+                                
+                                # Análise de liquidez
+                                if volume_24h > 1000000:
+                                    liquidity = "💧 Alta"
+                                elif volume_24h > 100000:
+                                    liquidity = "💦 Média"
+                                else:
+                                    liquidity = "💤 Baixa"
+                                
+                                market_info = {
+                                    "pair": pair,
+                                    "current_price": last_price,
+                                    "bid_price": bid_price,
+                                    "ask_price": ask_price,
+                                    "spread": {
+                                        "value": spread_value,
+                                        "percent": round(spread_percent, 4),
+                                        "status": spread_status
+                                    },
+                                    "24h_stats": {
+                                        "high": high_24h,
+                                        "low": low_24h,
+                                        "open": open_24h,
+                                        "change": change_24h,
+                                        "change_percent": round(change_percent_24h, 2),
+                                        "volume_usdt": round(volume_24h, 2),
+                                        "volatility": round(volatility, 2)
+                                    },
+                                    "1h_stats": {
+                                        "change_percent": variation_1h if variation_1h else None
+                                    },
+                                    "trading_fees": {
+                                        "maker_fee": 0,
+                                        "taker_fee": 0,
+                                        "estimated_buy_cost": last_price,
+                                        "estimated_sell_return": last_price
+                                    },
+                                    "market_analysis": {
+                                        "trend": trend,
+                                        "momentum": momentum,
+                                        "liquidity": liquidity,
+                                        "recommendation": f"⚠️ Spread {spread_status.lower()} | {trend} | {liquidity}"
+                                    }
+                                }
+                        except Exception:
+                            market_info = None
+                        
+                        # Monta resumo
+                        summary = {
+                            "buy_executed": result.get('status') == 'success',
+                            "sell_executed": False,  # Scheduled não executa venda
+                            "total_invested": format_usdt(result.get('total_invested', 0)),
+                            "total_profit": format_usdt(0),
+                            "net_result": format_usdt(0)
+                        }
+                        
+                        execution_log = {
+                            "execution_type": "scheduled",
+                            "executed_by": "scheduler",
+                            "timestamp": datetime.now().isoformat(),
+                            "pair": pair,
+                            
+                            # Resumo da execução (valores formatados)
+                            "summary": summary,
+                            
+                            # Resultado da compra
+                            "buy_details": {
+                                "status": result.get('status'),
+                                "message": result.get('message'),
+                                "symbols_analyzed": result.get('symbols_analyzed', 0),
+                                "orders_executed": len(result.get('orders', [])),
+                                "total_invested": format_usdt(result.get('total_invested', 0))
+                            },
+                            
+                            # Resultado da venda (scheduled não vende)
+                            "sell_details": {
+                                "status": "no_sells",
+                                "message": "Execução scheduled não realiza vendas",
+                                "holdings_checked": 0,
+                                "sells_executed": 0,
+                                "total_profit": format_usdt(0)
+                            },
+                            
+                            # Informações de mercado
+                            "market_info": market_info
+                        }
+                        execution_logs_db.insert_one(execution_log)
+                    except Exception:
+                        pass  # Falha silenciosa no log
+                
                 # Job executado silenciosamente
                 
             except Exception as e:
@@ -98,6 +249,51 @@ class DynamicJobManager:
                     "last_execution": datetime.now(),
                     "status": "error"
                 })
+                
+                # ✅ SALVA LOG DE ERRO TAMBÉM
+                if execution_logs_db is not None:
+                    try:
+                        error_log = {
+                            "execution_type": "scheduled",
+                            "executed_by": "scheduler",
+                            "timestamp": datetime.now().isoformat(),
+                            "pair": pair,
+                            
+                            # Resumo da execução
+                            "summary": {
+                                "buy_executed": False,
+                                "sell_executed": False,
+                                "total_invested": "0.00",
+                                "total_profit": "0.00",
+                                "net_result": "0.00"
+                            },
+                            
+                            # Detalhes do erro
+                            "buy_details": {
+                                "status": "error",
+                                "message": str(e),
+                                "error_type": type(e).__name__,
+                                "symbols_analyzed": 0,
+                                "orders_executed": 0,
+                                "total_invested": "0.00"
+                            },
+                            
+                            # Venda não executada
+                            "sell_details": {
+                                "status": "no_sells",
+                                "message": "Execução não chegou até a venda devido ao erro",
+                                "holdings_checked": 0,
+                                "sells_executed": 0,
+                                "total_profit": "0.00"
+                            },
+                            
+                            # Sem informações de mercado em caso de erro
+                            "market_info": None
+                        }
+                        execution_logs_db.insert_one(error_log)
+                        print(f"   > Log de erro salvo no banco")
+                    except Exception as log_error:
+                        print(f"   ! Erro ao salvar log de erro: {log_error}")
         
         return symbol_job
     
@@ -156,7 +352,7 @@ class DynamicJobManager:
             # Cria job com intervalo em minutos ou horas
             job_kwargs = {
                 'id': job_id,
-                'name': f"Trading Job: {pair}",
+                'name': f"Tranding Job: {pair}",
                 'replace_existing': True
             }
             job_kwargs[interval_unit] = interval_value
@@ -227,7 +423,7 @@ class DynamicJobManager:
                 success, message = self.add_job_for_symbol(pair)
                 if success:
                     added_count += 1
-                    print(f"   > Job: {pair} ({message.split('(')[1].split(')')[0]})")
+                    print(f"> Job: {pair} ({message.split('(')[1].split(')')[0]})")
         
         return added_count, removed_count
     

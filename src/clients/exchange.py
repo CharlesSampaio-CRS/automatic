@@ -7,19 +7,23 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from src.config.bot_config import MIN_VALUE_PER_CREATE_ORDER, MIN_VALUE_PER_SYMBOL, SYMBOLS, BASE_CURRENCY
+from src.utils.number_formatter import format_price, format_amount, format_usdt, format_percent
 
 # Importa estratégias de compra e venda
 from src.clients.buy_strategy import BuyStrategy
 from src.clients.sell_strategy import SellStrategy
 
+# Importa estratégias de 4 horas (scalping)
+from src.clients.buy_strategy_4h import BuyStrategy4h
+from src.clients.sell_strategy_4h import SellStrategy4h
+
 # Importa conexão do MongoDB
 try:
-    from src.database.mongodb_connection import connection_mongo
-    db = connection_mongo("Assets")
+    from src.database.mongodb_connection import get_database
+    db = get_database()
     # Conectado silenciosamente
 except Exception as e:
     print(f"! Erro MongoDB: {e}")
-    db = None
     db = None
     print(f"⚠ MongoDB não disponível: {e}")
 
@@ -56,9 +60,14 @@ class MexcClient:
         # Inicializa estratégias com config do MongoDB (se fornecido)
         trading_strategy = config.get('trading_strategy') if config else None
         sell_strategy_config = config.get('sell_strategy') if config else None
+        strategy_4h_config = config.get('strategy_4h') if config else None
         
         self.buy_strategy = BuyStrategy(trading_strategy)
         self.sell_strategy = SellStrategy(sell_strategy_config)
+        
+        # Estratégias de 4 horas (scalping)
+        self.buy_strategy_4h = BuyStrategy4h(strategy_4h_config)
+        self.sell_strategy_4h = SellStrategy4h(strategy_4h_config)
         
         # Threshold de volume para decidir entre market/limit
         # Mercados com volume > $1M/24h usam limit (boa liquidez)
@@ -217,13 +226,26 @@ class MexcClient:
 
     def get_symbol_variations(self):
         """
-        Retorna as variações de 24h dos símbolos configurados
+        Retorna as variações de 24h dos símbolos configurados no MongoDB
         """
         variations = []
-        for symbol in SYMBOLS:
-            variation = self.get_symbol_variation(symbol)
-            if variation:
-                variations.append(variation)
+        
+        # Busca símbolos configurados no MongoDB
+        if db is not None:
+            symbols_config = list(db['BotConfigs'].find({'enabled': True}))
+            print(f"🔍 Símbolos configurados no MongoDB: {len(symbols_config)}")
+            
+            for config in symbols_config:
+                symbol = config.get('pair')
+                if symbol:
+                    print(f"   > Analisando {symbol}...")
+                    variation = self.get_symbol_variation(symbol)
+                    if variation:
+                        variations.append(variation)
+        else:
+            print("⚠️  MongoDB não disponível - usando lista vazia")
+        
+        print(f"📊 Total de variações coletadas: {len(variations)}")
         return sorted(variations, key=lambda x: x['variation_24h'])
 
     def get_symbol_variation(self, symbol):
@@ -251,12 +273,162 @@ class MexcClient:
                 print(f"⚠️  Error fetching data for {symbol}: {e}")
         return None
 
-    def create_order(self, execution_type="scheduled"):
+    def get_variation_1h(self, symbol):
+        """
+        Retorna a variação de preço na última hora
+        
+        Args:
+            symbol: Par de trading (ex: REKTCOIN/USDT)
+        
+        Returns:
+            Variação percentual da última hora ou None em caso de erro
+        """
+        try:
+            # Busca o preço atual
+            ticker = self.client.fetch_ticker(symbol)
+            current_price = float(ticker.get('last', 0))
+            
+            if current_price <= 0:
+                return None
+            
+            # Busca candles de 1 hora (pega 3 para garantir que temos dados completos)
+            ohlcv = self.client.fetch_ohlcv(symbol, '1h', limit=3)
+            
+            if len(ohlcv) >= 2:
+                # O último candle [-1] pode estar em formação (não completo)
+                # O penúltimo candle [-2] é o último candle COMPLETO de 1h atrás
+                # Usamos o CLOSE do penúltimo candle como referência de 1h atrás
+                price_1h_ago = float(ohlcv[-2][4])  # [4] = preço de fechamento (close)
+                
+                if price_1h_ago > 0:
+                    variation_1h = ((current_price - price_1h_ago) / price_1h_ago) * 100
+                    return round(variation_1h, 2)
+            
+            return None
+            
+        except Exception as e:
+            print(f"⚠️  Erro ao buscar variação 1h para {symbol}: {e}")
+            return None
+
+    def get_variation_4h(self, symbol):
+        """
+        Retorna a variação de preço nas últimas 4 horas
+        
+        Args:
+            symbol: Par de trading (ex: REKTCOIN/USDT)
+        
+        Returns:
+            Variação percentual das últimas 4 horas ou None em caso de erro
+        """
+        try:
+            # Busca o preço atual
+            ticker = self.client.fetch_ticker(symbol)
+            current_price = float(ticker.get('last', 0))
+            
+            if current_price <= 0:
+                return None
+            
+            # Busca candles de 4 horas (pega 3 para garantir que temos dados completos)
+            ohlcv = self.client.fetch_ohlcv(symbol, '4h', limit=3)
+            
+            if len(ohlcv) >= 2:
+                # O último candle [-1] pode estar em formação (não completo)
+                # O penúltimo candle [-2] é o último candle COMPLETO de 4h atrás
+                # Usamos o CLOSE do penúltimo candle como referência de 4h atrás
+                price_4h_ago = float(ohlcv[-2][4])  # [4] = preço de fechamento (close)
+                
+                if price_4h_ago > 0:
+                    variation_4h = ((current_price - price_4h_ago) / price_4h_ago) * 100
+                    return round(variation_4h, 2)
+            
+            return None
+            
+        except Exception as e:
+            print(f"⚠️  Erro ao buscar variação 4h para {symbol}: {e}")
+            return None
+
+    def get_variation_24h(self, symbol):
+        """
+        Retorna a variação de preço nas últimas 24 horas
+        Usa o ticker['open'] que representa o início do período de 24h da exchange
+        
+        Args:
+            symbol: Par de trading (ex: REKTCOIN/USDT)
+        
+        Returns:
+            Variação percentual das últimas 24 horas ou None em caso de erro
+        """
+        try:
+            # Busca o ticker que contém open/last para 24h
+            ticker = self.client.fetch_ticker(symbol)
+            current_price = float(ticker.get('last', 0))
+            open_24h = float(ticker.get('open', 0))
+            
+            if current_price <= 0 or open_24h <= 0:
+                return None
+            
+            # Calcula variação baseada no open do ticker (padrão da exchange)
+            variation_24h = ((current_price - open_24h) / open_24h) * 100
+            return round(variation_24h, 2)
+            
+        except Exception as e:
+            print(f"⚠️  Erro ao buscar variação 24h para {symbol}: {e}")
+            return None
+
+    def get_multi_timeframe_variations(self, symbol):
+        """
+        Retorna variações de preço em múltiplos timeframes
+        
+        Args:
+            symbol: Par de trading (ex: REKTCOIN/USDT)
+        
+        Returns:
+            Dict com variações em diferentes períodos ou None em caso de erro
+        """
+        try:
+            # Busca o preço atual
+            ticker = self.client.fetch_ticker(symbol)
+            current_price = float(ticker.get('last', 0))
+            
+            if current_price <= 0:
+                return None
+            
+            variations = {}
+            
+            # Timeframes a verificar
+            timeframes = {
+                '5m': 'var_5m',
+                '15m': 'var_15m',
+                '30m': 'var_30m',
+                '1h': 'var_1h',
+                '4h': 'var_4h'
+            }
+            
+            for tf, key in timeframes.items():
+                try:
+                    ohlcv = self.client.fetch_ohlcv(symbol, tf, limit=2)
+                    if len(ohlcv) >= 2:
+                        # Usa o close do penúltimo candle (último completo)
+                        price_ago = float(ohlcv[-2][4])
+                        if price_ago > 0:
+                            variation = ((current_price - price_ago) / price_ago) * 100
+                            variations[key] = round(variation, 2)
+                except:
+                    variations[key] = None
+            
+            return variations
+            
+        except Exception as e:
+            print(f"⚠️  Erro ao buscar variações multi-timeframe para {symbol}: {e}")
+            return None
+
+    def create_order(self, execution_type="scheduled", dry_run=False):
         """
         Cria ordens de compra nos símbolos configurados com estratégia avançada
         
         Args:
             execution_type (str): Tipo de execução - "manual" ou "scheduled"
+            dry_run (bool): Se True, apenas simula sem executar ordens reais
         
         Estratégia de Maximização de Lucro:
             1. Compra APENAS em extremos (alta forte ou queda significativa)
@@ -264,7 +436,20 @@ class MexcClient:
         3. Calcula lucro potencial baseado em histórico
         4. Implementa stop loss e take profit automaticamente
         """
+        import sys
+        
+        if dry_run:
+            print("=" * 80, file=sys.stderr, flush=True)
+            print(f"🧪 MODO SIMULAÇÃO - NENHUMA ORDEM SERÁ EXECUTADA", file=sys.stderr, flush=True)
+            print("=" * 80, file=sys.stderr, flush=True)
+        
+        print("=" * 80, file=sys.stderr, flush=True)
+        print(f"🚀 CREATE_ORDER INICIADO - Tipo: {execution_type}", file=sys.stderr, flush=True)
+        print("=" * 80, file=sys.stderr, flush=True)
+        
         usdt_balance = self.get_usdt_available()
+        
+        print(f"💰 Saldo USDT: ${usdt_balance:.2f}", file=sys.stderr, flush=True)
         
         if usdt_balance < MIN_VALUE_PER_CREATE_ORDER:
             error_message = f"{ERROR_INSUFFICIENT_FUNDS}: Available balance: $ {usdt_balance:.2f}"
@@ -275,8 +460,13 @@ class MexcClient:
             }
 
         # Busca variações e filtra apenas símbolos que atendem critérios
+        print("📊 Buscando variações de símbolos...", file=sys.stderr, flush=True)
         symbol_variations = self.get_symbol_variations()
+        print(f"✅ Variações obtidas: {len(symbol_variations)}", file=sys.stderr, flush=True)
+        
+        print("🔍 Filtrando símbolos por estratégia...", file=sys.stderr, flush=True)
         filtered_symbols = self.filter_symbols_by_strategy(symbol_variations)
+        print(f"✅ Símbolos filtrados: {len(filtered_symbols)}", file=sys.stderr, flush=True)
         
         if not filtered_symbols:
             print(f"   > Nenhum símbolo atende os critérios de compra no momento")
@@ -294,7 +484,7 @@ class MexcClient:
         self.allocate_funds_with_dca_strategy(usdt_balance, symbol_orders)
         
         # Executa ordens com cálculo de lucro esperado
-        results = self.execute_orders_with_profit_tracking(symbol_orders, execution_type)
+        results = self.execute_orders_with_profit_tracking(symbol_orders, execution_type, dry_run)
         
         # Calcula métricas de performance
         performance_metrics = self.calculate_performance_metrics(results)
@@ -310,15 +500,92 @@ class MexcClient:
     
     def filter_symbols_by_strategy(self, symbol_variations):
         """
-        Filtra símbolos usando BuyStrategy
-        Delega lógica de compra para a classe especializada
+        Filtra símbolos usando BuyStrategy (24h) e BuyStrategy1h (1h)
+        Delega lógica de compra para as classes especializadas
+        Prioriza estratégia de 1h se habilitada e atende critérios
         """
-        from src.config.bot_config import BotConfig
-        config = BotConfig()
-        symbols_config = config.get('symbols', [])
+        print(f"\n{'='*80}")
+        print(f"🎯 INICIANDO FILTRO DE SÍMBOLOS")
+        print(f"{'='*80}")
+        print(f"📊 Total de símbolos para analisar: {len(symbol_variations)}")
         
-        # Usa a estratégia de compra para filtrar símbolos
-        filtered = self.buy_strategy.filter_symbols(symbol_variations, symbols_config)
+        # Busca configs DIRETAMENTE do MongoDB (não usa BotConfig legado)
+        symbols_config = []
+        if db is not None:
+            symbols_config = list(db['BotConfigs'].find({'enabled': True}))
+            print(f"📋 Configs encontradas no MongoDB: {len(symbols_config)}")
+        else:
+            print(f"⚠️  MongoDB não disponível")
+        
+        filtered = []
+        
+        # Processa cada símbolo
+        for variation_data in symbol_variations:
+            symbol = variation_data['symbol']
+            variation_24h = variation_data['variation_24h']
+            
+            # Busca config específica do símbolo
+            symbol_config = next(
+                (cfg for cfg in symbols_config if cfg.get('pair') == symbol),
+                None
+            )
+            
+            if not symbol_config:
+                continue
+            
+            # Verifica estratégia de 4h PRIMEIRO (se habilitada)
+            strategy_4h_config = symbol_config.get('strategy_4h', {})
+            print(f"🔍 DEBUG {symbol}: strategy_4h config = {strategy_4h_config}")
+            
+            if strategy_4h_config.get('enabled', False):
+                print(f"✅ {symbol}: Strategy 4h está HABILITADA")
+                # Busca variação de 4h (mais estável que 1h)
+                variation_4h = self.get_variation_4h(symbol)
+                print(f"📊 {symbol}: Variação 4h = {variation_4h}%")
+                
+                if variation_4h is not None:
+                    # 🔥 CRIA INSTÂNCIA COM CONFIG ESPECÍFICA DO SÍMBOLO
+                    # Monta config no formato esperado por BuyStrategy1h
+                    buy_strategy_config = {
+                        'enabled': strategy_4h_config.get('enabled', False),
+                        'levels': strategy_4h_config.get('buy_strategy', {}).get('levels', []),
+                        'risk_management': strategy_4h_config.get('risk_management', {})
+                    }
+                    buy_strategy_4h_symbol = BuyStrategy4h(buy_strategy_config)
+                    
+                    # Verifica se deve comprar pela estratégia de 4h (usando variação 4h)
+                    should_buy_4h, buy_info_4h = buy_strategy_4h_symbol.should_buy(variation_4h, symbol)
+                    print(f"🎯 {symbol}: should_buy_4h = {should_buy_4h}, info = {buy_info_4h}")
+                    
+                    if should_buy_4h:
+                        # Adiciona à lista com info da estratégia 4h
+                        filtered.append({
+                            **variation_data,
+                            'config': symbol_config,
+                            'signal_strength': buy_info_4h['signal_strength'],
+                            'reason': buy_info_4h['reason'],
+                            'buy_percentage': buy_info_4h['buy_percentage'],
+                            'variation_4h': variation_4h,
+                            'strategy': '4h'
+                        })
+                        print(f"✅ {symbol}: ADICIONADO à lista de compra (estratégia 4h)")
+                        continue  # Não verifica estratégia 24h se 4h já ativou
+                    else:
+                        print(f"❌ {symbol}: NÃO passou no filtro da estratégia 4h")
+            else:
+                print(f"❌ {symbol}: Strategy 4h está DESABILITADA")
+            
+            # Se não ativou estratégia 4h, verifica estratégia 24h
+            # Usa a estratégia de compra 24h para filtrar símbolo
+            filtered_24h = self.buy_strategy.filter_symbols([variation_data], symbols_config)
+            
+            if filtered_24h:
+                # Adiciona à lista com info da estratégia 24h
+                item = filtered_24h[0]
+                item['strategy'] = '24h'
+                if 'variation_4h' not in item:
+                    item['variation_4h'] = None
+                filtered.append(item)
         
         # Adiciona cálculo de lucro esperado
         for item in filtered:
@@ -395,23 +662,29 @@ class MexcClient:
                 2
                 )
                 
-                print(f"📊 {symbol}: Queda de {order['variation']:.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
+                # Identifica qual estratégia foi usada
+                strategy_label = order.get('strategy', '24h')
+                if strategy_label == '1h' and order.get('variation_4h') is not None:
+                    print(f"📊 {symbol}: [4H] Queda de {order.get('variation_4h', 0):.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
+                else:
+                    print(f"📊 {symbol}: [24H] Queda de {order['variation']:.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
             else:
                 order['value'] = 0
                 print(f"⏸️  {symbol}: Valor muito baixo (${investment_amount:.2f} < ${MIN_VALUE_PER_SYMBOL})")
     
-    def execute_orders_with_profit_tracking(self, symbol_orders, execution_type="scheduled"):
+    def execute_orders_with_profit_tracking(self, symbol_orders, execution_type="scheduled", dry_run=False):
         """
         Executa ordens e registra tracking de lucro/perda
         
         Args:
             symbol_orders: Dicionário com ordens por símbolo
             execution_type: Tipo de execução - "manual" ou "scheduled"
+            dry_run: Se True, apenas simula sem executar ordens reais
         """
         results = []
         for symbol, order in symbol_orders.items():
             if order['value'] > 0:
-                success, order_result = self.create_and_send_order(symbol, order['value'])
+                success, order_result = self.create_and_send_order(symbol, order['value'], dry_run)
                 status = STATUS_SUCCESS if success else STATUS_ERROR
                 
                 # Calcula quantidade comprada
@@ -577,11 +850,16 @@ class MexcClient:
         
         return results
 
-    def create_and_send_order(self, symbol, value):
+    def create_and_send_order(self, symbol, value, dry_run=False):
         """
         Cria e envia ordem usando estratégia HÍBRIDA:
             - Mercados líquidos (volume > $1M/24h): ordem LIMITADA
         - Mercados ilíquidos (volume < $1M/24h): ordem MERCADO
+        
+        Args:
+            symbol: Par de negociação
+            value: Valor em USDT a investir
+            dry_run: Se True, apenas simula sem executar ordem real
         """
         try:
             # Busca o preço atual para calcular a quantidade
@@ -600,6 +878,26 @@ class MexcClient:
             use_limit, reason = self.should_use_limit_order(symbol)
             
             print(f"\n   💡 Estratégia de Compra: {reason}")
+            
+            if dry_run:
+                # 🧪 MODO SIMULAÇÃO - NÃO EXECUTA ORDEM REAL
+                print(f"   🧪 [SIMULAÇÃO] Ordem NÃO foi executada na exchange")
+                print(f"   📊 [SIMULAÇÃO] Tipo: {'LIMIT' if use_limit else 'MARKET'}")
+                print(f"   📊 [SIMULAÇÃO] Amount: {amount} | Price: ${last_price:.10f} | Value: ${value:.2f}")
+                
+                # Retorna ordem simulada
+                simulated_order = {
+                    'id': f"SIM-{int(datetime.now().timestamp())}",
+                    'symbol': symbol,
+                    'type': 'limit' if use_limit else 'market',
+                    'side': 'buy',
+                    'price': last_price,
+                    'amount': float(amount),
+                    'cost': value,
+                    'status': 'simulated',
+                    'timestamp': datetime.now().timestamp()
+                }
+                return True, simulated_order
             
             if use_limit:
                 # MERCADO LÍQUIDO: Ordem LIMITADA para melhor preço

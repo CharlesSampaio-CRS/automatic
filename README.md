@@ -1,11 +1,11 @@
-# 🤖 Bot de Trading Automático - MEXC Exchange
+# 🚀 Maverick - Tranding Bot
 
 Bot automatizado para realizar investimentos periódicos em criptomoedas na exchange MEXC com configuração dinâmica via API REST.
 
 ## 📁 Estrutura do Projeto
 
 ```
-automatic/
+maverick/
 ├── .env                          # Variáveis de ambiente (não versionar)
 ├── .env.example                  # Exemplo de configuração
 ├── .gitignore                    # Arquivos ignorados pelo Git
@@ -85,7 +85,7 @@ bash scripts/test_api_endpoints.sh
 
 ## 📡 API Endpoints
 
-### Trading
+### Tranding
 - `GET /` - Status da API
 - `GET /balance` - Consultar saldo
 - `GET /order` - Executar ordem manual
@@ -98,8 +98,8 @@ bash scripts/test_api_endpoints.sh
 - `DELETE /config/symbols/{pair}` - Remover símbolo
 - `GET /config/base-currency` - Ver moeda base
 - `PUT /config/base-currency` - Alterar moeda base
-- `GET /config/trading-params` - Ver parâmetros
-- `PUT /config/trading-params` - Atualizar parâmetros
+- `GET /config/Tranding-params` - Ver parâmetros
+- `PUT /config/Tranding-params` - Atualizar parâmetros
 - `POST /config/reset` - Resetar configurações
 
 📚 **Documentação completa**: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)

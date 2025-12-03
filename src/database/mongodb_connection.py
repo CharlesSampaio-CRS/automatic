@@ -33,3 +33,11 @@ def connection_mongo(collection):
     """
     return db[collection]
 
+def get_database():
+    """
+    Retorna o objeto do banco de dados MongoDB
+    
+    Returns:
+        Database: Objeto do banco de dados MongoDB
+    """
+    return db

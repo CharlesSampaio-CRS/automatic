@@ -3,29 +3,35 @@ import sys
 import pytz
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from flask import Flask, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.jobstores.base import ConflictingIdError
 from dotenv import load_dotenv
 
 # Adiciona o diretório raiz ao path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from src.clients.exchange import MexcClient
-from src.config.bot_config import bot_config, BUSINESS_HOURS_START, BUSINESS_HOURS_END, SCHEDULE_INTERVAL_HOURS
+from src.config.bot_config import BUSINESS_HOURS_START, BUSINESS_HOURS_END, SCHEDULE_INTERVAL_HOURS
+from src.utils.number_formatter import format_usdt, format_percent
 from src.services.config_service import config_service
 from src.services.job_manager import initialize_job_manager
+from src.database.mongodb_connection import connection_mongo
 
 # Carrega variáveis do arquivo .env
 load_dotenv()
+
+# Conecta ao MongoDB para logs de execução
+try:
+    execution_logs_db = connection_mongo("ExecutionLogs")
+except Exception:
+    execution_logs_db = None
 
 API_KEY = os.getenv('API_KEY')
 API_SECRET = os.getenv('API_SECRET')
 
 COUNTDOWN_INTERVAL_SECONDS = SCHEDULE_INTERVAL_HOURS * 3600
 
-MSG_API_RUNNING = "API is running!"
 MSG_OUTSIDE_BUSINESS_HOURS = "Outside business hours. Order not executed."
 MSG_SCHEDULED_ORDER_EXECUTED = "Order executed:"
 
@@ -38,9 +44,9 @@ scheduler = BackgroundScheduler(timezone=TZ)
 def get_current_hour():
     return datetime.now(TZ).hour
 
-def _get_trading_recommendation(change_percent, spread_percent, volume):
+def _get_Tranding_recommendation(change_percent, spread_percent, volume):
     """
-    Gera recomendação de trading baseada em análise técnica simples
+    Gera recomendação de Tranding baseada em análise técnica simples
     
     Args:
         change_percent: Variação percentual de 24h
@@ -113,7 +119,7 @@ def home():
     """Health check"""
     return jsonify({
         "status": "success",
-        "message": "Bot de Trading Automático ",
+        "message": "Maverick - Tranding Bot",
         "version": "2.0"
     })
 
@@ -151,10 +157,10 @@ def balance():
 @app.route("/price", methods=["GET"])
 def get_price_by_params():
     """
-    Retorna o preço atual de um par de trading (via query params)
+    Retorna o preço atual de um par de Tranding (via query params)
     
     Query params:
-        - pair: Par de trading (ex: REKT/USDT, BTC/USDT)
+        - pair: Par de Tranding (ex: REKT/USDT, BTC/USDT)
     
     Exemplo: GET /price?pair=REKT/USDT
     
@@ -215,10 +221,10 @@ def get_price_by_params():
 @app.route("/price/<pair>", methods=["GET"])
 def get_price_by_path(pair):
     """
-    Retorna o preço atual de um par de trading (via path)
+    Retorna o preço atual de um par de Tranding (via path)
     
     Path param:
-        - pair: Par de trading (ex: REKT-USDT ou REKT/USDT)
+        - pair: Par de Tranding (ex: REKT-USDT ou REKT/USDT)
     
     Exemplo: GET /price/REKT-USDT
     
@@ -272,7 +278,7 @@ def get_price_by_path(pair):
 @app.route("/prices", methods=["POST"])
 def get_multiple_prices():
     """
-    Retorna preços de múltiplos pares de trading
+    Retorna preços de múltiplos pares de Tranding
     
     Body JSON:
     {
@@ -419,13 +425,26 @@ def order():
                 spread = ask_price - bid_price if ask_price and bid_price else 0
                 spread_percent = (spread / last_price * 100) if last_price > 0 else 0
                 
-                # Volume e variação
+                # Volume e variação 24h
                 volume_24h = float(ticker.get('quoteVolume', 0))
                 high_24h = float(ticker.get('high', 0))
                 low_24h = float(ticker.get('low', 0))
                 open_24h = float(ticker.get('open', 0))
-                change_24h = float(ticker.get('change', 0)) if ticker.get('change') else 0
-                change_percent_24h = float(ticker.get('percentage', 0)) if ticker.get('percentage') else 0
+                change_24h = last_price - open_24h if open_24h > 0 else 0
+                
+                # Calcula variação de 24h usando OHLCV (mais preciso)
+                change_percent_24h = mexc_client.get_variation_24h(pair.upper())
+                if change_percent_24h is None:
+                    # Fallback para o cálculo do ticker
+                    change_percent_24h = ((last_price - open_24h) / open_24h * 100) if open_24h > 0 else 0
+                
+                # Calcula variação de 1 hora usando a função corrigida
+                change_percent_1h = mexc_client.get_variation_1h(pair.upper())
+                if change_percent_1h is None:
+                    change_percent_1h = 0
+                
+                # Busca variações em múltiplos timeframes
+                multi_variations = mexc_client.get_multi_timeframe_variations(pair.upper())
                 
                 market_info = {
                     "pair": pair.upper(),
@@ -446,7 +465,11 @@ def order():
                         "volume_usdt": round(volume_24h, 2),
                         "volatility": round(((high_24h - low_24h) / low_24h * 100), 2) if low_24h > 0 else 0
                     },
-                    "trading_fees": {
+                    "1h_stats": {
+                        "change_percent": round(change_percent_1h, 2)
+                    },
+                    "multi_timeframe": multi_variations if multi_variations else {},
+                    "Tranding_fees": {
                         "maker_fee": 0.0,  # MEXC: 0% maker fee
                         "taker_fee": 0.0,  # MEXC: 0% taker fee
                         "estimated_buy_cost": round(last_price * 1.0000, 10),  # Sem taxa
@@ -456,11 +479,15 @@ def order():
                         "trend": "📈 Alta" if change_percent_24h > 0 else "📉 Queda" if change_percent_24h < 0 else "➡️ Lateral",
                         "momentum": "🔥 Forte" if abs(change_percent_24h) > 10 else "⚡ Moderado" if abs(change_percent_24h) > 5 else "😴 Fraco",
                         "liquidity": "💧 Alta" if volume_24h > 100000 else "💦 Média" if volume_24h > 10000 else "💧 Baixa",
-                        "recommendation": _get_trading_recommendation(change_percent_24h, spread_percent, volume_24h)
+                        "recommendation": _get_Tranding_recommendation(change_percent_24h, spread_percent, volume_24h)
                     }
                 }
                 
-                print(f"   > Preço: ${last_price:.10f} | Variação: {change_percent_24h:+.2f}% | Volume: ${volume_24h:,.0f}")
+                print(f"   > Preço: ${last_price:.10f}")
+                print(f"   > Variação 1h: {change_percent_1h:+.2f}% | 24h: {change_percent_24h:+.2f}%")
+                if multi_variations:
+                    print(f"   > Multi-timeframe: 5m: {multi_variations.get('var_5m', 'N/A'):+}% | 15m: {multi_variations.get('var_15m', 'N/A'):+}% | 30m: {multi_variations.get('var_30m', 'N/A'):+}% | 4h: {multi_variations.get('var_4h', 'N/A'):+}%")
+                print(f"   > Volume 24h: ${volume_24h:,.0f}")
                 
             except Exception as e:
                 print(f"   ! Erro: {e}")
@@ -492,6 +519,51 @@ def order():
         if summary['net_result'] != 0:
             print(f"   Resultado líquido: ${summary['net_result']:.2f}")
         print(f"{'='*80}\n")
+        
+        # Salva log de execução completo no MongoDB
+        if execution_logs_db is not None:
+            try:
+                execution_log = {
+                    "execution_type": "manual",
+                    "executed_by": "user",
+                    "timestamp": datetime.now().isoformat(),
+                    "pair": pair if pair else "all",
+                    
+                    # Resumo da execução (valores formatados)
+                    "summary": {
+                        "buy_executed": summary['buy_executed'],
+                        "sell_executed": summary['sell_executed'],
+                        "total_invested": format_usdt(summary['total_invested']),
+                        "total_profit": format_usdt(summary['total_profit']),
+                        "net_result": format_usdt(summary['net_result'])
+                    },
+                    
+                    # Resultado da compra
+                    "buy_details": {
+                        "status": buy_result.get('status'),
+                        "message": buy_result.get('message'),
+                        "symbols_analyzed": buy_result.get('symbols_analyzed', 0),
+                        "orders_executed": buy_result.get('orders_executed', 0),
+                        "total_invested": format_usdt(buy_result.get('total_invested', 0))
+                    } if buy_result.get('status') else None,
+                    
+                    # Resultado da venda
+                    "sell_details": {
+                        "status": sell_result.get('status'),
+                        "message": sell_result.get('message'),
+                        "holdings_checked": sell_result.get('holdings_checked', 0),
+                        "sells_executed": len(sell_result.get('sells_executed', [])),
+                        "total_profit": format_usdt(sell_result.get('total_profit', 0))
+                    } if sell_result.get('status') else None,
+                    
+                    # Informações de mercado
+                    "market_info": market_info if market_info and 'error' not in market_info else None
+                }
+                
+                execution_logs_db.insert_one(execution_log)
+                print(f"   > Log de execução salvo no banco")
+            except Exception as log_error:
+                print(f"   ! Erro ao salvar log: {log_error}")
         
         return jsonify({
             "status": "success",
@@ -586,7 +658,7 @@ def create_config():
             "min_value_per_order": 20,
             "allocation_percentage": 30
         },
-        "trading_strategy": {
+        "Tranding_strategy": {
             "type": "buy_levels",
             "min_price_variation": 1.0,
             "levels": [
@@ -704,6 +776,199 @@ def delete_config_by_pair(pair):
             "status": "error",
             "message": message
         }), 404
+
+# ========== ESTRATÉGIA 1H ==========
+
+@app.route("/configs/<pair>/strategy-1h", methods=["GET"])
+def get_strategy_1h_config(pair):
+    """
+    Retorna configuração da estratégia de 1h para um símbolo
+    
+    Exemplo: GET /configs/REKT/USDT/strategy-1h
+    
+    Response:
+    {
+        "status": "success",
+        "pair": "REKT/USDT",
+        "strategy_1h": {
+            "enabled": true,
+            "levels": [...],
+            "risk_management": {...}
+        }
+    }
+    """
+    pair_formatted = pair.replace('%2F', '/').upper()
+    
+    # Busca configuração do símbolo
+    config = config_service.get_symbol_config(pair_formatted)
+    
+    if not config:
+        return jsonify({
+            "status": "error",
+            "message": f"Configuração não encontrada para {pair_formatted}"
+        }), 404
+    
+    strategy_1h = config.get('strategy_1h', {
+        "enabled": False,
+        "levels": [],
+        "risk_management": {}
+    })
+    
+    return jsonify({
+        "status": "success",
+        "pair": pair_formatted,
+        "strategy_1h": strategy_1h
+    })
+
+@app.route("/configs/<pair>/strategy-1h", methods=["PUT"])
+def update_strategy_1h_config(pair):
+    """
+    Atualiza configuração da estratégia de 1h para um símbolo
+    
+    Exemplo: PUT /configs/REKT/USDT/strategy-1h
+    Body:
+    {
+        "enabled": true,
+        "levels": [
+            {
+                "name": "Scalp Leve",
+                "variation_threshold": -2.0,
+                "percentage_of_balance": 5,
+                "description": "Compra pequena em queda rápida de 2%"
+            }
+        ],
+        "risk_management": {
+            "stop_loss_percent": -3.0,
+            "cooldown_minutes": 15,
+            "max_trades_per_hour": 3,
+            "max_position_size_percent": 10.0
+        }
+    }
+    
+    Response:
+    {
+        "status": "success",
+        "message": "Estratégia 1h atualizada",
+        "pair": "REKT/USDT",
+        "strategy_1h": {...}
+    }
+    """
+    pair_formatted = pair.replace('%2F', '/').upper()
+    data = request.get_json()
+    
+    # Busca configuração atual
+    config = config_service.get_symbol_config(pair_formatted)
+    
+    if not config:
+        return jsonify({
+            "status": "error",
+            "message": f"Configuração não encontrada para {pair_formatted}"
+        }), 404
+    
+    # Valida campos obrigatórios
+    if 'enabled' not in data:
+        return jsonify({
+            "status": "error",
+            "message": "Campo 'enabled' é obrigatório"
+        }), 400
+    
+    # Atualiza strategy_1h
+    strategy_1h = {
+        "enabled": data.get('enabled', False),
+        "levels": data.get('levels', []),
+        "risk_management": data.get('risk_management', {})
+    }
+    
+    # Valida configuração usando schema
+    from src.models.config_schema import validate_config
+    config_copy = config.copy()
+    config_copy['strategy_1h'] = strategy_1h
+    
+    is_valid, error_msg = validate_config(config_copy)
+    if not is_valid:
+        return jsonify({
+            "status": "error",
+            "message": f"Configuração inválida: {error_msg}"
+        }), 400
+    
+    # Atualiza no MongoDB
+    success, message = config_service.update_symbol_config(pair_formatted, {
+        'strategy_1h': strategy_1h
+    })
+    
+    if success:
+        return jsonify({
+            "status": "success",
+            "message": "Estratégia 1h atualizada com sucesso",
+            "pair": pair_formatted,
+            "strategy_1h": strategy_1h
+        })
+    else:
+        return jsonify({
+            "status": "error",
+            "message": message
+        }), 500
+
+@app.route("/configs/<pair>/strategy-1h/toggle", methods=["POST"])
+def toggle_strategy_1h(pair):
+    """
+    Liga/desliga rapidamente a estratégia de 1h para um símbolo
+    
+    Exemplo: POST /configs/REKT/USDT/strategy-1h/toggle
+    Body:
+    {
+        "enabled": true
+    }
+    
+    Response:
+    {
+        "status": "success",
+        "message": "Estratégia 1h ativada",
+        "pair": "REKT/USDT",
+        "enabled": true
+    }
+    """
+    pair_formatted = pair.replace('%2F', '/').upper()
+    data = request.get_json()
+    
+    if 'enabled' not in data:
+        return jsonify({
+            "status": "error",
+            "message": "Campo 'enabled' é obrigatório"
+        }), 400
+    
+    enabled = bool(data['enabled'])
+    
+    # Busca configuração atual
+    config = config_service.get_symbol_config(pair_formatted)
+    
+    if not config:
+        return jsonify({
+            "status": "error",
+            "message": f"Configuração não encontrada para {pair_formatted}"
+        }), 404
+    
+    # Atualiza apenas o campo enabled
+    strategy_1h = config.get('strategy_1h', {})
+    strategy_1h['enabled'] = enabled
+    
+    success, message = config_service.update_symbol_config(pair_formatted, {
+        'strategy_1h': strategy_1h
+    })
+    
+    if success:
+        action = "ativada" if enabled else "desativada"
+        return jsonify({
+            "status": "success",
+            "message": f"Estratégia 1h {action} com sucesso",
+            "pair": pair_formatted,
+            "enabled": enabled
+        })
+    else:
+        return jsonify({
+            "status": "error",
+            "message": message
+        }), 500
 
 # ========== JOBS ==========
 
@@ -831,7 +1096,7 @@ if __name__ == "__main__":
     flask_debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     
     print("="*80)
-    print("BOT DE TRADING AUTOMÁTICO - MEXC")
+    print("MAVERICK - Tranding Bot")
     print("="*80)
     
     # Inicializa scheduler

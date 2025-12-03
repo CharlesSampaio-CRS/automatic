@@ -1,10 +1,10 @@
 {
   "info": {
-    "name": "Bot Trading MEXC - API v2.0",
-    "description": "API do Bot de Trading Automático com MongoDB e Jobs Dinâmicos",
+    "name": "Bot Trading MEXC - API v2.1",
+    "description": "API do Bot de Trading Automático com MongoDB, Jobs Dinâmicos e Estratégia 1H",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "1",
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "variable": [
     {
@@ -15,7 +15,7 @@
   ],
   "item": [
     {
-      "name": "🏥 Health Check",
+      "name": "Health Check",
       "item": [
         {
           "name": "Status da API",
@@ -34,7 +34,7 @@
       ]
     },
     {
-      "name": "💰 Balance",
+      "name": "Balance",
       "item": [
         {
           "name": "Consultar Saldo Total",
@@ -53,10 +53,10 @@
       ]
     },
     {
-      "name": "� Price (Preços)",
+      "name": "Price",
       "item": [
         {
-          "name": "Preço de Um Par (Query Params)",
+          "name": "Preco de Um Par (Query Params)",
           "request": {
             "method": "GET",
             "header": [],
@@ -68,16 +68,16 @@
                 {
                   "key": "pair",
                   "value": "REKTCOIN/USDT",
-                  "description": "Par de trading (ex: REKTCOIN/USDT, BTC/USDT)"
+                  "description": "Par de Trading (ex: REKTCOIN/USDT, BTC/USDT)"
                 }
               ]
             },
-            "description": "Retorna o preço atual de um par via query params"
+            "description": "Retorna o preco atual de um par via query params"
           },
           "response": []
         },
         {
-          "name": "Preço de Um Par (Path com Hífen)",
+          "name": "Preco de Um Par (Path com Hifen)",
           "request": {
             "method": "GET",
             "header": [],
@@ -86,12 +86,12 @@
               "host": ["{{base_url}}"],
               "path": ["price", "REKTCOIN-USDT"]
             },
-            "description": "Retorna o preço atual de um par via path (formato com hífen)"
+            "description": "Retorna o preco atual de um par via path (formato com hifen)"
           },
           "response": []
         },
         {
-          "name": "Preço de Um Par (Path com Barra Codificada)",
+          "name": "Preco de Um Par (Path com Barra Codificada)",
           "request": {
             "method": "GET",
             "header": [],
@@ -100,12 +100,12 @@
               "host": ["{{base_url}}"],
               "path": ["price", "REKTCOIN%2FUSDT"]
             },
-            "description": "Retorna o preço atual de um par via path (formato com barra codificada %2F)"
+            "description": "Retorna o preco atual de um par via path (formato com barra codificada %2F)"
           },
           "response": []
         },
         {
-          "name": "Preços de Múltiplos Pares",
+          "name": "Precos de Multiplos Pares",
           "request": {
             "method": "POST",
             "header": [
@@ -123,14 +123,14 @@
               "host": ["{{base_url}}"],
               "path": ["prices"]
             },
-            "description": "Retorna preços de múltiplos pares de uma vez"
+            "description": "Retorna precos de multiplos pares de uma vez"
           },
           "response": []
         }
       ]
     },
     {
-      "name": "�🛒 Order",
+      "name": "Order",
       "item": [
         {
           "name": "Executar Ordem Manual Completa (Buy + Sell)",
@@ -156,7 +156,7 @@
           "response": []
         },
         {
-          "name": "Executar Ordem Manual com Venda Forçada",
+          "name": "Executar Ordem Manual com Venda Forcada",
           "request": {
             "method": "POST",
             "header": [
@@ -174,14 +174,14 @@
               "host": ["{{base_url}}"],
               "path": ["order"]
             },
-            "description": "Executa ordem MANUAL com venda forçada (ignora verificação de lucro)"
+            "description": "Executa ordem MANUAL com venda forcada (ignora verificacao de lucro)"
           },
           "response": []
         }
       ]
     },
     {
-      "name": "⚙️ Configs (MongoDB)",
+      "name": "Configs (MongoDB)",
       "item": [
         {
           "name": "Listar Todas as Configs",
@@ -193,7 +193,7 @@
               "host": ["{{base_url}}"],
               "path": ["configs"]
             },
-            "description": "Lista todas as configurações de símbolos do MongoDB"
+            "description": "Lista todas as configuracoes de simbolos do MongoDB"
           },
           "response": []
         },
@@ -213,7 +213,7 @@
                 }
               ]
             },
-            "description": "Lista apenas configurações habilitadas"
+            "description": "Lista apenas configuracoes habilitadas"
           },
           "response": []
         },
@@ -227,7 +227,7 @@
               "host": ["{{base_url}}"],
               "path": ["configs", "REKTCOIN%2FUSDT"]
             },
-            "description": "Busca configuração de um símbolo específico (ex: REKTCOIN/USDT)"
+            "description": "Busca configuracao de um simbolo especifico (ex: REKTCOIN/USDT)"
           },
           "response": []
         },
@@ -250,7 +250,7 @@
               "host": ["{{base_url}}"],
               "path": ["configs"]
             },
-            "description": "Cria nova configuração para um símbolo no MongoDB"
+            "description": "Cria nova configuracao para um simbolo no MongoDB"
           },
           "response": []
         },
@@ -273,7 +273,7 @@
               "host": ["{{base_url}}"],
               "path": ["configs", "REKTCOIN%2FUSDT"]
             },
-            "description": "Atualiza configuração (parcial) - Exemplo: mudar intervalo"
+            "description": "Atualiza configuracao (parcial) - Exemplo: mudar intervalo"
           },
           "response": []
         },
@@ -296,7 +296,7 @@
               "host": ["{{base_url}}"],
               "path": ["configs", "REKTCOIN%2FUSDT"]
             },
-            "description": "Habilita ou desabilita um símbolo"
+            "description": "Habilita ou desabilita um simbolo"
           },
           "response": []
         },
@@ -310,14 +310,148 @@
               "host": ["{{base_url}}"],
               "path": ["configs", "BTC%2FUSDT"]
             },
-            "description": "Remove configuração de um símbolo do MongoDB"
+            "description": "Remove configuracao de um simbolo do MongoDB"
           },
           "response": []
         }
       ]
     },
     {
-      "name": "🤖 Jobs (Scheduler)",
+      "name": "Strategy 1H (Estrategia de 1 Hora)",
+      "item": [
+        {
+          "name": "Consultar Config Estrategia 1H",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/configs/REKTCOIN%2FUSDT/strategy-1h",
+              "host": ["{{base_url}}"],
+              "path": ["configs", "REKTCOIN%2FUSDT", "strategy-1h"]
+            },
+            "description": "Retorna configuracao da estrategia de 1h para um simbolo"
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Config Estrategia 1H Completa",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"levels\": [\n    {\n      \"name\": \"Scalp Leve\",\n      \"variation_threshold\": -2.0,\n      \"percentage_of_balance\": 5,\n      \"description\": \"Compra pequena em queda rapida de 2%\"\n    },\n    {\n      \"name\": \"Scalp Moderado\",\n      \"variation_threshold\": -3.0,\n      \"percentage_of_balance\": 7,\n      \"description\": \"Compra media em queda de 3%\"\n    },\n    {\n      \"name\": \"Scalp Forte\",\n      \"variation_threshold\": -5.0,\n      \"percentage_of_balance\": 10,\n      \"description\": \"Compra forte em queda brusca de 5%\"\n    }\n  ],\n  \"risk_management\": {\n    \"stop_loss_percent\": -3.0,\n    \"cooldown_minutes\": 15,\n    \"max_trades_per_hour\": 3,\n    \"max_position_size_percent\": 10.0\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/configs/REKTCOIN%2FUSDT/strategy-1h",
+              "host": ["{{base_url}}"],
+              "path": ["configs", "REKTCOIN%2FUSDT", "strategy-1h"]
+            },
+            "description": "Atualiza configuracao completa da estrategia de 1h"
+          },
+          "response": []
+        },
+        {
+          "name": "Ativar Estrategia 1H",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/configs/REKTCOIN%2FUSDT/strategy-1h/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["configs", "REKTCOIN%2FUSDT", "strategy-1h", "toggle"]
+            },
+            "description": "Liga rapidamente a estrategia de 1h para um simbolo"
+          },
+          "response": []
+        },
+        {
+          "name": "Desativar Estrategia 1H",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/configs/REKTCOIN%2FUSDT/strategy-1h/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["configs", "REKTCOIN%2FUSDT", "strategy-1h", "toggle"]
+            },
+            "description": "Desliga rapidamente a estrategia de 1h para um simbolo"
+          },
+          "response": []
+        },
+        {
+          "name": "Config Agressiva (Memecoins)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"levels\": [\n    {\n      \"name\": \"Scalp Ultra Rapido\",\n      \"variation_threshold\": -1.5,\n      \"percentage_of_balance\": 8,\n      \"description\": \"Aproveita qualquer queda\"\n    },\n    {\n      \"name\": \"Scalp Agressivo\",\n      \"variation_threshold\": -2.5,\n      \"percentage_of_balance\": 12,\n      \"description\": \"Compra forte em pequenas quedas\"\n    }\n  ],\n  \"risk_management\": {\n    \"stop_loss_percent\": -2.0,\n    \"cooldown_minutes\": 10,\n    \"max_trades_per_hour\": 4,\n    \"max_position_size_percent\": 12.0\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/configs/PEPE%2FUSDT/strategy-1h",
+              "host": ["{{base_url}}"],
+              "path": ["configs", "PEPE%2FUSDT", "strategy-1h"]
+            },
+            "description": "Exemplo de configuracao agressiva para memecoins volateis"
+          },
+          "response": []
+        },
+        {
+          "name": "Config Conservadora (BTC/ETH)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"levels\": [\n    {\n      \"name\": \"Scalp Seguro\",\n      \"variation_threshold\": -3.0,\n      \"percentage_of_balance\": 3,\n      \"description\": \"Apenas quedas significativas\"\n    }\n  ],\n  \"risk_management\": {\n    \"stop_loss_percent\": -4.0,\n    \"cooldown_minutes\": 30,\n    \"max_trades_per_hour\": 2,\n    \"max_position_size_percent\": 5.0\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/configs/BTC%2FUSDT/strategy-1h",
+              "host": ["{{base_url}}"],
+              "path": ["configs", "BTC%2FUSDT", "strategy-1h"]
+            },
+            "description": "Exemplo de configuracao conservadora para criptos estaveis"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jobs (Scheduler)",
       "item": [
         {
           "name": "Listar Todos os Jobs",
@@ -329,7 +463,7 @@
               "host": ["{{base_url}}"],
               "path": ["jobs"]
             },
-            "description": "Lista todos os jobs ativos com status e próxima execução"
+            "description": "Lista todos os jobs ativos com status e proxima execucao"
           },
           "response": []
         },
@@ -352,12 +486,12 @@
               "host": ["{{base_url}}"],
               "path": ["jobs"]
             },
-            "description": "Recarrega TODOS os jobs do MongoDB (usar após criar/editar configs)"
+            "description": "Recarrega TODOS os jobs do MongoDB (usar apos criar/editar configs)"
           },
           "response": []
         },
         {
-          "name": "Iniciar Jobs Específicos",
+          "name": "Iniciar Jobs Especificos",
           "request": {
             "method": "POST",
             "header": [
@@ -375,12 +509,12 @@
               "host": ["{{base_url}}"],
               "path": ["jobs"]
             },
-            "description": "Inicia jobs para símbolos específicos"
+            "description": "Inicia jobs para simbolos especificos"
           },
           "response": []
         },
         {
-          "name": "Parar Jobs Específicos",
+          "name": "Parar Jobs Especificos",
           "request": {
             "method": "POST",
             "header": [
@@ -398,7 +532,7 @@
               "host": ["{{base_url}}"],
               "path": ["jobs"]
             },
-            "description": "Para jobs de símbolos específicos"
+            "description": "Para jobs de simbolos especificos"
           },
           "response": []
         },

@@ -18,16 +18,30 @@ class BuyStrategy:
     - Mantém reserva para comprar ainda mais baixo
     """
     
-    def __init__(self, trading_strategy: Optional[Dict] = None):
+    def __init__(self, Tranding_strategy: Optional[Dict] = None):
         """
         Inicializa estratégia com configuração do MongoDB
         
         Args:
-            trading_strategy: Configuração de trading_strategy do MongoDB
+            Tranding_strategy: Configuração de trading_strategy do MongoDB
                              Se None, usa níveis padrão
         """
-        if trading_strategy and isinstance(trading_strategy, dict):
-            self.buy_levels = trading_strategy.get('levels', [])
+        if Tranding_strategy and isinstance(Tranding_strategy, dict):
+            # MongoDB usa estrutura: trading_strategy.buy_on_dip.thresholds
+            buy_on_dip = Tranding_strategy.get('buy_on_dip', {})
+            thresholds = buy_on_dip.get('thresholds', [])
+            
+            # Converte thresholds do MongoDB para formato de levels
+            self.buy_levels = []
+            for threshold in thresholds:
+                # Usa variation_max como threshold (ponto de entrada)
+                self.buy_levels.append({
+                    "name": threshold.get('description', 'Compra'),
+                    "variation_threshold": threshold.get('variation_max', 0),
+                    "percentage_of_balance": threshold.get('percentage_of_balance', 0),
+                    "description": threshold.get('description', '')
+                })
+            
             if not self.buy_levels:
                 self.buy_levels = self._get_default_levels()
         else:

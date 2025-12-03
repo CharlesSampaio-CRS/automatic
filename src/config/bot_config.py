@@ -1,13 +1,13 @@
 """
-Configurações Estáticas do Bot MEXC
+Configurações Estáticas do Bot
 
 NOTA IMPORTANTE:
 Este arquivo contém apenas constantes básicas para compatibilidade.
 Todas as configurações dinâmicas (pares, intervalos, horários) são 
-gerenciadas pelo MongoDB na collection 'bot_configs'.
+gerenciadas pelo MongoDB na collection 'BotConfigs'.
 
 O MongoDB é a única fonte de verdade para:
-- Pares de trading (pair)
+- Pares de Tranding (pair)
 - Intervalos de execução (schedule.interval_minutes)
 - Estado de habilitação (enabled)
 - Horários de negociação (schedule.business_hours_*) [DEPRECATED - bot roda 24/7]

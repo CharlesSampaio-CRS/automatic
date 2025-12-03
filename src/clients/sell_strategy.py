@@ -52,7 +52,7 @@ class SellStrategy:
         Usa o primeiro nível de venda como referência (mais conservador)
         
         Args:
-            symbol: Par de trading (ex: REKTCOIN/USDT)
+            symbol: Par de Tranding (ex: REKTCOIN/USDT)
         
         Returns:
             Percentual de lucro mínimo (ex: 5.0 para 5%)
@@ -68,7 +68,7 @@ class SellStrategy:
         Args:
             current_price: Preço atual do ativo
             buy_price: Preço de compra do ativo
-            symbol: Par de trading (ex: REKTCOIN/USDT)
+            symbol: Par de Tranding (ex: REKTCOIN/USDT)
         
         Returns:
             True se deve vender, False caso contrário
@@ -172,7 +172,7 @@ class SellStrategy:
         Executa venda de um nível específico
         
         Args:
-            symbol: Par de trading (ex: REKT/USDT)
+            symbol: Par de Tranding (ex: REKT/USDT)
             target: Alvo de venda a executar
             actual_price: Preço atual
             mexc_client: Cliente MEXC para executar ordem
