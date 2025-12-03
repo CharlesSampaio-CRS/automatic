@@ -1,0 +1,74 @@
+{
+  "min_value_per_create_order": 10,
+  "min_value_per_symbol": 5,
+  "base_currency": "USDT",
+  "symbols": [
+    {
+      "pair": "REKT/USDT",
+      "enabled": true,
+      "min_variation_positive": 33.0,
+      "max_variation_negative": -20.0,
+      "allocation_percentage": 100
+    }
+  ],
+  "business_hours_start": 9,
+  "business_hours_end": 23,
+  "schedule_interval_hours": 2,
+  "trading_strategy": {
+    "buy_on_dip": true,
+    "buy_strategy_type": "gradual_dip",
+    "buy_levels": [
+      {
+        "name": "Compra Leve",
+        "variation_threshold": -5.0,
+        "percentage_of_balance": 20,
+        "description": "Começa a comprar em quedas pequenas"
+      },
+      {
+        "name": "Compra Moderada",
+        "variation_threshold": -10.0,
+        "percentage_of_balance": 30,
+        "description": "Aumenta compra em quedas médias"
+      },
+      {
+        "name": "Compra Forte",
+        "variation_threshold": -15.0,
+        "percentage_of_balance": 50,
+        "description": "Compra pesado em quedas grandes"
+      },
+      {
+        "name": "Compra Máxima",
+        "variation_threshold": -20.0,
+        "percentage_of_balance": 100,
+        "description": "All-in nas quedas extremas"
+      }
+    ]
+  },
+  "sell_strategy": {
+    "enabled": true,
+    "type": "progressive",
+    "levels": [
+      {
+        "name": "Nível 1 - Lucro Seguro",
+        "sell_percentage": 33,
+        "profit_target": 10.0,
+        "description": "Garante lucro inicial"
+      },
+      {
+        "name": "Nível 2 - Lucro Médio",
+        "sell_percentage": 33,
+        "profit_target": 15.0,
+        "description": "Dobra o lucro realizado"
+      },
+      {
+        "name": "Nível 3 - Lucro Máximo",
+        "sell_percentage": 34,
+        "profit_target": 20.0,
+        "description": "Maximiza ganhos se continuar subindo"
+      }
+    ],
+    "check_interval_minutes": 30,
+    "auto_execute": false,
+    "notify_on_target": true
+  }
+}

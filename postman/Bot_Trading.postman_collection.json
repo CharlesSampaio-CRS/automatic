@@ -1,0 +1,274 @@
+{
+  "info": {
+    "name": "Bot Trading MEXC - API",
+    "description": "Collection completa da API do Bot de Trading Automático para MEXC Exchange",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "1"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "📊 Trading",
+      "item": [
+        {
+          "name": "Home - Status da API",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            },
+            "description": "Verifica se a API está rodando"
+          },
+          "response": []
+        },
+        {
+          "name": "Consultar Saldo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/balance",
+              "host": ["{{base_url}}"],
+              "path": ["balance"]
+            },
+            "description": "Retorna o saldo total em USDT e todos os ativos"
+          },
+          "response": []
+        },
+        {
+          "name": "Executar Ordem Manual",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/order",
+              "host": ["{{base_url}}"],
+              "path": ["order"]
+            },
+            "description": "Executa manualmente uma ordem de compra"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "⚙️ Configuração Geral",
+      "item": [
+        {
+          "name": "Ver Todas as Configurações",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/config",
+              "host": ["{{base_url}}"],
+              "path": ["config"]
+            },
+            "description": "Retorna todas as configurações do bot"
+          },
+          "response": []
+        },
+        {
+          "name": "Resetar Configurações",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/config/reset",
+              "host": ["{{base_url}}"],
+              "path": ["config", "reset"]
+            },
+            "description": "Reseta todas as configurações para os valores padrão"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🪙 Símbolos",
+      "item": [
+        {
+          "name": "Listar Todos os Símbolos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/config/symbols",
+              "host": ["{{base_url}}"],
+              "path": ["config", "symbols"]
+            },
+            "description": "Lista todos os símbolos configurados"
+          },
+          "response": []
+        },
+        {
+          "name": "Ver Símbolo Específico",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/config/symbols/BTC%2FUSDT",
+              "host": ["{{base_url}}"],
+              "path": ["config", "symbols", "BTC%2FUSDT"]
+            },
+            "description": "Retorna configuração de um símbolo específico (ex: BTC/USDT)"
+          },
+          "response": []
+        },
+        {
+          "name": "Adicionar Novo Símbolo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pair\": \"BTC/USDT\",\n  \"enabled\": true,\n  \"min_variation_positive\": 2.0,\n  \"max_variation_negative\": -5.0,\n  \"allocation_percentage\": 25.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/config/symbols",
+              "host": ["{{base_url}}"],
+              "path": ["config", "symbols"]
+            },
+            "description": "Adiciona um novo símbolo para trading"
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Símbolo",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"min_variation_positive\": 3.0,\n  \"allocation_percentage\": 30.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/config/symbols/BTC%2FUSDT",
+              "host": ["{{base_url}}"],
+              "path": ["config", "symbols", "BTC%2FUSDT"]
+            },
+            "description": "Atualiza configuração de um símbolo existente"
+          },
+          "response": []
+        },
+        {
+          "name": "Remover Símbolo",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/config/symbols/SHIB%2FUSDT",
+              "host": ["{{base_url}}"],
+              "path": ["config", "symbols", "SHIB%2FUSDT"]
+            },
+            "description": "Remove um símbolo da configuração"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💰 Moeda Base",
+      "item": [
+        {
+          "name": "Ver Moeda Base",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/config/base-currency",
+              "host": ["{{base_url}}"],
+              "path": ["config", "base-currency"]
+            },
+            "description": "Retorna a moeda base configurada"
+          },
+          "response": []
+        },
+        {
+          "name": "Alterar Moeda Base",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"base_currency\": \"USDT\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/config/base-currency",
+              "host": ["{{base_url}}"],
+              "path": ["config", "base-currency"]
+            },
+            "description": "Atualiza a moeda base (USDT, BRL, etc)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📈 Parâmetros de Trading",
+      "item": [
+        {
+          "name": "Ver Parâmetros de Trading",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/config/trading-params",
+              "host": ["{{base_url}}"],
+              "path": ["config", "trading-params"]
+            },
+            "description": "Retorna todos os parâmetros de trading configurados"
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Parâmetros de Trading",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"min_value_per_create_order\": 15,\n  \"min_value_per_symbol\": 7,\n  \"business_hours_start\": 8,\n  \"business_hours_end\": 22,\n  \"schedule_interval_hours\": 3,\n  \"trading_strategy\": {\n    \"buy_on_dip\": true,\n    \"buy_on_rise\": true,\n    \"use_percentage_allocation\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/config/trading-params",
+              "host": ["{{base_url}}"],
+              "path": ["config", "trading-params"]
+            },
+            "description": "Atualiza parâmetros de trading como valores mínimos, horários, estratégia"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
