@@ -116,7 +116,12 @@ class SystemRulesValidator:
         
         for test in test_cases:
             # Cria novas instâncias para cada teste (evita cooldown)
-            strategy_4h = BuyStrategy4h(self.config.get('strategy_4h'))
+            strategy_4h_config = self.config.get('strategy_4h')
+            if not strategy_4h_config:
+                print(f'❌ ERRO: strategy_4h não encontrada!')
+                return False
+                
+            strategy_4h = BuyStrategy4h(strategy_4h_config)
             strategy_24h = BuyStrategy(self.config.get('trading_strategy'))
             
             # Simula priorização
@@ -150,7 +155,12 @@ class SystemRulesValidator:
         print("2️⃣  VALIDANDO: Thresholds de Compra")
         print(f"{'='*80}")
         
-        strategy_4h = BuyStrategy4h(self.config.get('strategy_4h'))
+        strategy_4h_config = self.config.get('strategy_4h')
+        if not strategy_4h_config:
+            print(f'❌ ERRO: strategy_4h não encontrada!')
+            return False
+            
+        strategy_4h = BuyStrategy4h(strategy_4h_config)
         strategy_24h = BuyStrategy(self.config.get('trading_strategy'))
         
         test_cases_4h = [
@@ -170,10 +180,15 @@ class SystemRulesValidator:
         passed = 0
         failed = 0
         
+        strategy_4h_config = self.config.get('strategy_4h')
+        if not strategy_4h_config:
+            print(f'❌ ERRO: strategy_4h não encontrada!')
+            return False
+        
         print("\n   Strategy 4h:")
         for test in test_cases_4h:
             # Cria nova instância para cada teste (evita cooldown)
-            strategy_4h = BuyStrategy4h(self.config.get('strategy_4h'))
+            strategy_4h = BuyStrategy4h(strategy_4h_config)
             should_buy, info = strategy_4h.should_buy(test['variation'], self.symbol)
             
             if should_buy == test['should_buy']:
@@ -361,7 +376,11 @@ class SystemRulesValidator:
         balance = 100.0
         tokens = 0.0
         
-        strategy_4h = BuyStrategy4h(self.config.get('strategy_4h'))
+        strategy_4h_config = self.config.get('strategy_4h')
+        if not strategy_4h_config:
+            raise ValueError('❌ strategy_4h não encontrada na configuração!')
+            
+        strategy_4h = BuyStrategy4h(strategy_4h_config)
         strategy_24h = BuyStrategy(self.config.get('trading_strategy'))
         
         trades = []

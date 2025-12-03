@@ -62,6 +62,13 @@ class MexcClient:
         sell_strategy_config = config.get('sell_strategy') if config else None
         strategy_4h_config = config.get('strategy_4h') if config else None
         
+        # Valida se strategy_4h_config existe
+        if not strategy_4h_config:
+            raise ValueError(
+                '❌ strategy_4h não encontrada na configuração! '
+                'Verifique se o documento no MongoDB possui a chave "strategy_4h".'
+            )
+        
         self.buy_strategy = BuyStrategy(trading_strategy)
         self.sell_strategy = SellStrategy(sell_strategy_config)
         
@@ -536,6 +543,10 @@ class MexcClient:
             # Verifica estratégia de 4h PRIMEIRO (se habilitada)
             strategy_4h_config = symbol_config.get('strategy_4h', {})
             print(f"🔍 DEBUG {symbol}: strategy_4h config = {strategy_4h_config}")
+            
+            if not strategy_4h_config:
+                print(f"⚠️  {symbol}: strategy_4h não encontrada, pulando...")
+                continue
             
             if strategy_4h_config.get('enabled', False):
                 print(f"✅ {symbol}: Strategy 4h está HABILITADA")
