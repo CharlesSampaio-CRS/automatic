@@ -187,7 +187,11 @@ class MultiScenarioBacktest:
         trades = []
         
         # Estratégias
-        buy_strategy_4h = BuyStrategy4h(self.config.get('strategy_4h'))
+        strategy_4h_config = self.config.get('strategy_4h')
+        if not strategy_4h_config:
+            raise ValueError('❌ strategy_4h não encontrada na configuração!')
+            
+        buy_strategy_4h = BuyStrategy4h(strategy_4h_config)
         buy_strategy_24h = BuyStrategy(self.config.get('trading_strategy'))
         
         # Simula trading
