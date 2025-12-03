@@ -132,6 +132,8 @@ class HybridBacktestSimulator:
     def _init_buy_strategy_4h(self, config):
         """Inicializa estratégia de compra 4h usando config do MongoDB"""
         strategy_4h = config.get('strategy_4h', {})
+        if not strategy_4h:
+            raise ValueError('❌ strategy_4h não encontrada na configuração!')
         return BuyStrategy4h(strategy_4h)
     
     def _init_buy_strategy_24h(self, config):

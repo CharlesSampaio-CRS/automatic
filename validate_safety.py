@@ -46,7 +46,12 @@ def validate_safety_rules():
     print('-'*80)
     
     # Strategy 4h
-    strategy_4h = BuyStrategy4h(config.get('strategy_4h'))
+    strategy_4h_config = config.get('strategy_4h')
+    if not strategy_4h_config:
+        print('   ❌ ERRO: strategy_4h não encontrada na configuração!')
+        return False
+    
+    strategy_4h = BuyStrategy4h(strategy_4h_config)
     print('\n   Strategy 4h:')
     for level in strategy_4h.buy_levels:
         threshold = level['variation_threshold']
