@@ -16,9 +16,9 @@ if not MONGODB_URI:
 try:
     client = MongoClient(MONGODB_URI)
     db = client[MONGODB_DATABASE]
-    print(f"✓ MongoDB conectado: {MONGODB_DATABASE}")
+    # Conectado silenciosamente
 except Exception as e:
-    print(f"❌ Erro ao conectar no MongoDB: {e}")
+    print(f"! Erro MongoDB: {e}")
     raise
 
 def connection_mongo(collection):

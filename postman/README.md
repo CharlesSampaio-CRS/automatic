@@ -1,292 +1,204 @@
-# 📮 Postman Collection - Bot Trading MEXC
+# 📮 Postman Collection - Bot Trading MEXC v2.0
 
-Collection completa do Postman com todos os endpoints da API do Bot de Trading Automático.
-
-## 📦 Arquivos
-
-- **`Bot_Trading_MEXC_API.postman_collection.json`** - Collection principal com todos os endpoints
-- **`Bot_Trading_MEXC_Local.postman_environment.json`** - Environment para desenvolvimento local
-- **`Bot_Trading_MEXC_Production.postman_environment.json`** - Environment para produção
-
-## 🚀 Como Importar no Postman
-
-### Método 1: Interface do Postman
+## 🚀 Como Importar
 
 1. Abra o Postman
-2. Clique em **Import** (canto superior esquerdo)
-3. Selecione **File** ou arraste os arquivos:
-   - `Bot_Trading_MEXC_API.postman_collection.json`
-   - `Bot_Trading_MEXC_Local.postman_environment.json`
-   - `Bot_Trading_MEXC_Production.postman_environment.json`
-4. Clique em **Import**
-
-### Método 2: Via CLI (se tiver Postman CLI)
-
-```bash
-postman collection import Bot_Trading_MEXC_API.postman_collection.json
-postman environment import Bot_Trading_MEXC_Local.postman_environment.json
-```
-
-## ⚙️ Configuração
-
-### Selecionar Environment
-
-1. No canto superior direito do Postman
-2. Clique no dropdown de **Environments**
-3. Selecione: **Bot Trading MEXC - Local** (para testes locais)
-
-### Variáveis Disponíveis
-
-| Variável | Valor Padrão | Descrição |
-|----------|--------------|-----------|
-| `base_url` | `http://localhost:5000` | URL base da API |
-| `symbol` | `BTC/USDT` | Símbolo para testes |
-
-### Personalizar Variáveis
-
-1. Clique no ícone de **olho** (👁️) no canto superior direito
-2. Clique em **Edit** ao lado do environment
-3. Modifique os valores conforme necessário
-4. Clique em **Save**
-
-## 📚 Estrutura da Collection
-
-### 1. **Trading** (3 endpoints)
-- ✅ Status da API
-- 💰 Consultar Saldo
-- 🛒 Executar Ordem Manual
-
-### 2. **Configuração** (2 endpoints)
-- 📋 Ver Todas Configurações
-- 🔄 Reset Configurações
-
-### 3. **Símbolos** (5 endpoints)
-- 📊 Listar Todos Símbolos
-- 🔍 Ver Símbolo Específico
-- ➕ Adicionar Símbolo
-- ✏️ Atualizar Símbolo
-- ❌ Remover Símbolo
-
-### 4. **Moeda Base** (2 endpoints)
-- 💵 Ver Moeda Base
-- 🔄 Atualizar Moeda Base
-
-### 5. **Parâmetros de Trading** (2 endpoints)
-- 📊 Ver Parâmetros
-- ✏️ Atualizar Parâmetros
-
-## 🧪 Exemplos de Uso
-
-### 1. Verificar Status da API
-
-**Request:**
-```
-GET {{base_url}}/
-```
-
-**Response:**
-```json
-{
-  "message": "API is running!"
-}
-```
-
-### 2. Adicionar Novo Símbolo
-
-**Request:**
-```
-POST {{base_url}}/config/symbols
-Content-Type: application/json
-
-{
-  "pair": "BTC/USDT",
-  "enabled": true,
-  "min_variation_positive": 2.0,
-  "max_variation_negative": -5.0,
-  "allocation_percentage": 25.0
-}
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "message": "Símbolo BTC/USDT adicionado com sucesso",
-  "symbol": {...}
-}
-```
-
-### 3. Listar Todos os Símbolos
-
-**Request:**
-```
-GET {{base_url}}/config/symbols
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "total": 3,
-  "enabled": 2,
-  "symbols": [
-    {
-      "pair": "GROK/USDT",
-      "enabled": true,
-      "min_variation_positive": 2.0,
-      "max_variation_negative": -5.0,
-      "allocation_percentage": 33.33
-    },
-    ...
-  ]
-}
-```
-
-### 4. Atualizar Símbolo
-
-**Request:**
-```
-PUT {{base_url}}/config/symbols/BTC/USDT
-Content-Type: application/json
-
-{
-  "enabled": false,
-  "allocation_percentage": 30.0
-}
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "message": "Símbolo BTC/USDT atualizado com sucesso",
-  "symbol": {...}
-}
-```
-
-### 5. Consultar Saldo
-
-**Request:**
-```
-GET {{base_url}}/balance
-```
-
-**Response:**
-```json
-{
-  "total_assets_usdt": 100.50,
-  "available_usdt": 50.25,
-  "total_usdt": 150.75,
-  "date": "2025-12-02T10:30:00-03:00",
-  "tokens": [...]
-}
-```
-
-## 🔧 Dicas de Uso
-
-### Usar Variáveis nas Requests
-
-Nas requests, use `{{variable_name}}` para referenciar variáveis:
-
-```
-GET {{base_url}}/config/symbols/{{symbol}}
-```
-
-### Salvar Responses como Exemplos
-
-1. Execute uma request
-2. Clique em **Save Response**
-3. Dê um nome ao exemplo
-4. Agora outros usuários podem ver exemplos de respostas
-
-### Criar Testes Automatizados
-
-No Postman, vá até a aba **Tests** e adicione:
-
-```javascript
-// Verificar se a resposta é 200 OK
-pm.test("Status code is 200", function () {
-    pm.response.to.have.status(200);
-});
-
-// Verificar estrutura da resposta
-pm.test("Response has status field", function () {
-    var jsonData = pm.response.json();
-    pm.expect(jsonData).to.have.property('status');
-});
-
-// Salvar variável para próxima request
-pm.test("Save symbol from response", function () {
-    var jsonData = pm.response.json();
-    pm.environment.set("symbol", jsonData.symbol.pair);
-});
-```
-
-### Executar Collection Inteira
-
-1. Clique nos **3 pontos** ao lado da collection
-2. Selecione **Run collection**
-3. Configure ordem e delays
-4. Clique em **Run**
-
-## 🔄 Workflow Recomendado
-
-### Configuração Inicial
-
-1. ✅ **Status da API** - Verificar se está rodando
-2. 📋 **Ver Todas Configurações** - Ver configuração atual
-3. 📊 **Listar Todos Símbolos** - Ver símbolos existentes
-
-### Adicionar Novo Símbolo
-
-1. ➕ **Adicionar Símbolo** - Criar novo
-2. 🔍 **Ver Símbolo Específico** - Confirmar adição
-3. 📊 **Listar Todos Símbolos** - Ver lista atualizada
-
-### Testar Trading
-
-1. 💰 **Consultar Saldo** - Ver saldo disponível
-2. 🛒 **Executar Ordem Manual** - Testar execução
-3. 💰 **Consultar Saldo** - Verificar mudanças
-
-## 📝 Notas Importantes
-
-- ⚠️ **Certifique-se de que o bot está rodando** antes de testar
-- 🔧 **Use o environment correto** (Local ou Production)
-- 💾 **Salve alterações** nas variáveis quando modificar
-- 🧪 **Teste em Local** antes de usar em Production
-- 📊 **Monitore os logs** do bot durante os testes
-
-## 🆘 Troubleshooting
-
-### "Could not get any response"
-
-```bash
-# Verificar se o bot está rodando
-curl http://localhost:5000/
-
-# Iniciar o bot se não estiver rodando
-python3 run.py
-```
-
-### "Error: connect ECONNREFUSED"
-
-- Verifique se a porta está correta (padrão: 5000)
-- Verifique se não há firewall bloqueando
-- Teste com `curl` no terminal primeiro
-
-### Símbolo não funciona
-
-- Certifique-se de usar o formato correto: `BTC/USDT`
-- URL encode se necessário: `BTC%2FUSDT`
-- Verifique se o símbolo existe na MEXC
-
-## 📚 Recursos Adicionais
-
-- 📖 [Documentação Completa da API](../docs/API_REFERENCE.md)
-- 🚀 [Comandos Úteis](../COMMANDS.md)
-- 📘 [README Principal](../README.md)
+2. Clique em **Import**
+3. Selecione o arquivo `Bot_Trading.postman_collection.json`
+4. A collection será importada com todos os endpoints organizados
 
 ---
 
-**Desenvolvido com ❤️ para facilitar o desenvolvimento**
+## 📋 Estrutura da Collection
+
+### 🏥 **Health Check**
+- `GET /` - Verifica se a API está rodando
+
+### 💰 **Balance**
+- `GET /balance` - Consulta saldo total em USDT
+
+### � **Order**
+- `POST /order` - Executa ordem manual
+
+### ⚙️ **Configs (MongoDB)**
+- `GET /configs` - Lista todas as configs
+- `GET /configs?enabled_only=true` - Lista apenas configs habilitadas
+- `GET /configs/{pair}` - Busca config por par (ex: REKT/USDT)
+- `POST /configs` - Cria nova config
+- `PUT /configs/{pair}` - Atualiza config (parcial)
+- `DELETE /configs/{pair}` - Deleta config
+
+### 🤖 **Jobs (Scheduler)**
+- `GET /jobs` - Lista todos os jobs ativos
+- `POST /jobs` com `action: reload` - Recarrega do MongoDB
+- `POST /jobs` com `action: start` - Inicia jobs específicos
+- `POST /jobs` com `action: stop` - Para jobs específicos ou todos
+
+---
+
+## 🔧 Configuração
+
+### Variável de Ambiente
+
+A collection já vem configurada com a variável:
+
+```
+base_url = http://localhost:5000
+```
+
+Para alterar:
+1. Clique no nome da collection
+2. Vá em **Variables**
+3. Edite o valor de `base_url`
+---
+
+## 🎯 Fluxo de Uso Recomendado
+
+### 1️⃣ **Verificar Status**
+```
+GET /
+GET /balance
+```
+
+### 2️⃣ **Criar Configuração**
+```
+POST /configs
+Body: {JSON completo}
+```
+
+### 3️⃣ **Recarregar Jobs**
+```
+POST /jobs
+Body: {"action": "reload"}
+```
+
+### 4️⃣ **Verificar Jobs Ativos**
+```
+GET /jobs
+```
+
+### 5️⃣ **Testar Ordem Manual**
+```
+POST /order
+Body: {"pair": "ETH/USDT"}
+```
+
+### 6️⃣ **Atualizar Config**
+```
+PUT /configs/ETH%2FUSDT
+Body: {"schedule": {"interval_hours": 4}}
+```
+
+### 7️⃣ **Recarregar Novamente**
+```
+POST /jobs
+Body: {"action": "reload"}
+```
+
+---
+
+## 📝 Exemplos de Body
+
+### Criar Config Completa
+```json
+{
+  "pair": "BTC/USDT",
+  "enabled": true,
+  "schedule": {
+    "interval_hours": 4,
+    "business_hours_start": 9,
+    "business_hours_end": 23,
+    "enabled": true
+  },
+  "limits": {
+    "min_value_per_order": 20,
+    "allocation_percentage": 30
+  },
+  "trading_strategy": {
+    "type": "buy_levels",
+    "min_price_variation": 1.0,
+    "levels": [
+      {"price_drop_percent": 1.0, "allocation_percent": 20},
+      {"price_drop_percent": 3.0, "allocation_percent": 30},
+      {"price_drop_percent": 5.0, "allocation_percent": 50}
+    ]
+  },
+  "sell_strategy": {
+    "type": "profit_levels",
+    "levels": [
+      {"profit_percent": 2.0, "sell_percent": 30},
+      {"profit_percent": 5.0, "sell_percent": 50},
+      {"profit_percent": 10.0, "sell_percent": 100}
+    ]
+  }
+}
+```
+
+### Atualizar Apenas Intervalo
+```json
+{
+  "schedule": {
+    "interval_hours": 3
+  }
+}
+```
+
+### Desabilitar Símbolo
+```json
+{
+  "enabled": false
+}
+```
+
+---
+
+## 🔍 Observações Importantes
+
+### URL Encoding
+Quando usar pares com `/` na URL, use `%2F`:
+- ✅ Correto: `/configs/REKT%2FUSDT`
+- ❌ Errado: `/configs/REKT/USDT`
+
+### Actions do Jobs
+O endpoint `POST /jobs` aceita 3 actions:
+
+1. **reload** - Recarrega todos do MongoDB
+   ```json
+   {"action": "reload"}
+   ```
+
+2. **start** - Inicia específicos (requer pairs)
+   ```json
+   {"action": "start", "pairs": ["REKT/USDT", "BTC/USDT"]}
+   ```
+
+3. **stop** - Para específicos ou todos
+   ```json
+   {"action": "stop", "pairs": ["REKT/USDT"]}
+   ```
+   ou
+   ```json
+   {"action": "stop"}
+   ```
+
+### Após Mudanças no MongoDB
+**SEMPRE** use `POST /jobs {"action": "reload"}` para aplicar as mudanças!
+
+---
+
+## 📚 Documentação Completa
+
+Para mais detalhes, consulte:
+- `API_DOCS.md` - Documentação completa da API
+- `API_CHANGELOG.txt` - Resumo das mudanças
+
+---
+
+## ✨ Features da Collection v2.0
+
+- ✅ Organizada por domínios (Health, Balance, Order, Configs, Jobs)
+- ✅ Exemplos de body pré-configurados
+- ✅ Descrições em cada request
+- ✅ Variável `base_url` configurável
+- ✅ Cobertura completa da API v2.0
+- ✅ Suporte a MongoDB e Jobs Dinâmicos

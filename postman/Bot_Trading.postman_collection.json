@@ -1,9 +1,10 @@
 {
   "info": {
-    "name": "Bot Trading MEXC - API",
-    "description": "Collection completa da API do Bot de Trading Automático para MEXC Exchange",
+    "name": "Bot Trading MEXC - API v2.0",
+    "description": "API do Bot de Trading Automático com MongoDB e Jobs Dinâmicos",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "1"
+    "_exporter_id": "1",
+    "version": "2.0.0"
   },
   "variable": [
     {
@@ -14,10 +15,10 @@
   ],
   "item": [
     {
-      "name": "📊 Trading",
+      "name": "🏥 Health Check",
       "item": [
         {
-          "name": "Home - Status da API",
+          "name": "Status da API",
           "request": {
             "method": "GET",
             "header": [],
@@ -29,9 +30,14 @@
             "description": "Verifica se a API está rodando"
           },
           "response": []
-        },
+        }
+      ]
+    },
+    {
+      "name": "💰 Balance",
+      "item": [
         {
-          "name": "Consultar Saldo",
+          "name": "Consultar Saldo Total",
           "request": {
             "method": "GET",
             "header": [],
@@ -40,92 +46,117 @@
               "host": ["{{base_url}}"],
               "path": ["balance"]
             },
-            "description": "Retorna o saldo total em USDT e todos os ativos"
+            "description": "Retorna o saldo total em USDT"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "� Price (Preços)",
+      "item": [
+        {
+          "name": "Preço de Um Par (Query Params)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/price?pair=REKTCOIN/USDT",
+              "host": ["{{base_url}}"],
+              "path": ["price"],
+              "query": [
+                {
+                  "key": "pair",
+                  "value": "REKTCOIN/USDT",
+                  "description": "Par de trading (ex: REKTCOIN/USDT, BTC/USDT)"
+                }
+              ]
+            },
+            "description": "Retorna o preço atual de um par via query params"
           },
           "response": []
         },
         {
-          "name": "Executar Ordem Manual",
+          "name": "Preço de Um Par (Path com Hífen)",
           "request": {
             "method": "GET",
             "header": [],
+            "url": {
+              "raw": "{{base_url}}/price/REKTCOIN-USDT",
+              "host": ["{{base_url}}"],
+              "path": ["price", "REKTCOIN-USDT"]
+            },
+            "description": "Retorna o preço atual de um par via path (formato com hífen)"
+          },
+          "response": []
+        },
+        {
+          "name": "Preço de Um Par (Path com Barra Codificada)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/price/REKTCOIN%2FUSDT",
+              "host": ["{{base_url}}"],
+              "path": ["price", "REKTCOIN%2FUSDT"]
+            },
+            "description": "Retorna o preço atual de um par via path (formato com barra codificada %2F)"
+          },
+          "response": []
+        },
+        {
+          "name": "Preços de Múltiplos Pares",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pairs\": [\"REKTCOIN/USDT\", \"BTC/USDT\", \"ETH/USDT\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/prices",
+              "host": ["{{base_url}}"],
+              "path": ["prices"]
+            },
+            "description": "Retorna preços de múltiplos pares de uma vez"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "�🛒 Order",
+      "item": [
+        {
+          "name": "Executar Ordem Manual Completa (Buy + Sell)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pair\": \"REKTCOIN/USDT\"\n}"
+            },
             "url": {
               "raw": "{{base_url}}/order",
               "host": ["{{base_url}}"],
               "path": ["order"]
             },
-            "description": "Executa manualmente uma ordem de compra"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "⚙️ Configuração Geral",
-      "item": [
-        {
-          "name": "Ver Todas as Configurações",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/config",
-              "host": ["{{base_url}}"],
-              "path": ["config"]
-            },
-            "description": "Retorna todas as configurações do bot"
+            "description": "Executa ordem MANUAL completa: verifica compra E venda automaticamente"
           },
           "response": []
         },
         {
-          "name": "Resetar Configurações",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/config/reset",
-              "host": ["{{base_url}}"],
-              "path": ["config", "reset"]
-            },
-            "description": "Reseta todas as configurações para os valores padrão"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "🪙 Símbolos",
-      "item": [
-        {
-          "name": "Listar Todos os Símbolos",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/config/symbols",
-              "host": ["{{base_url}}"],
-              "path": ["config", "symbols"]
-            },
-            "description": "Lista todos os símbolos configurados"
-          },
-          "response": []
-        },
-        {
-          "name": "Ver Símbolo Específico",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/config/symbols/BTC%2FUSDT",
-              "host": ["{{base_url}}"],
-              "path": ["config", "symbols", "BTC%2FUSDT"]
-            },
-            "description": "Retorna configuração de um símbolo específico (ex: BTC/USDT)"
-          },
-          "response": []
-        },
-        {
-          "name": "Adicionar Novo Símbolo",
+          "name": "Executar Ordem Manual com Venda Forçada",
           "request": {
             "method": "POST",
             "header": [
@@ -136,19 +167,95 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"pair\": \"BTC/USDT\",\n  \"enabled\": true,\n  \"min_variation_positive\": 2.0,\n  \"max_variation_negative\": -5.0,\n  \"allocation_percentage\": 25.0\n}"
+              "raw": "{\n  \"pair\": \"REKTCOIN/USDT\",\n  \"force_sell\": true\n}"
             },
             "url": {
-              "raw": "{{base_url}}/config/symbols",
+              "raw": "{{base_url}}/order",
               "host": ["{{base_url}}"],
-              "path": ["config", "symbols"]
+              "path": ["order"]
             },
-            "description": "Adiciona um novo símbolo para trading"
+            "description": "Executa ordem MANUAL com venda forçada (ignora verificação de lucro)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "⚙️ Configs (MongoDB)",
+      "item": [
+        {
+          "name": "Listar Todas as Configs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/configs",
+              "host": ["{{base_url}}"],
+              "path": ["configs"]
+            },
+            "description": "Lista todas as configurações de símbolos do MongoDB"
           },
           "response": []
         },
         {
-          "name": "Atualizar Símbolo",
+          "name": "Listar Configs Habilitadas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/configs?enabled_only=true",
+              "host": ["{{base_url}}"],
+              "path": ["configs"],
+              "query": [
+                {
+                  "key": "enabled_only",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Lista apenas configurações habilitadas"
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Config por Pair",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/configs/REKTCOIN%2FUSDT",
+              "host": ["{{base_url}}"],
+              "path": ["configs", "REKTCOIN%2FUSDT"]
+            },
+            "description": "Busca configuração de um símbolo específico (ex: REKTCOIN/USDT)"
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Nova Config",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pair\": \"BTC/USDT\",\n  \"enabled\": true,\n  \"schedule\": {\n    \"interval_hours\": 4,\n    \"business_hours_start\": 9,\n    \"business_hours_end\": 23,\n    \"enabled\": true\n  },\n  \"limits\": {\n    \"min_value_per_order\": 20,\n    \"allocation_percentage\": 30\n  },\n  \"trading_strategy\": {\n    \"type\": \"buy_levels\",\n    \"min_price_variation\": 1.0,\n    \"levels\": [\n      {\n        \"price_drop_percent\": 1.0,\n        \"allocation_percent\": 20\n      },\n      {\n        \"price_drop_percent\": 3.0,\n        \"allocation_percent\": 30\n      },\n      {\n        \"price_drop_percent\": 5.0,\n        \"allocation_percent\": 50\n      }\n    ]\n  },\n  \"sell_strategy\": {\n    \"type\": \"profit_levels\",\n    \"levels\": [\n      {\n        \"profit_percent\": 2.0,\n        \"sell_percent\": 30\n      },\n      {\n        \"profit_percent\": 5.0,\n        \"sell_percent\": 50\n      },\n      {\n        \"profit_percent\": 10.0,\n        \"sell_percent\": 100\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/configs",
+              "host": ["{{base_url}}"],
+              "path": ["configs"]
+            },
+            "description": "Cria nova configuração para um símbolo no MongoDB"
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Config (Intervalo)",
           "request": {
             "method": "PUT",
             "header": [
@@ -159,54 +266,77 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"enabled\": true,\n  \"min_variation_positive\": 3.0,\n  \"allocation_percentage\": 30.0\n}"
+              "raw": "{\n  \"schedule\": {\n    \"interval_hours\": 3\n  }\n}"
             },
             "url": {
-              "raw": "{{base_url}}/config/symbols/BTC%2FUSDT",
+              "raw": "{{base_url}}/configs/REKTCOIN%2FUSDT",
               "host": ["{{base_url}}"],
-              "path": ["config", "symbols", "BTC%2FUSDT"]
+              "path": ["configs", "REKTCOIN%2FUSDT"]
             },
-            "description": "Atualiza configuração de um símbolo existente"
+            "description": "Atualiza configuração (parcial) - Exemplo: mudar intervalo"
           },
           "response": []
         },
         {
-          "name": "Remover Símbolo",
+          "name": "Atualizar Config (Habilitar/Desabilitar)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/configs/REKTCOIN%2FUSDT",
+              "host": ["{{base_url}}"],
+              "path": ["configs", "REKTCOIN%2FUSDT"]
+            },
+            "description": "Habilita ou desabilita um símbolo"
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Config",
           "request": {
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/config/symbols/SHIB%2FUSDT",
+              "raw": "{{base_url}}/configs/BTC%2FUSDT",
               "host": ["{{base_url}}"],
-              "path": ["config", "symbols", "SHIB%2FUSDT"]
+              "path": ["configs", "BTC%2FUSDT"]
             },
-            "description": "Remove um símbolo da configuração"
+            "description": "Remove configuração de um símbolo do MongoDB"
           },
           "response": []
         }
       ]
     },
     {
-      "name": "💰 Moeda Base",
+      "name": "🤖 Jobs (Scheduler)",
       "item": [
         {
-          "name": "Ver Moeda Base",
+          "name": "Listar Todos os Jobs",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/config/base-currency",
+              "raw": "{{base_url}}/jobs",
               "host": ["{{base_url}}"],
-              "path": ["config", "base-currency"]
+              "path": ["jobs"]
             },
-            "description": "Retorna a moeda base configurada"
+            "description": "Lista todos os jobs ativos com status e próxima execução"
           },
           "response": []
         },
         {
-          "name": "Alterar Moeda Base",
+          "name": "Recarregar Jobs do MongoDB",
           "request": {
-            "method": "PUT",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
@@ -215,40 +345,21 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"base_currency\": \"USDT\"\n}"
+              "raw": "{\n  \"action\": \"reload\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/config/base-currency",
+              "raw": "{{base_url}}/jobs",
               "host": ["{{base_url}}"],
-              "path": ["config", "base-currency"]
+              "path": ["jobs"]
             },
-            "description": "Atualiza a moeda base (USDT, BRL, etc)"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "📈 Parâmetros de Trading",
-      "item": [
-        {
-          "name": "Ver Parâmetros de Trading",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/config/trading-params",
-              "host": ["{{base_url}}"],
-              "path": ["config", "trading-params"]
-            },
-            "description": "Retorna todos os parâmetros de trading configurados"
+            "description": "Recarrega TODOS os jobs do MongoDB (usar após criar/editar configs)"
           },
           "response": []
         },
         {
-          "name": "Atualizar Parâmetros de Trading",
+          "name": "Iniciar Jobs Específicos",
           "request": {
-            "method": "PUT",
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
@@ -257,14 +368,60 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"min_value_per_create_order\": 15,\n  \"min_value_per_symbol\": 7,\n  \"business_hours_start\": 8,\n  \"business_hours_end\": 22,\n  \"schedule_interval_hours\": 3,\n  \"trading_strategy\": {\n    \"buy_on_dip\": true,\n    \"buy_on_rise\": true,\n    \"use_percentage_allocation\": true\n  }\n}"
+              "raw": "{\n  \"action\": \"start\",\n  \"pairs\": [\"REKTCOIN/USDT\", \"BTC/USDT\"]\n}"
             },
             "url": {
-              "raw": "{{base_url}}/config/trading-params",
+              "raw": "{{base_url}}/jobs",
               "host": ["{{base_url}}"],
-              "path": ["config", "trading-params"]
+              "path": ["jobs"]
             },
-            "description": "Atualiza parâmetros de trading como valores mínimos, horários, estratégia"
+            "description": "Inicia jobs para símbolos específicos"
+          },
+          "response": []
+        },
+        {
+          "name": "Parar Jobs Específicos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"stop\",\n  \"pairs\": [\"REKTCOIN/USDT\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/jobs",
+              "host": ["{{base_url}}"],
+              "path": ["jobs"]
+            },
+            "description": "Para jobs de símbolos específicos"
+          },
+          "response": []
+        },
+        {
+          "name": "Parar TODOS os Jobs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"stop\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/jobs",
+              "host": ["{{base_url}}"],
+              "path": ["jobs"]
+            },
+            "description": "Para todos os jobs ativos"
           },
           "response": []
         }

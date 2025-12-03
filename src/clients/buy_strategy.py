@@ -4,10 +4,8 @@ Compra APENAS quando o preço está caindo
 Quanto MAIOR a queda, MAIOR o investimento
 """
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 from datetime import datetime
-import json
-import os
 
 class BuyStrategy:
     """
@@ -20,46 +18,20 @@ class BuyStrategy:
     - Mantém reserva para comprar ainda mais baixo
     """
     
-    def __init__(self):
-        """Inicializa estratégia carregando configurações do settings.json"""
-        self.buy_levels = self._load_buy_levels_from_config()
-    
-    def _load_buy_levels_from_config(self):
+    def __init__(self, trading_strategy: Optional[Dict] = None):
         """
-        Carrega níveis de compra do arquivo settings.json
-        """
-        config_file = os.path.join(
-            os.path.dirname(__file__), 
-            '../config/settings.json'
-        )
+        Inicializa estratégia com configuração do MongoDB
         
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            
-            trading_strategy = config.get('trading_strategy', {})
-            
-            # Verifica se compra na queda está habilitada
-            if not trading_strategy.get('buy_on_dip', True):
-                print("⚠️  Estratégia de compra na queda desabilitada no settings.json")
-                return []
-            
-            buy_levels = trading_strategy.get('buy_levels', [])
-            
-            if not buy_levels:
-                print("⚠️  Nenhum nível de compra configurado, usando padrão")
-                return self._get_default_levels()
-            
-            print(f"✓ {len(buy_levels)} níveis de compra carregados do settings.json")
-            for level in buy_levels:
-                print(f"  • {level['name']}: Queda {level['variation_threshold']:+.1f}% → {level['percentage_of_balance']}% do saldo")
-            
-            return buy_levels
-            
-        except Exception as e:
-            print(f"⚠️  Erro ao carregar configuração: {e}")
-            print(f"   Usando níveis padrão")
-            return self._get_default_levels()
+        Args:
+            trading_strategy: Configuração de trading_strategy do MongoDB
+                             Se None, usa níveis padrão
+        """
+        if trading_strategy and isinstance(trading_strategy, dict):
+            self.buy_levels = trading_strategy.get('levels', [])
+            if not self.buy_levels:
+                self.buy_levels = self._get_default_levels()
+        else:
+            self.buy_levels = self._get_default_levels()
     
     def _get_default_levels(self):
         """Retorna níveis de compra padrão"""
@@ -83,20 +55,18 @@ class BuyStrategy:
                 "description": "Compra pesado em quedas grandes"
             },
             {
-                "name": "Compra Máxima",
+                "name": "Compra Agressiva",
                 "variation_threshold": -20.0,
+                "percentage_of_balance": 70,
+                "description": "Compra muito forte em quedas severas"
+            },
+            {
+                "name": "Compra Máxima",
+                "variation_threshold": -40.0,
                 "percentage_of_balance": 100,
-                "description": "All-in nas quedas extremas"
+                "description": "All-in em quedas extremas (crash/oportunidade única)"
             }
         ]
-    
-    def reload_config(self):
-        """
-        Recarrega configuração do settings.json
-        Útil quando o arquivo é alterado
-        """
-        self.buy_levels = self._load_buy_levels_from_config()
-        return self.buy_levels
     
     def should_buy(self, variation_24h: float) -> tuple[bool, Dict]:
         """

@@ -3,76 +3,87 @@ Estratégia de Venda Progressiva (Scaling Out)
 Vende em partes conforme o preço aumenta
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
 class SellStrategy:
     """
     Gerencia vendas progressivas em múltiplos níveis
-    Lê configurações dinamicamente do settings.json
+    Recebe configurações do MongoDB
     """
     
-    def __init__(self):
-        # Carrega configuração do arquivo settings.json
-        self.sell_levels = self._load_sell_levels_from_config()
-    
-    def _load_sell_levels_from_config(self):
+    def __init__(self, sell_strategy: Optional[Dict] = None):
         """
-        Carrega níveis de venda do arquivo settings.json
+        Inicializa estratégia com configuração do MongoDB
+        
+        Args:
+            sell_strategy: Configuração de sell_strategy do MongoDB
+                          Se None, usa níveis padrão
         """
-        import json
-        import os
-        
-        config_file = os.path.join(
-            os.path.dirname(__file__), 
-            '../config/settings.json'
-        )
-        
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            
-            sell_strategy = config.get('sell_strategy', {})
-            
-            if not sell_strategy.get('enabled', False):
-                print("⚠️  Estratégia de venda desabilitada no settings.json")
-                return []
-            
+        if sell_strategy and isinstance(sell_strategy, dict):
             levels_config = sell_strategy.get('levels', [])
             
             # Converte configuração para formato interno
-            sell_levels = []
+            self.sell_levels = []
             for level in levels_config:
-                sell_levels.append({
-                    "percentage": level.get('sell_percentage', 33),
-                    "profit_target": level.get('profit_target', 5.0),
-                    "name": level.get('name', f"Nível {len(sell_levels) + 1}"),
+                self.sell_levels.append({
+                    "percentage": level.get('sell_percent', level.get('sell_percentage', 33)),
+                    "profit_target": level.get('profit_percent', level.get('profit_target', 5.0)),
+                    "name": level.get('name', f"Nível {len(self.sell_levels) + 1}"),
                     "description": level.get('description', '')
                 })
             
-            print(f"✓ {len(sell_levels)} níveis de venda carregados do settings.json")
-            for level in sell_levels:
-                print(f"  • {level['name']}: {level['percentage']}% em +{level['profit_target']}%")
-            
-            return sell_levels
-            
-        except Exception as e:
-            print(f"⚠️  Erro ao carregar configuração: {e}")
-            print(f"   Usando níveis padrão")
-            # Níveis padrão de fallback
-            return [
-                {"percentage": 33, "profit_target": 5.0,  "name": "Nível 1 - Lucro Seguro"},
-                {"percentage": 33, "profit_target": 10.0, "name": "Nível 2 - Lucro Médio"},
-                {"percentage": 34, "profit_target": 15.0, "name": "Nível 3 - Lucro Máximo"}
-            ]
+            if not self.sell_levels:
+                self.sell_levels = self._get_default_levels()
+        else:
+            self.sell_levels = self._get_default_levels()
     
-    def reload_config(self):
+    def _get_default_levels(self):
+        """Retorna níveis de venda padrão"""
+        return [
+            {"percentage": 33, "profit_target": 5.0,  "name": "Nível 1 - Lucro Seguro"},
+            {"percentage": 33, "profit_target": 10.0, "name": "Nível 2 - Lucro Médio"},
+            {"percentage": 34, "profit_target": 15.0, "name": "Nível 3 - Lucro Máximo"}
+        ]
+    
+    def get_min_profit_for_symbol(self, symbol: str) -> float:
         """
-        Recarrega configuração do settings.json
-        Útil quando o arquivo é alterado
+        Retorna o lucro mínimo configurado para o símbolo
+        Usa o primeiro nível de venda como referência (mais conservador)
+        
+        Args:
+            symbol: Par de trading (ex: REKTCOIN/USDT)
+        
+        Returns:
+            Percentual de lucro mínimo (ex: 5.0 para 5%)
         """
-        self.sell_levels = self._load_sell_levels_from_config()
-        return self.sell_levels
+        if self.sell_levels and len(self.sell_levels) > 0:
+            return self.sell_levels[0]["profit_target"]
+        return 5.0  # Padrão: 5% de lucro mínimo
+    
+    def should_sell(self, current_price: float, buy_price: float, symbol: str) -> bool:
+        """
+        Verifica se deve vender baseado no lucro mínimo configurado
+        
+        Args:
+            current_price: Preço atual do ativo
+            buy_price: Preço de compra do ativo
+            symbol: Par de trading (ex: REKTCOIN/USDT)
+        
+        Returns:
+            True se deve vender, False caso contrário
+        """
+        if buy_price <= 0:
+            return False
+        
+        # Calcula lucro percentual
+        profit_percent = ((current_price - buy_price) / buy_price) * 100
+        
+        # Busca lucro mínimo configurado
+        min_profit = self.get_min_profit_for_symbol(symbol)
+        
+        # Vende se lucro atual >= lucro mínimo
+        return profit_percent >= min_profit
     
     def calculate_sell_targets(self, buy_price: float, amount_bought: float, 
                                investment_value: float) -> List[Dict]:
