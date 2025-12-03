@@ -26,19 +26,12 @@ class BuyStrategy4h:
             strategy_4h: Configuração de strategy_4h do MongoDB
                         Se None, usa níveis padrão
         """
-        import sys
-        print(f"\n🔧 BuyStrategy4h.__init__ recebeu:", file=sys.stderr, flush=True)
-        print(f"   type: {type(strategy_4h)}", file=sys.stderr, flush=True)
-        print(f"   value: {strategy_4h}", file=sys.stderr, flush=True)
-        
         if strategy_4h and isinstance(strategy_4h, dict):
             self.enabled = strategy_4h.get('enabled', False)
-            print(f"   self.enabled = {self.enabled}", file=sys.stderr, flush=True)
             
             # MongoDB usa estrutura: strategy_4h.buy_strategy.levels
             buy_strategy = strategy_4h.get('buy_strategy', {})
             self.buy_levels = buy_strategy.get('levels', [])
-            print(f"   self.buy_levels = {len(self.buy_levels)} levels", file=sys.stderr, flush=True)
             
             # Configurações de gestão de risco
             risk_mgmt = strategy_4h.get('risk_management', {})

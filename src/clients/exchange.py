@@ -451,20 +451,12 @@ class MexcClient:
         3. Calcula lucro potencial baseado em histórico
         4. Implementa stop loss e take profit automaticamente
         """
-        import sys
-        
         if dry_run:
-            print("=" * 80, file=sys.stderr, flush=True)
-            print(f"🧪 MODO SIMULAÇÃO - NENHUMA ORDEM SERÁ EXECUTADA", file=sys.stderr, flush=True)
-            print("=" * 80, file=sys.stderr, flush=True)
+            print("🧪 MODO SIMULAÇÃO - NENHUMA ORDEM SERÁ EXECUTADA")
         
-        print("=" * 80, file=sys.stderr, flush=True)
-        print(f"🚀 CREATE_ORDER INICIADO - Tipo: {execution_type}", file=sys.stderr, flush=True)
-        print("=" * 80, file=sys.stderr, flush=True)
+        print(f"🚀 CREATE_ORDER - Tipo: {execution_type}")
         
         usdt_balance = self.get_usdt_available()
-        
-        print(f"💰 Saldo USDT: ${usdt_balance:.2f}", file=sys.stderr, flush=True)
         
         if usdt_balance < MIN_VALUE_PER_CREATE_ORDER:
             error_message = f"{ERROR_INSUFFICIENT_FUNDS}: Available balance: $ {usdt_balance:.2f}"
@@ -475,13 +467,8 @@ class MexcClient:
             }
 
         # Busca variações e filtra apenas símbolos que atendem critérios
-        print("📊 Buscando variações de símbolos...", file=sys.stderr, flush=True)
         symbol_variations = self.get_symbol_variations()
-        print(f"✅ Variações obtidas: {len(symbol_variations)}", file=sys.stderr, flush=True)
-        
-        print("🔍 Filtrando símbolos por estratégia...", file=sys.stderr, flush=True)
         filtered_symbols = self.filter_symbols_by_strategy(symbol_variations)
-        print(f"✅ Símbolos filtrados: {len(filtered_symbols)}", file=sys.stderr, flush=True)
         
         if not filtered_symbols:
             print(f"   > Nenhum símbolo atende os critérios de compra no momento")
@@ -519,16 +506,12 @@ class MexcClient:
         Delega lógica de compra para as classes especializadas
         Prioriza estratégia de 1h se habilitada e atende critérios
         """
-        print(f"\n{'='*80}")
-        print(f"🎯 INICIANDO FILTRO DE SÍMBOLOS")
-        print(f"{'='*80}")
-        print(f"📊 Total de símbolos para analisar: {len(symbol_variations)}")
+        print(f"🎯 Analisando {len(symbol_variations)} símbolos")
         
         # Busca configs DIRETAMENTE do MongoDB (não usa BotConfig legado)
         symbols_config = []
         if db is not None:
             symbols_config = list(db['BotConfigs'].find({'enabled': True}))
-            print(f"📋 Configs encontradas no MongoDB: {len(symbols_config)}")
         else:
             print(f"⚠️  MongoDB não disponível")
         
@@ -549,9 +532,7 @@ class MexcClient:
                 continue
             
             # Verifica estratégia de 4h PRIMEIRO (se habilitada)
-            strategy_4h_config = symbol_config.get('strategy_4h', {})
-            print(f"🔍 DEBUG {symbol}: strategy_4h config = {strategy_4h_config}")
-            
+            strategy_4h_config = symbol_config.get('strategy_4h', {})            
             if not strategy_4h_config:
                 print(f"⚠️  {symbol}: strategy_4h não encontrada, pulando...")
                 continue
@@ -569,7 +550,6 @@ class MexcClient:
                     
                     # Verifica se deve comprar pela estratégia de 4h (usando variação 4h)
                     should_buy_4h, buy_info_4h = buy_strategy_4h_symbol.should_buy(variation_4h, symbol)
-                    print(f"🎯 {symbol}: should_buy_4h = {should_buy_4h}, info = {buy_info_4h}")
                     
                     if should_buy_4h:
                         # Adiciona à lista com info da estratégia 4h
