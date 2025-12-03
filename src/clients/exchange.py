@@ -62,19 +62,27 @@ class MexcClient:
         sell_strategy_config = config.get('sell_strategy') if config else None
         strategy_4h_config = config.get('strategy_4h') if config else None
         
-        # Valida se strategy_4h_config existe
-        if not strategy_4h_config:
-            raise ValueError(
-                '❌ strategy_4h não encontrada na configuração! '
-                'Verifique se o documento no MongoDB possui a chave "strategy_4h".'
-            )
-        
-        self.buy_strategy = BuyStrategy(trading_strategy)
-        self.sell_strategy = SellStrategy(sell_strategy_config)
-        
-        # Estratégias de 4 horas (scalping)
-        self.buy_strategy_4h = BuyStrategy4h(strategy_4h_config)
-        self.sell_strategy_4h = SellStrategy4h(strategy_4h_config)
+        # Inicializa estratégias apenas se config fornecido
+        if config:
+            # Valida se strategy_4h_config existe quando config é fornecido
+            if not strategy_4h_config:
+                raise ValueError(
+                    '❌ strategy_4h não encontrada na configuração! '
+                    'Verifique se o documento no MongoDB possui a chave "strategy_4h".'
+                )
+            
+            self.buy_strategy = BuyStrategy(trading_strategy)
+            self.sell_strategy = SellStrategy(sell_strategy_config)
+            
+            # Estratégias de 4 horas (scalping)
+            self.buy_strategy_4h = BuyStrategy4h(strategy_4h_config)
+            self.sell_strategy_4h = SellStrategy4h(strategy_4h_config)
+        else:
+            # Sem config: inicializa com None (operações básicas como get_balance)
+            self.buy_strategy = None
+            self.sell_strategy = None
+            self.buy_strategy_4h = None
+            self.sell_strategy_4h = None
         
         # Threshold de volume para decidir entre market/limit
         # Mercados com volume > $1M/24h usam limit (boa liquidez)
@@ -555,14 +563,9 @@ class MexcClient:
                 print(f"📊 {symbol}: Variação 4h = {variation_4h}%")
                 
                 if variation_4h is not None:
-                    # 🔥 CRIA INSTÂNCIA COM CONFIG ESPECÍFICA DO SÍMBOLO
-                    # Monta config no formato esperado por BuyStrategy1h
-                    buy_strategy_config = {
-                        'enabled': strategy_4h_config.get('enabled', False),
-                        'levels': strategy_4h_config.get('buy_strategy', {}).get('levels', []),
-                        'risk_management': strategy_4h_config.get('risk_management', {})
-                    }
-                    buy_strategy_4h_symbol = BuyStrategy4h(buy_strategy_config)
+                    # 🔥 PASSA A CONFIG COMPLETA DO strategy_4h (não monta manualmente)
+                    # BuyStrategy4h já sabe extrair buy_strategy.levels internamente
+                    buy_strategy_4h_symbol = BuyStrategy4h(strategy_4h_config)
                     
                     # Verifica se deve comprar pela estratégia de 4h (usando variação 4h)
                     should_buy_4h, buy_info_4h = buy_strategy_4h_symbol.should_buy(variation_4h, symbol)
@@ -999,7 +1002,12 @@ class MexcClient:
                 buy_price = None
                 if db is not None:
                     try:
-                        buy_record = db.find_one({"symbol": trading_symbol}, sort=[("timestamp", -1)])
+                        # Busca na collection de ordens (ajuste o nome da collection conforme necessário)
+                        orders_collection = db['Orders']  # ou db['ExecutionLogs'] dependendo de onde salva
+                        buy_record = orders_collection.find_one(
+                            {"symbol": trading_symbol}, 
+                            sort=[("date", -1)]  # Usa 'date' em vez de 'timestamp'
+                        )
                         if buy_record and 'buy_price' in buy_record:
                             buy_price = float(buy_record['buy_price'])
                     except Exception as e:
