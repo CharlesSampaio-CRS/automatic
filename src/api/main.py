@@ -1093,82 +1093,89 @@ def manage_jobs():
 SYSTEM_VERSION = "1.0.0"
 SYSTEM_BUILD_DATE = "2025-12-03"
 
+# ========== INICIALIZAÇÃO (RODA EM LOCAL E PRODUÇÃO) ==========
+print("\n" + "="*80, flush=True)
+print("🤖 MAVERICK - Trading Bot Automático", flush=True)
+print("="*80, flush=True)
+print(f"📦 Versão: {SYSTEM_VERSION}", flush=True)
+print(f"📅 Build: {SYSTEM_BUILD_DATE}", flush=True)
+print(f"🌐 Timezone: {TZ}", flush=True)
+print(f"⏰ Hora atual: {datetime.now(TZ).strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
+print("="*80, flush=True)
+
+# Inicializa scheduler
+try:
+    scheduler.start()
+    print("✅ Scheduler iniciado", flush=True)
+except Exception as e:
+    print(f"❌ Erro no Scheduler: {e}", flush=True)
+
+# Inicializa job manager
+job_mgr = initialize_job_manager(scheduler, API_KEY, API_SECRET)
+print("✅ Job Manager inicializado", flush=True)
+
+# Carrega jobs do MongoDB
+added, removed = job_mgr.reload_all_jobs()
+
+print("\n" + "="*80, flush=True)
+print("📋 JOBS CONFIGURADOS", flush=True)
+print("="*80, flush=True)
+
+if added == 0:
+    print("⚠️  Nenhum job encontrado", flush=True)
+    print("💡 Configure via: POST /configs", flush=True)
+else:
+    print(f"✅ {added} job{'s' if added != 1 else ''} ativo{'s' if added != 1 else ''}\n", flush=True)
+    
+    status = job_mgr.get_active_jobs_status()
+    for idx, job_info in enumerate(status.get('jobs', []), 1):
+        pair = job_info['pair']
+        interval_minutes = job_info.get('interval_minutes')
+        interval_hours = job_info.get('interval_hours')
+        next_run = job_info.get('next_run')
+        
+        # Formata intervalo
+        if interval_minutes:
+            interval_display = f"{interval_minutes} min"
+        elif interval_hours:
+            interval_display = f"{interval_hours}h"
+        else:
+            interval_display = "?"
+        
+        print(f"{idx}. 📊 {pair}", flush=True)
+        print(f"   ⏱️  Intervalo: {interval_display}", flush=True)
+        if next_run:
+            # Formata next_run
+            if isinstance(next_run, str):
+                # Se for string, tenta converter
+                try:
+                    next_run_dt = datetime.fromisoformat(next_run.replace('Z', '+00:00'))
+                    print(f"   ⏭️  Próxima execução: {next_run_dt.strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
+                except:
+                    print(f"   ⏭️  Próxima execução: {next_run}", flush=True)
+            elif hasattr(next_run, 'strftime'):
+                print(f"   ⏭️  Próxima execução: {next_run.strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
+            else:
+                print(f"   ⏭️  Próxima execução: {next_run}", flush=True)
+        print(flush=True)
+
+print("="*80, flush=True)
+print("🚀 MAVERICK BOT PRONTO!", flush=True)
+print("="*80 + "\n", flush=True)
+
+# Inicia timer de countdown (mantém thread viva)
+timer_thread = threading.Thread(target=countdown_timer, args=(COUNTDOWN_INTERVAL_SECONDS,))
+timer_thread.daemon = True
+timer_thread.start()
+
+# ========== APENAS PARA DESENVOLVIMENTO LOCAL ==========
 if __name__ == "__main__":
-    # Carrega configurações do .env
+    # Carrega configurações do .env para rodar localmente
     flask_host = os.getenv('FLASK_HOST', '0.0.0.0')
     flask_port = int(os.getenv('FLASK_PORT', 5000))
     flask_debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     
-    print("\n" + "="*80)
-    print("🤖 MAVERICK - Trading Bot Automático")
-    print("="*80)
-    print(f"📦 Versão: {SYSTEM_VERSION}")
-    print(f"📅 Build: {SYSTEM_BUILD_DATE}")
-    print(f"🌐 Timezone: {TZ}")
-    print(f"⏰ Hora atual: {datetime.now(TZ).strftime('%d/%m/%Y %H:%M:%S')}")
-    print("="*80)
-    
-    # Inicializa scheduler
-    try:
-        scheduler.start()
-    except Exception as e:
-        print(f"❌ Erro no Scheduler: {e}")
-    
-    # Inicializa job manager
-    job_mgr = initialize_job_manager(scheduler, API_KEY, API_SECRET)
-    
-    # Carrega jobs do MongoDB
-    added, removed = job_mgr.reload_all_jobs()
-    
-    print("\n" + "="*80)
-    print("📋 JOBS CONFIGURADOS")
-    print("="*80)
-    
-    if added == 0:
-        print("⚠️  Nenhum job encontrado")
-        print("💡 Configure via: POST /configs")
-    else:
-        print(f"✅ {added} job{'s' if added != 1 else ''} ativo{'s' if added != 1 else ''}\n")
-        
-        status = job_mgr.get_active_jobs_status()
-        for idx, job_info in enumerate(status.get('jobs', []), 1):
-            pair = job_info['pair']
-            interval_minutes = job_info.get('interval_minutes')
-            interval_hours = job_info.get('interval_hours')
-            next_run = job_info.get('next_run')
-            
-            # Formata intervalo
-            if interval_minutes:
-                interval_display = f"{interval_minutes} min"
-            elif interval_hours:
-                interval_display = f"{interval_hours}h"
-            else:
-                interval_display = "?"
-            
-            print(f"{idx}. 📊 {pair}")
-            print(f"   ⏱️  Intervalo: {interval_display}")
-            if next_run:
-                # Formata next_run
-                if isinstance(next_run, str):
-                    # Se for string, tenta converter
-                    try:
-                        next_run_dt = datetime.fromisoformat(next_run.replace('Z', '+00:00'))
-                        print(f"   ⏭️  Próxima execução: {next_run_dt.strftime('%d/%m/%Y %H:%M:%S')}")
-                    except:
-                        print(f"   ⏭️  Próxima execução: {next_run}")
-                elif hasattr(next_run, 'strftime'):
-                    print(f"   ⏭️  Próxima execução: {next_run.strftime('%d/%m/%Y %H:%M:%S')}")
-                else:
-                    print(f"   ⏭️  Próxima execução: {next_run}")
-            print()
-    
-    print("="*80)
-    print(f"🌐 API Server: http://{flask_host}:{flask_port}")
-    print("="*80 + "\n")
-    
-    # Inicia timer de countdown (mantém thread viva)
-    timer_thread = threading.Thread(target=countdown_timer, args=(COUNTDOWN_INTERVAL_SECONDS,))
-    timer_thread.daemon = True
-    timer_thread.start()
+    print(f"🌐 Servidor local: http://{flask_host}:{flask_port}", flush=True)
+    print(f"🔧 Debug mode: {flask_debug}\n", flush=True)
     
     app.run(debug=flask_debug, host=flask_host, port=flask_port)
