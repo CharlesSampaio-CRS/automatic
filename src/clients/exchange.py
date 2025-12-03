@@ -801,7 +801,7 @@ class MexcClient:
         }
         
         try:
-            if db:
+            if db is not None:
                 db.insert_one(order_data)
                 execution_label = "🤖 AUTOMÁTICA" if result.get('execution_type') == 'scheduled' else "👤 MANUAL"
                 print(f"   ✓ Order saved to database [{execution_label}]")
@@ -1236,7 +1236,7 @@ class MexcClient:
         }
         
         try:
-            if db:  # Só salva se o banco estiver disponível
+            if db is not None:  # Só salva se o banco estiver disponível
                 db.insert_one(order_data)
                 print(f"✓ Order saved to database: {order_data}")
                 return f"Order saved to database: {order_data}"
