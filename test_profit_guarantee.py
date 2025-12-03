@@ -15,11 +15,18 @@ def simulate_buy_sell_cycle():
     db = get_database()
     config = db['BotConfigs'].find_one({'pair': 'REKTCOIN/USDT'})
     
-    strategy_4h = BuyStrategy4h(config.get('strategy_4h'))
+    if not config:
+        raise Exception('❌ Config não encontrada no MongoDB!')
+    
+    strategy_4h_config = config.get('strategy_4h')
+    if not strategy_4h_config:
+        raise Exception('❌ strategy_4h não encontrada na config!')
+    
+    strategy_4h = BuyStrategy4h(strategy_4h_config)
     strategy_24h = BuyStrategy(config.get('trading_strategy'))
     
     # Configurações
-    min_profit_target = config.get('strategy_4h', {}).get('sell_strategy', {}).get('min_profit', 5)
+    min_profit_target = strategy_4h_config.get('sell_strategy', {}).get('min_profit', 5)
     
     print('='*80)
     print('🧪 SIMULAÇÃO DE GARANTIA DE LUCRO')
@@ -233,9 +240,16 @@ def test_edge_cases():
     db = get_database()
     config = db['BotConfigs'].find_one({'pair': 'REKTCOIN/USDT'})
     
-    strategy_4h = BuyStrategy4h(config.get('strategy_4h'))
+    if not config:
+        raise Exception('❌ Config não encontrada no MongoDB!')
+    
+    strategy_4h_config = config.get('strategy_4h')
+    if not strategy_4h_config:
+        raise Exception('❌ strategy_4h não encontrada na config!')
+    
+    strategy_4h = BuyStrategy4h(strategy_4h_config)
     strategy_24h = BuyStrategy(config.get('trading_strategy'))
-    min_profit = config.get('strategy_4h', {}).get('sell_strategy', {}).get('min_profit', 5)
+    min_profit = strategy_4h_config.get('sell_strategy', {}).get('min_profit', 5)
     
     test_cases = [
         {
