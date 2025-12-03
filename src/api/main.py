@@ -1089,21 +1089,30 @@ def manage_jobs():
 
 # ========== FIM DOS ENDPOINTS ==========
 
+# Versão do sistema
+SYSTEM_VERSION = "1.0.0"
+SYSTEM_BUILD_DATE = "2025-12-03"
+
 if __name__ == "__main__":
     # Carrega configurações do .env
     flask_host = os.getenv('FLASK_HOST', '0.0.0.0')
     flask_port = int(os.getenv('FLASK_PORT', 5000))
     flask_debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     
+    print("\n" + "="*80)
+    print("🤖 MAVERICK - Trading Bot Automático")
     print("="*80)
-    print("MAVERICK - Tranding Bot")
+    print(f"📦 Versão: {SYSTEM_VERSION}")
+    print(f"📅 Build: {SYSTEM_BUILD_DATE}")
+    print(f"🌐 Timezone: {TZ}")
+    print(f"⏰ Hora atual: {datetime.now(TZ).strftime('%d/%m/%Y %H:%M:%S')}")
     print("="*80)
     
     # Inicializa scheduler
     try:
         scheduler.start()
     except Exception as e:
-        print(f"! Scheduler: {e}")
+        print(f"❌ Erro no Scheduler: {e}")
     
     # Inicializa job manager
     job_mgr = initialize_job_manager(scheduler, API_KEY, API_SECRET)
@@ -1111,30 +1120,50 @@ if __name__ == "__main__":
     # Carrega jobs do MongoDB
     added, removed = job_mgr.reload_all_jobs()
     
+    print("\n" + "="*80)
+    print("📋 JOBS CONFIGURADOS")
+    print("="*80)
+    
     if added == 0:
-        print("! Nenhum job encontrado")
-        print("  Configure via: POST /configs")
+        print("⚠️  Nenhum job encontrado")
+        print("💡 Configure via: POST /configs")
     else:
-        print(f"> {added} job{'s' if added != 1 else ''} ativo{'s' if added != 1 else ''}")
+        print(f"✅ {added} job{'s' if added != 1 else ''} ativo{'s' if added != 1 else ''}\n")
         
         status = job_mgr.get_active_jobs_status()
-        for job_info in status.get('jobs', []):
+        for idx, job_info in enumerate(status.get('jobs', []), 1):
             pair = job_info['pair']
             interval_minutes = job_info.get('interval_minutes')
             interval_hours = job_info.get('interval_hours')
+            next_run = job_info.get('next_run')
             
             # Formata intervalo
             if interval_minutes:
-                interval_display = f"{interval_minutes}min"
+                interval_display = f"{interval_minutes} min"
             elif interval_hours:
                 interval_display = f"{interval_hours}h"
             else:
                 interval_display = "?"
             
-            # Já impresso no reload_all_jobs
+            print(f"{idx}. 📊 {pair}")
+            print(f"   ⏱️  Intervalo: {interval_display}")
+            if next_run:
+                # Formata next_run
+                if isinstance(next_run, str):
+                    # Se for string, tenta converter
+                    try:
+                        next_run_dt = datetime.fromisoformat(next_run.replace('Z', '+00:00'))
+                        print(f"   ⏭️  Próxima execução: {next_run_dt.strftime('%d/%m/%Y %H:%M:%S')}")
+                    except:
+                        print(f"   ⏭️  Próxima execução: {next_run}")
+                elif hasattr(next_run, 'strftime'):
+                    print(f"   ⏭️  Próxima execução: {next_run.strftime('%d/%m/%Y %H:%M:%S')}")
+                else:
+                    print(f"   ⏭️  Próxima execução: {next_run}")
+            print()
     
     print("="*80)
-    print(f"> http://{flask_host}:{flask_port}")
+    print(f"🌐 API Server: http://{flask_host}:{flask_port}")
     print("="*80 + "\n")
     
     # Inicia timer de countdown (mantém thread viva)
