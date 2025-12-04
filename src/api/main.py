@@ -1265,6 +1265,76 @@ def manage_jobs():
             message="Failed to manage jobs"
         )
 
+# ========== EXECUTION LOGS ==========
+
+@app.route("/logs", methods=["GET"])
+def get_execution_logs():
+    """
+    Lista logs de execução dos jobs (histórico)
+    
+    Query params:
+        - limit: int - número máximo de registros (default: 50, max: 500)
+        - pair: str - filtrar por par específico (ex: BTC/USDT)
+        - execution_type: str - filtrar por tipo (manual, scheduled)
+    
+    Response:
+    {
+        "success": true,
+        "total": 100,
+        "logs": [ {...}, {...} ]
+    }
+    """
+    try:
+        if execution_logs_db is None:
+            return APIResponse.server_error(
+                error=None,
+                message="Execution logs database not available"
+            )
+        
+        # Query params
+        limit = request.args.get('limit', '50')
+        pair = request.args.get('pair')
+        execution_type = request.args.get('execution_type')
+        
+        try:
+            limit = int(limit)
+            if limit > 500:
+                limit = 500
+            if limit < 1:
+                limit = 50
+        except ValueError:
+            limit = 50
+        
+        # Filtros
+        query_filter = {}
+        if pair:
+            query_filter['pair'] = pair.upper()
+        if execution_type:
+            query_filter['execution_type'] = execution_type.lower()
+        
+        # Busca logs ordenados por timestamp decrescente (mais recentes primeiro)
+        logs = list(execution_logs_db.find(
+            query_filter,
+            {'_id': 0}  # Exclui o campo _id do MongoDB
+        ).sort('timestamp', -1).limit(limit))
+        
+        total = execution_logs_db.count_documents(query_filter)
+        
+        return APIResponse.success(
+            data={
+                "total": total,
+                "returned": len(logs),
+                "limit": limit,
+                "logs": logs
+            },
+            message=f"Retrieved {len(logs)} execution log(s)"
+        )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message="Failed to retrieve execution logs"
+        )
+
 # ========== FIM DOS ENDPOINTS ==========
 
 # Versão do sistema
