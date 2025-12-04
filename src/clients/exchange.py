@@ -623,7 +623,9 @@ class MexcClient:
                 'buy_percentage': item.get('buy_percentage', 100),  # % do saldo a investir
                 'take_profit_price': item['last_price'] * (1 + item['expected_profit_pct'] / 100),
                 'stop_loss_price': item['last_price'] * 0.95,  # Stop loss em -5%
-                'allocation_pct': item['config'].get('allocation_percentage', 100)
+                'allocation_pct': item['config'].get('allocation_percentage', 100),
+                'strategy': item.get('strategy', '24h'),  # Salva qual estratégia foi usada (4h ou 24h)
+                'variation_4h': item.get('variation_4h')  # Salva variação 4h se disponível
             }
             for item in filtered_symbols
         }
@@ -638,12 +640,23 @@ class MexcClient:
             return
         
         for symbol, order in symbol_orders.items():
-            # Usa a estratégia de compra para calcular quanto investir
+            # Identifica qual estratégia foi usada
+            strategy_used = order.get('strategy', '24h')
             buy_percentage = order.get('buy_percentage', 100)
-            investment_amount = self.buy_strategy.calculate_investment_amount(
-                usdt_balance, 
-                buy_percentage
-            )
+            
+            # Calcula o investimento baseado na estratégia utilizada
+            if strategy_used == '4h' and self.buy_strategy_4h:
+                # Usa cálculo da estratégia 4h
+                investment_amount = self.buy_strategy_4h.calculate_position_size(
+                    usdt_balance,
+                    buy_percentage
+                )
+            else:
+                # Usa cálculo da estratégia 24h
+                investment_amount = self.buy_strategy.calculate_investment_amount(
+                    usdt_balance, 
+                    buy_percentage
+                )
             
             # Garante valor mínimo
             if investment_amount >= MIN_VALUE_PER_SYMBOL:
@@ -658,10 +671,10 @@ class MexcClient:
                 
                 # Identifica qual estratégia foi usada
                 strategy_label = order.get('strategy', '24h')
-                if strategy_label == '1h' and order.get('variation_4h') is not None:
-                    print(f" {symbol}: [4H] Queda de {order.get('variation_4h', 0):.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
+                if strategy_label == '4h' and order.get('variation_4h') is not None:
+                    print(f"💰 {symbol}: [4H] Queda de {order.get('variation_4h', 0):.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
                 else:
-                    print(f" {symbol}: [24H] Queda de {order['variation']:.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
+                    print(f"💰 {symbol}: [24H] Queda de {order['variation']:.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
             else:
                 order['value'] = 0
                 print(f"⏸️  {symbol}: Valor muito baixo (${investment_amount:.2f} < ${MIN_VALUE_PER_SYMBOL})")
