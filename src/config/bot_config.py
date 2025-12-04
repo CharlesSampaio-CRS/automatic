@@ -16,8 +16,8 @@ O MongoDB é a única fonte de verdade para:
 # ===== CONSTANTES BÁSICAS (Hardcoded) =====
 # Usadas apenas para validações mínimas e fallback
 
-MIN_VALUE_PER_CREATE_ORDER = 10  # Valor mínimo para criar ordem (USDT)
-MIN_VALUE_PER_SYMBOL = 2          # Valor mínimo por símbolo (USDT) - Reduzido para permitir trades com saldo baixo
+MIN_VALUE_PER_CREATE_ORDER = 5   # Valor mínimo total de saldo para iniciar operações (USDT) - Reduzido para permitir saldos baixos
+MIN_VALUE_PER_SYMBOL = 2          # Valor mínimo por símbolo/trade individual (USDT) - Reduzido para permitir trades com saldo baixo
 BASE_CURRENCY = "USDT"            # Moeda base para todas as operações
 
 # ===== CONSTANTES LEGADAS (Deprecated) =====
