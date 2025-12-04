@@ -159,7 +159,7 @@
       "name": "Order",
       "item": [
         {
-          "name": "Executar Ordem Manual Completa (Buy + Sell)",
+          "name": "Execute Complete Manual Order (Buy + Sell)",
           "request": {
             "method": "POST",
             "header": [
@@ -260,7 +260,7 @@
           "response": []
         },
         {
-          "name": "Buscar Config por Pair",
+          "name": "Get Config by Pair",
           "request": {
             "method": "GET",
             "header": [],
@@ -306,7 +306,7 @@
           "response": []
         },
         {
-          "name": "Atualizar Config (Intervalo)",
+          "name": "Update Config (Interval)",
           "request": {
             "method": "PUT",
             "header": [
@@ -334,7 +334,7 @@
           "response": []
         },
         {
-          "name": "Atualizar Config (Habilitar/Desabilitar)",
+          "name": "Update Config (Enable/Disable)",
           "request": {
             "method": "PUT",
             "header": [
@@ -383,7 +383,7 @@
       ]
     },
     {
-      "name": "Strategy 1H (Estrategia de 1 Hora)",
+      "name": "Strategy 1H (1 Hour Strategy)",
       "item": [
         {
           "name": "Get 1H Strategy Config",
@@ -495,7 +495,7 @@
           "response": []
         },
         {
-          "name": "Config Agressiva (Memecoins)",
+          "name": "Aggressive Config (Memecoins)",
           "request": {
             "method": "PUT",
             "header": [
@@ -524,7 +524,7 @@
           "response": []
         },
         {
-          "name": "Config Conservadora (BTC/ETH)",
+          "name": "Conservative Config (BTC/ETH)",
           "request": {
             "method": "PUT",
             "header": [
@@ -558,7 +558,7 @@
       "name": "Jobs (Scheduler)",
       "item": [
         {
-          "name": "Listar Todos os Jobs",
+          "name": "List All Jobs",
           "request": {
             "method": "GET",
             "header": [],
@@ -576,7 +576,7 @@
           "response": []
         },
         {
-          "name": "Recarregar Jobs do MongoDB",
+          "name": "Reload Jobs from MongoDB",
           "request": {
             "method": "POST",
             "header": [
@@ -657,7 +657,7 @@
           "response": []
         },
         {
-          "name": "Parar TODOS os Jobs",
+          "name": "Stop ALL Jobs",
           "request": {
             "method": "POST",
             "header": [
