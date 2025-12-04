@@ -74,6 +74,12 @@ class BuyStrategy4h:
                 "variation_threshold": -5.0,
                 "percentage_of_balance": 10,
                 "description": "Compra forte em queda brusca de 5%"
+            },
+            {
+                "name": "Queda Acentuada",
+                "variation_threshold": -8.0,
+                "percentage_of_balance": 50,
+                "description": "Compra agressiva em queda acentuada de 8% - investe 50% do saldo"
             }
         ]
     

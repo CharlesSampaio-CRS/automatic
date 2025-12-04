@@ -1456,15 +1456,16 @@ def handle_uncaught_exception(error):
     traceback.print_exc()
     
     return APIResponse.server_error(
-        error=error,
-        message="An unexpected error occurred"
+        message="An unexpected error occurred",
+        details=str(error)
     )
 
 @app.errorhandler(404)
 def handle_not_found(error):
     """Captura rotas não encontradas"""
     return APIResponse.not_found(
-        message=f"Endpoint not found: {request.path}"
+        resource=f"Endpoint {request.path}",
+        details=None
     )
 
 @app.errorhandler(405)
