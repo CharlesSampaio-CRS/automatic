@@ -20,6 +20,12 @@ MIN_VALUE_PER_CREATE_ORDER = 5   # Valor mínimo total de saldo para iniciar ope
 MIN_VALUE_PER_SYMBOL = 2          # Valor mínimo por símbolo/trade individual (USDT) - Reduzido para permitir trades com saldo baixo
 BASE_CURRENCY = "USDT"            # Moeda base para todas as operações
 
+# ===== LÓGICA INTELIGENTE DE INVESTIMENTO =====
+# Regra: Se saldo < $10, usar 100% para maximizar lucro
+# Regra: Se saldo >= $10, usar percentuais da estratégia
+SMALL_BALANCE_THRESHOLD = 10.0    # Limite para considerar "saldo pequeno"
+SMALL_BALANCE_USE_FULL = True     # Se True, usa 100% quando saldo < threshold
+
 # ===== CONSTANTES LEGADAS (Deprecated) =====
 # Mantidas apenas para compatibilidade com código antigo
 # NÃO SÃO MAIS USADAS! MongoDB sobrescreve tudo.

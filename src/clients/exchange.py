@@ -17,6 +17,9 @@ from src.clients.sell_strategy import SellStrategy
 from src.clients.buy_strategy_4h import BuyStrategy4h
 from src.clients.sell_strategy_4h import SellStrategy4h
 
+# Importa estratégia inteligente de investimento
+from src.clients.smart_investment_strategy import SmartInvestmentStrategy
+
 # Importa conexão do MongoDB
 try:
     from src.database.mongodb_connection import get_database
@@ -83,6 +86,10 @@ class MexcClient:
             self.sell_strategy = None
             self.buy_strategy_4h = None
             self.sell_strategy_4h = None
+        
+        # Estratégia inteligente de investimento (sempre ativa)
+        # Ajusta percentuais baseado no saldo para maximizar lucro
+        self.smart_strategy = SmartInvestmentStrategy()
         
         # Threshold de volume para decidir entre market/limit
         # Mercados com volume > $1M/24h usam limit (boa liquidez)
@@ -633,7 +640,12 @@ class MexcClient:
     
     def allocate_funds_with_dca_strategy(self, usdt_balance, symbol_orders):
         """
-        Aloca fundos usando BuyStrategy
+        Aloca fundos usando estratégia INTELIGENTE
+        
+        Lógica Inteligente:
+        - Saldo < $10: Usa 100% para maximizar lucro (ignora percentuais)
+        - Saldo >= $10: Usa percentuais da estratégia (gestão de risco)
+        
         Delega cálculo de investimento para a classe especializada
         """
         if not symbol_orders:
@@ -644,19 +656,31 @@ class MexcClient:
             strategy_used = order.get('strategy', '24h')
             buy_percentage = order.get('buy_percentage', 100)
             
+            # 🎯 APLICA ESTRATÉGIA INTELIGENTE
+            # Se saldo < $10: ajusta para 100%
+            # Se saldo >= $10: mantém percentual original
+            adjusted_percentage = self.smart_strategy.get_adjusted_percentage(
+                usdt_balance,
+                buy_percentage
+            )
+            
             # Calcula o investimento baseado na estratégia utilizada
             if strategy_used == '4h' and self.buy_strategy_4h:
-                # Usa cálculo da estratégia 4h
+                # Usa cálculo da estratégia 4h com percentual ajustado
                 investment_amount = self.buy_strategy_4h.calculate_position_size(
                     usdt_balance,
-                    buy_percentage
+                    adjusted_percentage
                 )
             else:
-                # Usa cálculo da estratégia 24h
+                # Usa cálculo da estratégia 24h com percentual ajustado
                 investment_amount = self.buy_strategy.calculate_investment_amount(
                     usdt_balance, 
-                    buy_percentage
+                    adjusted_percentage
                 )
+            
+            # Verifica se aplicou lógica inteligente
+            used_smart_logic = adjusted_percentage != buy_percentage
+            smart_emoji = "🎯" if used_smart_logic else "💰"
             
             # Garante valor mínimo
             if investment_amount >= MIN_VALUE_PER_SYMBOL:
@@ -669,12 +693,18 @@ class MexcClient:
                 2
                 )
                 
-                # Identifica qual estratégia foi usada
+                # Logging detalhado
                 strategy_label = order.get('strategy', '24h')
                 if strategy_label == '4h' and order.get('variation_4h') is not None:
-                    print(f"💰 {symbol}: [4H] Queda de {order.get('variation_4h', 0):.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
+                    if used_smart_logic:
+                        print(f"{smart_emoji} {symbol}: [4H] Queda {order.get('variation_4h', 0):.1f}% → SALDO BAIXO: Investe 100% (${order['value']:.2f}) ao invés de {buy_percentage}%")
+                    else:
+                        print(f"{smart_emoji} {symbol}: [4H] Queda {order.get('variation_4h', 0):.1f}% → Investe {adjusted_percentage}% (${order['value']:.2f})")
                 else:
-                    print(f"💰 {symbol}: [24H] Queda de {order['variation']:.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
+                    if used_smart_logic:
+                        print(f"{smart_emoji} {symbol}: [24H] Queda {order['variation']:.1f}% → SALDO BAIXO: Investe 100% (${order['value']:.2f}) ao invés de {buy_percentage}%")
+                    else:
+                        print(f"{smart_emoji} {symbol}: [24H] Queda {order['variation']:.1f}% → Investe {adjusted_percentage}% (${order['value']:.2f})")
             else:
                 order['value'] = 0
                 print(f"⏸️  {symbol}: Valor muito baixo (${investment_amount:.2f} < ${MIN_VALUE_PER_SYMBOL})")
