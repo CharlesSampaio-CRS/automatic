@@ -18,7 +18,6 @@ from src.services.config_service import config_service
 from src.services.job_manager import initialize_job_manager
 from src.database.mongodb_connection import connection_mongo
 from src.api.response import APIResponse  # ✨ NEW: Standardized API responses
-from src.middleware.auth import require_jwt  # 🔒 NEW: JWT authentication
 
 # Carrega variáveis do arquivo .env
 load_dotenv()
@@ -119,7 +118,6 @@ def countdown_timer(interval):
 # ========== HOME ==========
 
 @app.route("/")
-@require_jwt
 def home():
     """Health check"""
     return APIResponse.success(
@@ -134,7 +132,6 @@ def home():
 # ========== BALANCE ==========
 
 @app.route("/balance", methods=["GET"])
-@require_jwt
 def balance():
     """
     Get total balance in USDT
@@ -161,7 +158,6 @@ def balance():
 # ========== PRICE ==========
 
 @app.route("/price", methods=["GET"])
-@require_jwt
 def get_price_by_params():
     """
     Get current price of a trading pair (via query params)
@@ -213,7 +209,6 @@ def get_price_by_params():
         )
 
 @app.route("/price/<pair>", methods=["GET"])
-@require_jwt
 def get_price_by_path(pair):
     """
     Get current price of a trading pair (via path)
@@ -257,7 +252,6 @@ def get_price_by_path(pair):
         )
 
 @app.route("/prices", methods=["POST"])
-@require_jwt
 def get_multiple_prices():
     """
     Get prices for multiple trading pairs
@@ -338,7 +332,6 @@ def get_multiple_prices():
 # ========== ORDER ==========
 
 @app.route("/order", methods=["POST"])
-@require_jwt
 def order():
     """
     Executa ordem MANUAL completa (BUY + SELL) para um símbolo específico
@@ -569,7 +562,6 @@ def order():
 # ========== CONFIGS ==========
 
 @app.route("/configs", methods=["GET"])
-@require_jwt
 def get_all_configs():
     """
     Lista TODAS as configurações de símbolos (MongoDB)
@@ -602,7 +594,6 @@ def get_all_configs():
         )
 
 @app.route("/configs/<pair>", methods=["GET"])
-@require_jwt
 def get_config_by_pair(pair):
     """
     Busca configuração de um símbolo específico (MongoDB)
@@ -637,7 +628,6 @@ def get_config_by_pair(pair):
         )
 
 @app.route("/configs", methods=["POST"])
-@require_jwt
 def create_config():
     """
     Cria nova configuração para um símbolo (MongoDB)
@@ -708,7 +698,6 @@ def create_config():
         )
 
 @app.route("/configs/<pair>", methods=["PUT"])
-@require_jwt
 def update_config_by_pair(pair):
     """
     Atualiza configuração de um símbolo (MongoDB)
@@ -759,7 +748,6 @@ def update_config_by_pair(pair):
         )
 
 @app.route("/configs/<pair>", methods=["DELETE"])
-@require_jwt
 def delete_config_by_pair(pair):
     """
     Remove configuração de um símbolo (MongoDB)
@@ -794,7 +782,6 @@ def delete_config_by_pair(pair):
 # ========== ESTRATÉGIA 1H ==========
 
 @app.route("/configs/<pair>/strategy-1h", methods=["GET"])
-@require_jwt
 def get_strategy_1h_config(pair):
     """
     Retorna configuração da estratégia de 1h para um símbolo
@@ -843,7 +830,6 @@ def get_strategy_1h_config(pair):
         )
 
 @app.route("/configs/<pair>/strategy-1h", methods=["PUT"])
-@require_jwt
 def update_strategy_1h_config(pair):
     """
     Atualiza configuração da estratégia de 1h para um símbolo
@@ -945,7 +931,6 @@ def update_strategy_1h_config(pair):
         )
 
 @app.route("/configs/<pair>/strategy-1h/toggle", methods=["POST"])
-@require_jwt
 def toggle_strategy_1h(pair):
     """
     Liga/desliga rapidamente a estratégia de 1h para um símbolo
@@ -1149,7 +1134,6 @@ def health_check():
 
 
 @app.route("/jobs", methods=["GET"])
-@require_jwt
 def get_all_jobs():
     """Lista todos os jobs ativos"""
     try:
@@ -1174,7 +1158,6 @@ def get_all_jobs():
         )
 
 @app.route("/jobs", methods=["POST"])
-@require_jwt
 def manage_jobs():
     """Gerencia jobs com actions: start, stop ou reload"""
     try:
