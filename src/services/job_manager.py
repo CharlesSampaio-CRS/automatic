@@ -312,6 +312,13 @@ class DynamicJobManager:
                             "timestamp": datetime.now(TZ).isoformat(),
                             "pair": pair,
                             
+                            # Informações de agendamento
+                            "schedule_info": {
+                                "interval": interval_display if 'interval_display' in locals() else "unknown",
+                                "next_execution": next_run.isoformat() if next_run else None,
+                                "next_execution_formatted": next_run.strftime('%d/%m/%Y %H:%M:%S') if next_run else None
+                            },
+                            
                             # Resumo da execução (valores formatados)
                             "summary": summary,
                             
@@ -387,6 +394,13 @@ class DynamicJobManager:
                             "executed_by": "scheduler",
                             "timestamp": datetime.now(TZ).isoformat(),
                             "pair": pair,
+                            
+                            # Informações de agendamento
+                            "schedule_info": {
+                                "interval": interval_display if 'interval_display' in locals() else "unknown",
+                                "next_execution": next_run.isoformat() if 'next_run' in locals() and next_run else None,
+                                "next_execution_formatted": next_run.strftime('%d/%m/%Y %H:%M:%S') if 'next_run' in locals() and next_run else None
+                            },
                             
                             # Resumo da execução
                             "summary": {
