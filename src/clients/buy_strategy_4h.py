@@ -227,11 +227,9 @@ class BuyStrategy4h:
                 "strategy": "1h"
             }
         
-        # Limita o percentual ao máximo configurado
-        buy_percentage = min(
-            matching_level['percentage_of_balance'],
-            self.max_position_size_percent
-        )
+        # Retorna o percentual SEM limitar ainda
+        # A lógica inteligente aplicará o limite depois (se necessário)
+        buy_percentage = matching_level['percentage_of_balance']
         
         # Calcula força do sinal (0-100)
         # Quanto maior a queda, maior a força

@@ -657,12 +657,20 @@ class MexcClient:
             buy_percentage = order.get('buy_percentage', 100)
             
             # 🎯 APLICA ESTRATÉGIA INTELIGENTE
-            # Se saldo < $10: ajusta para 100%
-            # Se saldo >= $10: mantém percentual original
+            # Se saldo < $10: ajusta para 100% (IGNORA LIMITES!)
+            # Se saldo >= $10: mantém percentual E aplica limite max_position_size_percent
             adjusted_percentage = self.smart_strategy.get_adjusted_percentage(
                 usdt_balance,
                 buy_percentage
             )
+            
+            # Se saldo >= $10, aplica limite de gestão de risco
+            if usdt_balance >= 10.0:
+                if strategy_used == '4h' and self.buy_strategy_4h:
+                    # Limita ao max_position_size_percent da estratégia 4h
+                    max_allowed = self.buy_strategy_4h.max_position_size_percent
+                    adjusted_percentage = min(adjusted_percentage, max_allowed)
+                # Para estratégia 24h, o limite já é aplicado internamente
             
             # Calcula o investimento baseado na estratégia utilizada
             if strategy_used == '4h' and self.buy_strategy_4h:
