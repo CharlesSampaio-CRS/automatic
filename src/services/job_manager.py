@@ -130,23 +130,38 @@ class DynamicJobManager:
                     print(f"NEXT  [{job_id_display}] Next execution: {next_run.strftime('%d/%m/%Y %H:%M:%S')} (in {interval_display})", flush=True)
                 print(f"{'='*60}\n", flush=True)
                 
-                # 4. EXECUÇÃO: Cria cliente com configuração do MongoDB
-                print(f"SETUP [{job_id_display}] Creating MEXC client...", flush=True)
-                mexc_client = MexcClient(self.api_key, self.api_secret, config)
-                print(f"OK    [{job_id_display}] MEXC client created", flush=True)
+                # 4. EXECUÇÃO: Cria cliente e executa ordem (com try-catch robusto)
+                mexc_client = None
+                result = None
+                execution_error = None
                 
-                # 5. EXECUÇÃO: Executa ordem
-                print(f"EXEC  [{job_id_display}] Executing order (type: scheduled)...", flush=True)
-                result = mexc_client.create_order(execution_type="scheduled")
-                print(f"DONE  [{job_id_display}] Order executed - Status: {result.get('status')}", flush=True)
+                try:
+                    print(f"SETUP [{job_id_display}] Creating MEXC client...", flush=True)
+                    mexc_client = MexcClient(self.api_key, self.api_secret, config)
+                    print(f"OK    [{job_id_display}] MEXC client created", flush=True)
+                    
+                    print(f"EXEC  [{job_id_display}] Executing order (type: scheduled)...", flush=True)
+                    result = mexc_client.create_order(execution_type="scheduled")
+                    print(f"DONE  [{job_id_display}] Order executed - Status: {result.get('status')}", flush=True)
+                    
+                except Exception as order_error:
+                    execution_error = order_error
+                    print(f"ERROR [{job_id_display}] Error in execution: {order_error}", flush=True)
+                    result = {
+                        'status': 'error',
+                        'message': str(order_error),
+                        'orders': [],
+                        'total_invested': 0,
+                        'symbols_analyzed': 0
+                    }
                 
-                # Atualiza metadata
+                # Atualiza metadata (SEMPRE, mesmo em caso de erro)
                 metadata_updates = {
                     "last_execution": datetime.now(),
-                    "status": "active" if result.get('status') == 'success' else "skipped"
+                    "status": "active" if result and result.get('status') == 'success' else "error" if execution_error else "skipped"
                 }
                 
-                if result.get('status') == 'success':
+                if result and result.get('status') == 'success':
                     orders = result.get('orders', [])
                     total_invested = result.get('total_invested', 0)
                     
@@ -174,25 +189,26 @@ class DynamicJobManager:
                                 return 0
                             return float(f"{value:.{decimals}f}")
                         
-                        # Busca informações de mercado do par
+                        # Busca informações de mercado do par (somente se client foi criado)
                         market_info = None
                         try:
-                            ticker = mexc_client.client.fetch_ticker(pair)
-                            if ticker:
-                                last_price = format_price(float(ticker.get('last', 0)))
-                                bid_price = format_price(float(ticker.get('bid', 0)))
-                                ask_price = format_price(float(ticker.get('ask', 0)))
-                                high_24h = format_price(float(ticker.get('high', 0)))
-                                low_24h = format_price(float(ticker.get('low', 0)))
-                                open_24h = format_price(float(ticker.get('open', 0)))
-                                volume_24h = round(float(ticker.get('quoteVolume', 0)), 2)
-                                
-                                # Calcula variações
-                                change_24h = format_price(last_price - open_24h if open_24h > 0 else 0)
-                                change_percent_24h = round((change_24h / open_24h * 100) if open_24h > 0 else 0, 2)
-                                
-                                # Busca variação 1h
-                                variation_1h = mexc_client.get_variation_1h(pair)
+                            if mexc_client:
+                                ticker = mexc_client.client.fetch_ticker(pair)
+                                if ticker:
+                                    last_price = format_price(float(ticker.get('last', 0)))
+                                    bid_price = format_price(float(ticker.get('bid', 0)))
+                                    ask_price = format_price(float(ticker.get('ask', 0)))
+                                    high_24h = format_price(float(ticker.get('high', 0)))
+                                    low_24h = format_price(float(ticker.get('low', 0)))
+                                    open_24h = format_price(float(ticker.get('open', 0)))
+                                    volume_24h = round(float(ticker.get('quoteVolume', 0)), 2)
+                                    
+                                    # Calcula variações
+                                    change_24h = format_price(last_price - open_24h if open_24h > 0 else 0)
+                                    change_percent_24h = round((change_24h / open_24h * 100) if open_24h > 0 else 0, 2)
+                                    
+                                    # Busca variação 1h
+                                    variation_1h = mexc_client.get_variation_1h(pair)
                                 
                                 # Calcula spread
                                 spread_value = format_price(ask_price - bid_price if (ask_price and bid_price) else 0)
@@ -268,10 +284,20 @@ class DynamicJobManager:
                                         "recommendation": f"Spread {spread_status} | {trend} | {liquidity}"
                                     }
                                 }
-                        except Exception:
+                        except Exception as market_error:
+                            print(f"WARN  [{job_id_display}] Could not fetch market info: {market_error}", flush=True)
                             market_info = None
                         
-                        # Monta resumo
+                        # Monta resumo (com verificação de result)
+                        if not result:
+                            result = {
+                                'status': 'error',
+                                'message': 'Execution failed before creating result',
+                                'orders': [],
+                                'total_invested': 0,
+                                'symbols_analyzed': 0
+                            }
+                        
                         summary = {
                             "buy_executed": result.get('status') == 'success',
                             "sell_executed": False,  # Scheduled não executa venda
@@ -331,7 +357,7 @@ class DynamicJobManager:
                 print(f"\n{'='*60}", flush=True)
                 print(f"END   [{job_id_display}] EXECUÇÃO CONCLUÍDA", flush=True)
                 print(f"TIME  [{job_id_display}] Duração: {execution_duration:.2f}s", flush=True)
-                print(f"STAT  [{job_id_display}] Status: {result.get('status')}", flush=True)
+                print(f"STAT  [{job_id_display}] Status: {result.get('status') if result else 'unknown'}", flush=True)
                 print(f"{'='*60}\n", flush=True)
                 
             except Exception as e:
@@ -359,7 +385,7 @@ class DynamicJobManager:
                         error_log = {
                             "execution_type": "scheduled",
                             "executed_by": "scheduler",
-                            "timestamp": datetime.now().isoformat(),
+                            "timestamp": datetime.now(TZ).isoformat(),
                             "pair": pair,
                             
                             # Resumo da execução
@@ -384,7 +410,7 @@ class DynamicJobManager:
                             # Venda não executada
                             "sell_details": {
                                 "status": "no_sells",
-                                "message": "Execução não chegou até a venda devido ao erro",
+                                "message": "Execution did not reach sell due to error",
                                 "holdings_checked": 0,
                                 "sells_executed": 0,
                                 "total_profit": "0.00"
@@ -394,9 +420,9 @@ class DynamicJobManager:
                             "market_info": None
                         }
                         execution_logs_db.insert_one(error_log)
-                        print(f"   > Log de erro salvo no banco")
+                        print(f"ERROR [{job_id_display}] Error log saved to MongoDB", flush=True)
                     except Exception as log_error:
-                        print(f"   ! Erro ao salvar log de erro: {log_error}")
+                        print(f"ERROR [{job_id_display}] Failed to save error log: {log_error}", flush=True)
         
         return symbol_job
     
