@@ -99,7 +99,7 @@ Body: {"action": "reload"}
 
 ---
 
-## 📝 Body Examples
+##  Body Examples
 
 ### Create Complete Config
 ```json

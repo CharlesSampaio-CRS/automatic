@@ -73,7 +73,7 @@
 -  Removed verbose debug logs
 -  Production robustness improvements
 
-### 📝 Logging Enhancements
+###  Logging Enhancements
 -  Detailed execution logs with job ID
 -  No swallowed exceptions (all errors printed)
 -  Startup screen with version info

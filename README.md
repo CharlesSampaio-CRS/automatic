@@ -140,7 +140,7 @@ Each symbol has:
 - **APScheduler** - Periodic execution
 - **python-dotenv** - Environment variables
 
-## 📝 License
+##  License
 
 Personal use project.
 
