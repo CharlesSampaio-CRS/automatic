@@ -47,6 +47,29 @@ try:
 except Exception:
     execution_logs_db = None
 
+def determine_execution_status(buy_executed, sell_executed, has_error=False):
+    """
+    Determina o status da execução para exibição no frontend
+    
+    Args:
+        buy_executed: Se compra foi executada
+        sell_executed: Se venda foi executada
+        has_error: Se houve erro na execução
+    
+    Returns:
+        String com status: "buy", "sell", "no_action", "error"
+    """
+    if has_error:
+        return "error"
+    elif buy_executed and sell_executed:
+        return "buy_and_sell"
+    elif buy_executed:
+        return "buy"
+    elif sell_executed:
+        return "sell"
+    else:
+        return "no_action"
+
 
 class DynamicJobManager:
     """Gerencia jobs individuais para cada símbolo"""
@@ -306,11 +329,19 @@ class DynamicJobManager:
                             "net_result": format_usdt(0)
                         }
                         
+                        # Determina status da execução
+                        execution_status = determine_execution_status(
+                            buy_executed=summary['buy_executed'],
+                            sell_executed=False,
+                            has_error=result.get('error') is not None
+                        )
+                        
                         execution_log = {
                             "execution_type": "scheduled",
                             "executed_by": "scheduler",
                             "timestamp": datetime.now(TZ).isoformat(),
                             "pair": pair,
+                            "status": execution_status,  # ✨ NOVO: Status padronizado
                             
                             # Informações de agendamento
                             "schedule_info": {

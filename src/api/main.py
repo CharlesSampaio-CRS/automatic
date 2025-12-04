@@ -44,6 +44,29 @@ TZ = pytz.timezone("America/Sao_Paulo")
 
 scheduler = BackgroundScheduler(timezone=TZ)
 
+def determine_execution_status(buy_executed, sell_executed, has_error=False):
+    """
+    Determina o status da execução para exibição no frontend
+    
+    Args:
+        buy_executed: Se compra foi executada
+        sell_executed: Se venda foi executada
+        has_error: Se houve erro na execução
+    
+    Returns:
+        String com status: "buy", "sell", "no_action", "error"
+    """
+    if has_error:
+        return "error"
+    elif buy_executed and sell_executed:
+        return "buy_and_sell"  # Raro, mas possível
+    elif buy_executed:
+        return "buy"
+    elif sell_executed:
+        return "sell"
+    else:
+        return "no_action"
+
 def get_current_hour():
     return datetime.now(TZ).hour
 
@@ -531,11 +554,19 @@ def order():
         # Salva log de execução completo no MongoDB
         if execution_logs_db is not None:
             try:
+                # Determina status da execução
+                execution_status = determine_execution_status(
+                    buy_executed=summary['buy_executed'],
+                    sell_executed=summary['sell_executed'],
+                    has_error=False
+                )
+                
                 execution_log = {
                     "execution_type": "manual",
                     "executed_by": "user",
                     "timestamp": datetime.now().isoformat(),
                     "pair": pair if pair else "all",
+                    "status": execution_status,  # ✨ NOVO: Status padronizado
                     
                     # Resumo da execução (valores formatados)
                     "summary": {
