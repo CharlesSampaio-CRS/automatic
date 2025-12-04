@@ -17,6 +17,7 @@ from src.utils.number_formatter import format_usdt, format_percent
 from src.services.config_service import config_service
 from src.services.job_manager import initialize_job_manager
 from src.database.mongodb_connection import connection_mongo
+from src.api.response import APIResponse  # ✨ NEW: Standardized API responses
 
 # Carrega variáveis do arquivo .env
 load_dotenv()
@@ -119,11 +120,14 @@ def countdown_timer(interval):
 @app.route("/")
 def home():
     """Health check"""
-    return jsonify({
-        "status": "success",
-        "message": "Maverick - Tranding Bot",
-        "version": "2.0"
-    })
+    return APIResponse.success(
+        data={
+            "name": "Maverick - Trading Bot",
+            "version": "2.1.2",
+            "status": "running"
+        },
+        message="API is running"
+    )
 
 # ========== BALANCE ==========
 
@@ -979,108 +983,127 @@ def health_check():
     """Health check completo do sistema"""
     from src.services.job_manager import job_manager
     
-    health_status = {
-        "status": "healthy",
-        "timestamp": datetime.now(TZ).isoformat(),
-        "timestamp_readable": datetime.now(TZ).strftime('%d/%m/%Y %H:%M:%S'),
-        "version": SYSTEM_VERSION,
-        "build_date": SYSTEM_BUILD_DATE,
-        "checks": {}
-    }
+    checks = {}
+    is_healthy = True
+    is_degraded = False
     
     # 1. Verifica Scheduler
     try:
         scheduler_running = scheduler.running
         scheduler_state = str(scheduler.state)
-        health_status["checks"]["scheduler"] = {
+        checks["scheduler"] = {
             "status": "ok" if scheduler_running else "error",
             "running": scheduler_running,
             "state": scheduler_state
         }
         if not scheduler_running:
-            health_status["status"] = "unhealthy"
+            is_healthy = False
     except Exception as e:
-        health_status["checks"]["scheduler"] = {
+        checks["scheduler"] = {
             "status": "error",
             "error": str(e)
         }
-        health_status["status"] = "unhealthy"
+        is_healthy = False
     
     # 2. Verifica MongoDB ExecutionLogs
     try:
         if execution_logs_db is not None:
             # Tenta fazer uma operação simples
             execution_logs_db.count_documents({}, limit=1)
-            health_status["checks"]["mongodb_logs"] = {
+            checks["mongodb_logs"] = {
                 "status": "ok",
                 "connected": True
             }
         else:
-            health_status["checks"]["mongodb_logs"] = {
+            checks["mongodb_logs"] = {
                 "status": "error",
                 "connected": False,
                 "message": "execution_logs_db is None"
             }
-            health_status["status"] = "degraded"
+            is_degraded = True
     except Exception as e:
-        health_status["checks"]["mongodb_logs"] = {
+        checks["mongodb_logs"] = {
             "status": "error",
             "error": str(e)
         }
-        health_status["status"] = "degraded"
+        is_degraded = True
     
     # 3. Verifica Jobs Ativos
     try:
         if job_manager:
             jobs_status = job_manager.get_active_jobs_status()
             total_jobs = jobs_status.get('total_jobs', 0)
-            health_status["checks"]["jobs"] = {
+            checks["jobs"] = {
                 "status": "ok" if total_jobs > 0 else "warning",
                 "total_active": total_jobs,
                 "jobs_list": [j['pair'] for j in jobs_status.get('jobs', [])]
             }
             if total_jobs == 0:
-                health_status["status"] = "degraded"
+                is_degraded = True
         else:
-            health_status["checks"]["jobs"] = {
+            checks["jobs"] = {
                 "status": "error",
                 "message": "job_manager not initialized"
             }
-            health_status["status"] = "unhealthy"
+            is_healthy = False
     except Exception as e:
-        health_status["checks"]["jobs"] = {
+        checks["jobs"] = {
             "status": "error",
             "error": str(e)
         }
-        health_status["status"] = "degraded"
+        is_degraded = True
     
     # 4. Verifica API Keys
     try:
         api_key_set = bool(API_KEY and len(API_KEY) > 10)
         api_secret_set = bool(API_SECRET and len(API_SECRET) > 10)
-        health_status["checks"]["api_credentials"] = {
+        checks["api_credentials"] = {
             "status": "ok" if (api_key_set and api_secret_set) else "error",
             "api_key_set": api_key_set,
             "api_secret_set": api_secret_set
         }
         if not (api_key_set and api_secret_set):
-            health_status["status"] = "unhealthy"
+            is_healthy = False
     except Exception as e:
-        health_status["checks"]["api_credentials"] = {
+        checks["api_credentials"] = {
             "status": "error",
             "error": str(e)
         }
-        health_status["status"] = "unhealthy"
+        is_healthy = False
     
-    # Determina HTTP status code
-    if health_status["status"] == "healthy":
-        http_code = 200
-    elif health_status["status"] == "degraded":
-        http_code = 200  # 200 mas com warnings
+    # Determina status final
+    if not is_healthy:
+        overall_status = "unhealthy"
+    elif is_degraded:
+        overall_status = "degraded"
     else:
-        http_code = 503  # Service Unavailable
+        overall_status = "healthy"
     
-    return jsonify(health_status), http_code
+    health_data = {
+        "status": overall_status,
+        "version": SYSTEM_VERSION,
+        "build_date": SYSTEM_BUILD_DATE,
+        "checks": checks
+    }
+    
+    # Usa resposta padronizada
+    if overall_status == "unhealthy":
+        return APIResponse.error(
+            message="System is unhealthy",
+            status_code=503,
+            error_type="service_unavailable",
+            details=health_data
+        )
+    elif overall_status == "degraded":
+        return APIResponse.success(
+            data=health_data,
+            message="System is running with some degraded services"
+        )
+    else:
+        return APIResponse.success(
+            data=health_data,
+            message="System is healthy"
+        )
 
 
 @app.route("/jobs", methods=["GET"])
