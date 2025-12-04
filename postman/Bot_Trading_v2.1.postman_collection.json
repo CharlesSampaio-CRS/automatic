@@ -679,7 +679,7 @@
                 "jobs"
               ]
             },
-            "description": "Stops all active jobs"
+            "description": "Stops all active jobs "
           },
           "response": []
         }
