@@ -1,95 +1,97 @@
-# 📮 Postman Collection - Bot Tranding MEXC v2.0
+# 📮 Postman Collection - MEXC Trading Bot v2.1
 
-## 🚀 Como Importar
+## 🚀 How to Import
 
-1. Abra o Postman
-2. Clique em **Import**
-3. Selecione o arquivo `Bot_Tranding.postman_collection.json`
-4. A collection será importada com todos os endpoints organizados
+1. Open Postman
+2. Click on **Import**
+3. Select the file `Bot_Trading_v2.1.postman_collection.json`
+4. The collection will be imported with all organized endpoints
 
 ---
 
-## 📋 Estrutura da Collection
+## 📋 Collection Structure
 
 ### 🏥 **Health Check**
-- `GET /` - Verifica se a API está rodando
+- `GET /` - Check if API is running
+- `GET /health` - System health status
 
 ### 💰 **Balance**
-- `GET /balance` - Consulta saldo total em USDT
+- `GET /balance` - Check total balance in USDT
 
-### � **Order**
-- `POST /order` - Executa ordem manual
+### 📦 **Order**
+- `POST /order` - Execute manual order
 
 ### ⚙️ **Configs (MongoDB)**
-- `GET /configs` - Lista todas as configs
-- `GET /configs?enabled_only=true` - Lista apenas configs habilitadas
-- `GET /configs/{pair}` - Busca config por par (ex: REKT/USDT)
-- `POST /configs` - Cria nova config
-- `PUT /configs/{pair}` - Atualiza config (parcial)
-- `DELETE /configs/{pair}` - Deleta config
+- `GET /configs` - List all configs
+- `GET /configs?enabled_only=true` - List only enabled configs
+- `GET /configs/{pair}` - Get config by pair (ex: REKT/USDT)
+- `POST /configs` - Create new config
+- `PUT /configs/{pair}` - Update config (partial)
+- `DELETE /configs/{pair}` - Delete config
 
 ### 🤖 **Jobs (Scheduler)**
-- `GET /jobs` - Lista todos os jobs ativos
-- `POST /jobs` com `action: reload` - Recarrega do MongoDB
-- `POST /jobs` com `action: start` - Inicia jobs específicos
-- `POST /jobs` com `action: stop` - Para jobs específicos ou todos
+- `GET /jobs` - List all active jobs
+- `POST /jobs` with `action: reload` - Reload from MongoDB
+- `POST /jobs` with `action: start` - Start specific jobs
+- `POST /jobs` with `action: stop` - Stop specific or all jobs
 
 ---
 
-## 🔧 Configuração
+## 🔧 Configuration
 
-### Variável de Ambiente
+### Environment Variable
 
-A collection já vem configurada com a variável:
+The collection comes pre-configured with the variable:
 
 ```
 base_url = http://localhost:5000
 ```
 
-Para alterar:
-1. Clique no nome da collection
-2. Vá em **Variables**
-3. Edite o valor de `base_url`
+To change:
+1. Click on the collection name
+2. Go to **Variables**
+3. Edit the `base_url` value
 ---
 
-## 🎯 Fluxo de Uso Recomendado
+## 🎯 Recommended Usage Flow
 
-### 1️⃣ **Verificar Status**
+### 1️⃣ **Check Status**
 ```
 GET /
+GET /health
 GET /balance
 ```
 
-### 2️⃣ **Criar Configuração**
+### 2️⃣ **Create Configuration**
 ```
 POST /configs
-Body: {JSON completo}
+Body: {Complete JSON}
 ```
 
-### 3️⃣ **Recarregar Jobs**
+### 3️⃣ **Reload Jobs**
 ```
 POST /jobs
 Body: {"action": "reload"}
 ```
 
-### 4️⃣ **Verificar Jobs Ativos**
+### 4️⃣ **Check Active Jobs**
 ```
 GET /jobs
 ```
 
-### 5️⃣ **Testar Ordem Manual**
+### 5️⃣ **Test Manual Order**
 ```
 POST /order
 Body: {"pair": "ETH/USDT"}
 ```
 
-### 6️⃣ **Atualizar Config**
+### 6️⃣ **Update Config**
 ```
 PUT /configs/ETH%2FUSDT
 Body: {"schedule": {"interval_hours": 4}}
 ```
 
-### 7️⃣ **Recarregar Novamente**
+### 7️⃣ **Reload Again**
 ```
 POST /jobs
 Body: {"action": "reload"}
@@ -97,9 +99,9 @@ Body: {"action": "reload"}
 
 ---
 
-## 📝 Exemplos de Body
+## 📝 Body Examples
 
-### Criar Config Completa
+### Create Complete Config
 ```json
 {
   "pair": "BTC/USDT",
@@ -114,7 +116,7 @@ Body: {"action": "reload"}
     "min_value_per_order": 20,
     "allocation_percentage": 30
   },
-  "Tranding_strategy": {
+  "trading_strategy": {
     "type": "buy_levels",
     "min_price_variation": 1.0,
     "levels": [
@@ -134,7 +136,7 @@ Body: {"action": "reload"}
 }
 ```
 
-### Atualizar Apenas Intervalo
+### Update Only Interval
 ```json
 {
   "schedule": {
@@ -143,7 +145,7 @@ Body: {"action": "reload"}
 }
 ```
 
-### Desabilitar Símbolo
+### Disable Symbol
 ```json
 {
   "enabled": false
@@ -152,53 +154,57 @@ Body: {"action": "reload"}
 
 ---
 
-## 🔍 Observações Importantes
+## 🔍 Important Notes
 
 ### URL Encoding
-Quando usar pares com `/` na URL, use `%2F`:
-- ✅ Correto: `/configs/REKT%2FUSDT`
-- ❌ Errado: `/configs/REKT/USDT`
+When using pairs with `/` in URL, use `%2F`:
+- ✅ Correct: `/configs/REKT%2FUSDT`
+- ❌ Wrong: `/configs/REKT/USDT`
 
-### Actions do Jobs
-O endpoint `POST /jobs` aceita 3 actions:
+### Jobs Actions
+The `POST /jobs` endpoint accepts 3 actions:
 
-1. **reload** - Recarrega todos do MongoDB
+1. **reload** - Reload all from MongoDB
    ```json
    {"action": "reload"}
    ```
 
-2. **start** - Inicia específicos (requer pairs)
+2. **start** - Start specific (requires pairs)
    ```json
    {"action": "start", "pairs": ["REKT/USDT", "BTC/USDT"]}
    ```
 
-3. **stop** - Para específicos ou todos
+3. **stop** - Stop specific or all
    ```json
    {"action": "stop", "pairs": ["REKT/USDT"]}
    ```
-   ou
+   or
    ```json
    {"action": "stop"}
    ```
 
-### Após Mudanças no MongoDB
-**SEMPRE** use `POST /jobs {"action": "reload"}` para aplicar as mudanças!
+### After MongoDB Changes
+**ALWAYS** use `POST /jobs {"action": "reload"}` to apply changes!
 
 ---
 
-## 📚 Documentação Completa
+## 📚 Complete Documentation
 
-Para mais detalhes, consulte:
-- `API_DOCS.md` - Documentação completa da API
-- `API_CHANGELOG.txt` - Resumo das mudanças
+For more details, check:
+- `API_DOCS.md` - Complete API documentation
+- `API_CHANGELOG.txt` - Changes summary
+- `LOGS_MONGODB_AJUSTADOS.md` - MongoDB logs improvements
 
 ---
 
-## ✨ Features da Collection v2.0
+## ✨ Collection v2.1 Features
 
-- ✅ Organizada por domínios (Health, Balance, Order, Configs, Jobs)
-- ✅ Exemplos de body pré-configurados
-- ✅ Descrições em cada request
-- ✅ Variável `base_url` configurável
-- ✅ Cobertura completa da API v2.0
-- ✅ Suporte a MongoDB e Jobs Dinâmicos
+- ✅ Organized by domains (Health, Balance, Order, Configs, Jobs)
+- ✅ Pre-configured body examples
+- ✅ Descriptions in each request
+- ✅ Configurable `base_url` variable
+- ✅ Complete API v2.1 coverage
+- ✅ MongoDB and Dynamic Jobs support
+- ✅ Professional English messages
+- ✅ Formatted values (no scientific notation)
+- ✅ Correct timezone (America/Sao_Paulo)
