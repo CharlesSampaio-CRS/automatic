@@ -58,18 +58,36 @@ class DynamicJobManager:
             Função executável pelo scheduler
         """
         def symbol_job():
-            """Job específico para executar ordem de um símbolo"""
-            # Busca configuração atualizada do MongoDB
-            config = config_service.get_symbol_config(pair)
+            """Job específico para executar ordem de um símbolo - GARANTIA DE EXECUÇÃO"""
+            job_start_time = datetime.now(TZ)
+            job_id_display = f"JOB_{pair.replace('/', '_')}"
             
-            if not config or not config.get('enabled'):
-                # Desabilitado - pula silenciosamente
+            try:
+                # 1. VALIDAÇÃO: Busca configuração atualizada do MongoDB
+                config = config_service.get_symbol_config(pair)
+                
+                if not config:
+                    print(f"WARNING [{job_id_display}] Config não encontrada - pulando execução", flush=True)
+                    return
+                
+                if not config.get('enabled'):
+                    print(f"WARNING [{job_id_display}] Config desabilitada - pulando execução", flush=True)
+                    return
+                
+                # 2. INICIALIZAÇÃO: Log de início
+                print(f"\n{'='*60}", flush=True)
+                print(f"START [{job_id_display}] INICIANDO EXECUÇÃO", flush=True)
+                print(f"{'='*60}", flush=True)
+                print(f"TIME  [{job_id_display}] Início: {job_start_time.strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
+                
+            except Exception as e:
+                print(f"ERROR [{job_id_display}] ERRO CRÍTICO na validação: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
                 return
             
-            # Executa ordem 24/7 (sem restrição de horário)
+            # 3. EXECUÇÃO PRINCIPAL (com garantia de robustez)
             try:
-                now = datetime.now(TZ)
-                
                 # Busca intervalo do job para calcular próxima execução
                 schedule_config = config.get('schedule', {})
                 interval_minutes = schedule_config.get('interval_minutes')
@@ -78,31 +96,29 @@ class DynamicJobManager:
                 if interval_minutes:
                     interval_display = f"{interval_minutes} min"
                     from datetime import timedelta
-                    next_run = now + timedelta(minutes=interval_minutes)
+                    next_run = job_start_time + timedelta(minutes=interval_minutes)
                 elif interval_hours:
                     interval_display = f"{interval_hours}h"
                     from datetime import timedelta
-                    next_run = now + timedelta(hours=interval_hours)
+                    next_run = job_start_time + timedelta(hours=interval_hours)
                 else:
                     interval_display = "?"
                     next_run = None
                 
-                # Log simples e claro
-                print(f"\n{'='*60}")
-                print(f"🤖 JOB EXECUTADO")
-                print(f"{'='*60}")
-                print(f"📊 Par: {pair}")
-                print(f"⏰ Agora: {now.strftime('%d/%m/%Y %H:%M:%S')}")
+                print(f"PAIR  [{job_id_display}] Par: {pair}", flush=True)
                 if next_run:
-                    print(f"⏭️  Próxima: {next_run.strftime('%d/%m/%Y %H:%M:%S')} (em {interval_display})")
-                print(f"{'='*60}\n")
+                    print(f"NEXT  [{job_id_display}] Próxima execução: {next_run.strftime('%d/%m/%Y %H:%M:%S')} (em {interval_display})", flush=True)
+                print(f"{'='*60}\n", flush=True)
                 
-                # Cria cliente com configuração do MongoDB
+                # 4. EXECUÇÃO: Cria cliente com configuração do MongoDB
+                print(f"SETUP [{job_id_display}] Criando cliente MEXC...", flush=True)
                 mexc_client = MexcClient(self.api_key, self.api_secret, config)
+                print(f"OK    [{job_id_display}] Cliente MEXC criado", flush=True)
                 
-                # TODO: Modificar create_order para aceitar símbolo específico
-                # Por enquanto, executa ordem normal
+                # 5. EXECUÇÃO: Executa ordem
+                print(f"EXEC  [{job_id_display}] Executando ordem (tipo: scheduled)...", flush=True)
                 result = mexc_client.create_order(execution_type="scheduled")
+                print(f"DONE  [{job_id_display}] Ordem executada - Status: {result.get('status')}", flush=True)
                 
                 # Atualiza metadata
                 metadata_updates = {
@@ -122,10 +138,14 @@ class DynamicJobManager:
                     metadata_updates['total_invested'] = current_total_invested + total_invested
                 
                 config_service.update_metadata(pair, metadata_updates)
+                print(f"OK    [{job_id_display}] Metadata atualizada no MongoDB", flush=True)
                 
                 # ✅ SEMPRE SALVA LOG (sucesso, skipped ou erro)
+                print(f"LOG   [{job_id_display}] Preparando log para MongoDB...", flush=True)
+                
                 if execution_logs_db is not None:
                     try:
+                        print(f"INFO  [{job_id_display}] Coletando informações de mercado...", flush=True)
                         # Busca informações de mercado do par
                         market_info = None
                         try:
@@ -155,35 +175,35 @@ class DynamicJobManager:
                                 
                                 # Status do spread
                                 if spread_percent < 0.3:
-                                    spread_status = "🟢 Baixo"
+                                    spread_status = "LOW"
                                 elif spread_percent < 1.0:
-                                    spread_status = "🟡 Médio"
+                                    spread_status = "MEDIUM"
                                 else:
-                                    spread_status = "🔴 Alto"
+                                    spread_status = "HIGH"
                                 
                                 # Análise de tendência
                                 if change_percent_24h > 2:
-                                    trend = "📈 Alta"
+                                    trend = "UP"
                                 elif change_percent_24h < -2:
-                                    trend = "📉 Queda"
+                                    trend = "DOWN"
                                 else:
-                                    trend = "➡️ Lateral"
+                                    trend = "FLAT"
                                 
                                 # Análise de momentum
                                 if abs(change_percent_24h) > 10:
-                                    momentum = "🚀 Forte"
+                                    momentum = "STRONG"
                                 elif abs(change_percent_24h) > 5:
-                                    momentum = "⚡ Moderado"
+                                    momentum = "MODERATE"
                                 else:
-                                    momentum = "😴 Fraco"
+                                    momentum = "WEAK"
                                 
                                 # Análise de liquidez
                                 if volume_24h > 1000000:
-                                    liquidity = "💧 Alta"
+                                    liquidity = "HIGH"
                                 elif volume_24h > 100000:
-                                    liquidity = "💦 Média"
+                                    liquidity = "MEDIUM"
                                 else:
-                                    liquidity = "💤 Baixa"
+                                    liquidity = "LOW"
                                 
                                 market_info = {
                                     "pair": pair,
@@ -217,7 +237,7 @@ class DynamicJobManager:
                                         "trend": trend,
                                         "momentum": momentum,
                                         "liquidity": liquidity,
-                                        "recommendation": f"⚠️ Spread {spread_status.lower()} | {trend} | {liquidity}"
+                                        "recommendation": f"Spread {spread_status} | {trend} | {liquidity}"
                                     }
                                 }
                         except Exception:
@@ -262,14 +282,42 @@ class DynamicJobManager:
                             # Informações de mercado
                             "market_info": market_info
                         }
-                        execution_logs_db.insert_one(execution_log)
-                    except Exception:
-                        pass  # Falha silenciosa no log
+                        
+                        print(f"SAVE  [{job_id_display}] Log montado, inserindo no MongoDB...", flush=True)
+                        result_insert = execution_logs_db.insert_one(execution_log)
+                        print(f"OK    [{job_id_display}] Log salvo! ID: {result_insert.inserted_id}", flush=True)
+                        
+                    except Exception as e:
+                        print(f"ERROR [{job_id_display}] ERRO ao salvar log no MongoDB: {e}", flush=True)
+                        import traceback
+                        traceback.print_exc()
+                else:
+                    print(f"ERROR [{job_id_display}] execution_logs_db is None - MongoDB não conectado!", flush=True)
                 
                 # Job executado silenciosamente
                 
+                # 6. FINALIZAÇÃO: Calcula tempo de execução
+                job_end_time = datetime.now(TZ)
+                execution_duration = (job_end_time - job_start_time).total_seconds()
+                
+                print(f"\n{'='*60}", flush=True)
+                print(f"END   [{job_id_display}] EXECUÇÃO CONCLUÍDA", flush=True)
+                print(f"TIME  [{job_id_display}] Duração: {execution_duration:.2f}s", flush=True)
+                print(f"STAT  [{job_id_display}] Status: {result.get('status')}", flush=True)
+                print(f"{'='*60}\n", flush=True)
+                
             except Exception as e:
-                print(f"! Erro job {pair}: {e}")
+                job_end_time = datetime.now(TZ)
+                execution_duration = (job_end_time - job_start_time).total_seconds()
+                
+                print(f"\n{'='*60}", flush=True)
+                print(f"ERROR [{job_id_display}] ERRO NA EXECUÇÃO", flush=True)
+                print(f"TIME  [{job_id_display}] Duração: {execution_duration:.2f}s", flush=True)
+                print(f"ERR   [{job_id_display}] Erro: {e}", flush=True)
+                print(f"{'='*60}\n", flush=True)
+                
+                import traceback
+                traceback.print_exc()
                 
                 # Atualiza status para erro
                 config_service.update_metadata(pair, {

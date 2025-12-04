@@ -24,8 +24,10 @@ load_dotenv()
 # Conecta ao MongoDB para logs de execução
 try:
     execution_logs_db = connection_mongo("ExecutionLogs")
-except Exception:
+    print("OK MongoDB ExecutionLogs conectado com sucesso!", flush=True)
+except Exception as e:
     execution_logs_db = None
+    print(f"ERROR ao conectar MongoDB ExecutionLogs: {e}", flush=True)
 
 API_KEY = os.getenv('API_KEY')
 API_SECRET = os.getenv('API_SECRET')
@@ -972,6 +974,115 @@ def toggle_strategy_1h(pair):
 
 # ========== JOBS ==========
 
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Health check completo do sistema"""
+    from src.services.job_manager import job_manager
+    
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.now(TZ).isoformat(),
+        "timestamp_readable": datetime.now(TZ).strftime('%d/%m/%Y %H:%M:%S'),
+        "version": SYSTEM_VERSION,
+        "build_date": SYSTEM_BUILD_DATE,
+        "checks": {}
+    }
+    
+    # 1. Verifica Scheduler
+    try:
+        scheduler_running = scheduler.running
+        scheduler_state = str(scheduler.state)
+        health_status["checks"]["scheduler"] = {
+            "status": "ok" if scheduler_running else "error",
+            "running": scheduler_running,
+            "state": scheduler_state
+        }
+        if not scheduler_running:
+            health_status["status"] = "unhealthy"
+    except Exception as e:
+        health_status["checks"]["scheduler"] = {
+            "status": "error",
+            "error": str(e)
+        }
+        health_status["status"] = "unhealthy"
+    
+    # 2. Verifica MongoDB ExecutionLogs
+    try:
+        if execution_logs_db is not None:
+            # Tenta fazer uma operação simples
+            execution_logs_db.count_documents({}, limit=1)
+            health_status["checks"]["mongodb_logs"] = {
+                "status": "ok",
+                "connected": True
+            }
+        else:
+            health_status["checks"]["mongodb_logs"] = {
+                "status": "error",
+                "connected": False,
+                "message": "execution_logs_db is None"
+            }
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["checks"]["mongodb_logs"] = {
+            "status": "error",
+            "error": str(e)
+        }
+        health_status["status"] = "degraded"
+    
+    # 3. Verifica Jobs Ativos
+    try:
+        if job_manager:
+            jobs_status = job_manager.get_active_jobs_status()
+            total_jobs = jobs_status.get('total_jobs', 0)
+            health_status["checks"]["jobs"] = {
+                "status": "ok" if total_jobs > 0 else "warning",
+                "total_active": total_jobs,
+                "jobs_list": [j['pair'] for j in jobs_status.get('jobs', [])]
+            }
+            if total_jobs == 0:
+                health_status["status"] = "degraded"
+        else:
+            health_status["checks"]["jobs"] = {
+                "status": "error",
+                "message": "job_manager not initialized"
+            }
+            health_status["status"] = "unhealthy"
+    except Exception as e:
+        health_status["checks"]["jobs"] = {
+            "status": "error",
+            "error": str(e)
+        }
+        health_status["status"] = "degraded"
+    
+    # 4. Verifica API Keys
+    try:
+        api_key_set = bool(API_KEY and len(API_KEY) > 10)
+        api_secret_set = bool(API_SECRET and len(API_SECRET) > 10)
+        health_status["checks"]["api_credentials"] = {
+            "status": "ok" if (api_key_set and api_secret_set) else "error",
+            "api_key_set": api_key_set,
+            "api_secret_set": api_secret_set
+        }
+        if not (api_key_set and api_secret_set):
+            health_status["status"] = "unhealthy"
+    except Exception as e:
+        health_status["checks"]["api_credentials"] = {
+            "status": "error",
+            "error": str(e)
+        }
+        health_status["status"] = "unhealthy"
+    
+    # Determina HTTP status code
+    if health_status["status"] == "healthy":
+        http_code = 200
+    elif health_status["status"] == "degraded":
+        http_code = 200  # 200 mas com warnings
+    else:
+        http_code = 503  # Service Unavailable
+    
+    return jsonify(health_status), http_code
+
+
 @app.route("/jobs", methods=["GET"])
 def get_all_jobs():
     """Lista todos os jobs ativos"""
@@ -1095,37 +1206,41 @@ SYSTEM_BUILD_DATE = "2025-12-03"
 
 # ========== INICIALIZAÇÃO (RODA EM LOCAL E PRODUÇÃO) ==========
 print("\n" + "="*80, flush=True)
-print("🤖 MAVERICK - Trading Bot Automático", flush=True)
+print("MAVERICK - Trading Bot Automático", flush=True)
 print("="*80, flush=True)
-print(f"📦 Versão: {SYSTEM_VERSION}", flush=True)
-print(f"📅 Build: {SYSTEM_BUILD_DATE}", flush=True)
-print(f"🌐 Timezone: {TZ}", flush=True)
-print(f"⏰ Hora atual: {datetime.now(TZ).strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
+print(f"VERSION: {SYSTEM_VERSION}", flush=True)
+print(f"BUILD:   {SYSTEM_BUILD_DATE}", flush=True)
+print(f"TZ:      {TZ}", flush=True)
+print(f"TIME:    {datetime.now(TZ).strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
 print("="*80, flush=True)
 
 # Inicializa scheduler
 try:
     scheduler.start()
-    print("✅ Scheduler iniciado", flush=True)
+    print("OK Scheduler iniciado com sucesso", flush=True)
+    print(f"   Estado: {scheduler.state}", flush=True)
+    print(f"   Running: {scheduler.running}", flush=True)
 except Exception as e:
-    print(f"❌ Erro no Scheduler: {e}", flush=True)
+    print(f"ERROR ao iniciar Scheduler: {e}", flush=True)
+    import traceback
+    traceback.print_exc()
 
 # Inicializa job manager
 job_mgr = initialize_job_manager(scheduler, API_KEY, API_SECRET)
-print("✅ Job Manager inicializado", flush=True)
+print("OK Job Manager inicializado", flush=True)
 
 # Carrega jobs do MongoDB
 added, removed = job_mgr.reload_all_jobs()
 
 print("\n" + "="*80, flush=True)
-print("📋 JOBS CONFIGURADOS", flush=True)
+print("JOBS CONFIGURADOS", flush=True)
 print("="*80, flush=True)
 
 if added == 0:
-    print("⚠️  Nenhum job encontrado", flush=True)
-    print("💡 Configure via: POST /configs", flush=True)
+    print("WARNING Nenhum job encontrado", flush=True)
+    print("INFO Configure via: POST /configs", flush=True)
 else:
-    print(f"✅ {added} job{'s' if added != 1 else ''} ativo{'s' if added != 1 else ''}\n", flush=True)
+    print(f"OK {added} job{'s' if added != 1 else ''} ativo{'s' if added != 1 else ''}\n", flush=True)
     
     status = job_mgr.get_active_jobs_status()
     for idx, job_info in enumerate(status.get('jobs', []), 1):
@@ -1142,25 +1257,25 @@ else:
         else:
             interval_display = "?"
         
-        print(f"{idx}. 📊 {pair}", flush=True)
-        print(f"   ⏱️  Intervalo: {interval_display}", flush=True)
+        print(f"{idx}. PAIR {pair}", flush=True)
+        print(f"   INTERVAL: {interval_display}", flush=True)
         if next_run:
             # Formata next_run
             if isinstance(next_run, str):
                 # Se for string, tenta converter
                 try:
                     next_run_dt = datetime.fromisoformat(next_run.replace('Z', '+00:00'))
-                    print(f"   ⏭️  Próxima execução: {next_run_dt.strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
+                    print(f"   NEXT: {next_run_dt.strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
                 except:
-                    print(f"   ⏭️  Próxima execução: {next_run}", flush=True)
+                    print(f"   NEXT: {next_run}", flush=True)
             elif hasattr(next_run, 'strftime'):
-                print(f"   ⏭️  Próxima execução: {next_run.strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
+                print(f"   NEXT: {next_run.strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
             else:
-                print(f"   ⏭️  Próxima execução: {next_run}", flush=True)
+                print(f"   NEXT: {next_run}", flush=True)
         print(flush=True)
 
 print("="*80, flush=True)
-print("🚀 MAVERICK BOT PRONTO!", flush=True)
+print("MAVERICK BOT PRONTO!", flush=True)
 print("="*80 + "\n", flush=True)
 
 # Inicia timer de countdown (mantém thread viva)
