@@ -1,7 +1,27 @@
 """
 Gerenciador de Jobs Dinâmicos por Símbolo
 
-Cada criptomoeda habilitada terá seu próprio job no APScheduler
+Cada criptomoeda habi                if not config:
+                    print(f"WARNING [{job_id_display}] Config not found - skipping execution", flush=True)
+                    return
+                
+                if not config.get('enabled', False):
+                             print(f"\n{'='*60}", flush=True)
+                print(f"END   [{job_id_display}] EXECUTION COMPLETED", flush=True)
+                print(f"TIME  [{job_id_display}] Duration: {execution_duration:.2f}s", flush=True)
+                print(f"STAT  [{job_id_display}] Status: {result.get('status')}", flush=True)
+                print(f"{'='*60}\n", flush=True)
+                
+            except Exception as e:
+                job_end_time = datetime.now(TZ)
+                execution_duration = (job_end_time - job_start_time).total_seconds()
+                
+                print(f"\n{'='*60}", flush=True)
+                print(f"ERROR [{job_id_display}] ERROR IN EXECUTION", flush=True)
+                print(f"TIME  [{job_id_display}] Duration: {execution_duration:.2f}s", flush=True)
+                print(f"ERR   [{job_id_display}] Error: {str(e)}", flush=True)
+                print(f"{'='*60}\n", flush=True)WARNING [{job_id_display}] Config disabled - skipping execution", flush=True)
+                    returnterá seu próprio job no APScheduler
 com intervalo e horário configuráveis individualmente
 """
 
@@ -67,21 +87,21 @@ class DynamicJobManager:
                 config = config_service.get_symbol_config(pair)
                 
                 if not config:
-                    print(f"WARNING [{job_id_display}] Config não encontrada - pulando execução", flush=True)
+                    print(f"WARNING [{job_id_display}] Config not found - skipping execution", flush=True)
                     return
                 
                 if not config.get('enabled'):
-                    print(f"WARNING [{job_id_display}] Config desabilitada - pulando execução", flush=True)
+                    print(f"WARNING [{job_id_display}] Config disabled - skipping execution", flush=True)
                     return
                 
                 # 2. INICIALIZAÇÃO: Log de início
                 print(f"\n{'='*60}", flush=True)
-                print(f"START [{job_id_display}] INICIANDO EXECUÇÃO", flush=True)
+                print(f"START [{job_id_display}] STARTING EXECUTION", flush=True)
                 print(f"{'='*60}", flush=True)
-                print(f"TIME  [{job_id_display}] Início: {job_start_time.strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
+                print(f"TIME  [{job_id_display}] Start: {job_start_time.strftime('%d/%m/%Y %H:%M:%S')}", flush=True)
                 
             except Exception as e:
-                print(f"ERROR [{job_id_display}] ERRO CRÍTICO na validação: {e}", flush=True)
+                print(f"ERROR [{job_id_display}] CRITICAL ERROR in validation: {e}", flush=True)
                 import traceback
                 traceback.print_exc()
                 return
@@ -105,20 +125,20 @@ class DynamicJobManager:
                     interval_display = "?"
                     next_run = None
                 
-                print(f"PAIR  [{job_id_display}] Par: {pair}", flush=True)
+                print(f"PAIR  [{job_id_display}] Pair: {pair}", flush=True)
                 if next_run:
-                    print(f"NEXT  [{job_id_display}] Próxima execução: {next_run.strftime('%d/%m/%Y %H:%M:%S')} (em {interval_display})", flush=True)
+                    print(f"NEXT  [{job_id_display}] Next execution: {next_run.strftime('%d/%m/%Y %H:%M:%S')} (in {interval_display})", flush=True)
                 print(f"{'='*60}\n", flush=True)
                 
                 # 4. EXECUÇÃO: Cria cliente com configuração do MongoDB
-                print(f"SETUP [{job_id_display}] Criando cliente MEXC...", flush=True)
+                print(f"SETUP [{job_id_display}] Creating MEXC client...", flush=True)
                 mexc_client = MexcClient(self.api_key, self.api_secret, config)
-                print(f"OK    [{job_id_display}] Cliente MEXC criado", flush=True)
+                print(f"OK    [{job_id_display}] MEXC client created", flush=True)
                 
                 # 5. EXECUÇÃO: Executa ordem
-                print(f"EXEC  [{job_id_display}] Executando ordem (tipo: scheduled)...", flush=True)
+                print(f"EXEC  [{job_id_display}] Executing order (type: scheduled)...", flush=True)
                 result = mexc_client.create_order(execution_type="scheduled")
-                print(f"DONE  [{job_id_display}] Ordem executada - Status: {result.get('status')}", flush=True)
+                print(f"DONE  [{job_id_display}] Order executed - Status: {result.get('status')}", flush=True)
                 
                 # Atualiza metadata
                 metadata_updates = {
@@ -138,40 +158,48 @@ class DynamicJobManager:
                     metadata_updates['total_invested'] = current_total_invested + total_invested
                 
                 config_service.update_metadata(pair, metadata_updates)
-                print(f"OK    [{job_id_display}] Metadata atualizada no MongoDB", flush=True)
+                print(f"OK    [{job_id_display}] Metadata updated in MongoDB", flush=True)
                 
-                # ✅ SEMPRE SALVA LOG (sucesso, skipped ou erro)
-                print(f"LOG   [{job_id_display}] Preparando log para MongoDB...", flush=True)
+                #SEMPRE SALVA LOG (sucesso, skipped ou erro)
+                print(f"LOG   [{job_id_display}] Preparing log for MongoDB...", flush=True)
                 
                 if execution_logs_db is not None:
                     try:
-                        print(f"INFO  [{job_id_display}] Coletando informações de mercado...", flush=True)
+                        print(f"INFO  [{job_id_display}] Collecting market information...", flush=True)
+                        
+                        # Função para formatar valores (evita notação científica)
+                        def format_price(value, decimals=8):
+                            """Formata preço evitando notação científica"""
+                            if value is None or value == 0:
+                                return 0
+                            return float(f"{value:.{decimals}f}")
+                        
                         # Busca informações de mercado do par
                         market_info = None
                         try:
                             ticker = mexc_client.client.fetch_ticker(pair)
                             if ticker:
-                                last_price = float(ticker.get('last', 0))
-                                bid_price = float(ticker.get('bid', 0))
-                                ask_price = float(ticker.get('ask', 0))
-                                high_24h = float(ticker.get('high', 0))
-                                low_24h = float(ticker.get('low', 0))
-                                open_24h = float(ticker.get('open', 0))
-                                volume_24h = float(ticker.get('quoteVolume', 0))
+                                last_price = format_price(float(ticker.get('last', 0)))
+                                bid_price = format_price(float(ticker.get('bid', 0)))
+                                ask_price = format_price(float(ticker.get('ask', 0)))
+                                high_24h = format_price(float(ticker.get('high', 0)))
+                                low_24h = format_price(float(ticker.get('low', 0)))
+                                open_24h = format_price(float(ticker.get('open', 0)))
+                                volume_24h = round(float(ticker.get('quoteVolume', 0)), 2)
                                 
                                 # Calcula variações
-                                change_24h = last_price - open_24h if open_24h > 0 else 0
-                                change_percent_24h = (change_24h / open_24h * 100) if open_24h > 0 else 0
+                                change_24h = format_price(last_price - open_24h if open_24h > 0 else 0)
+                                change_percent_24h = round((change_24h / open_24h * 100) if open_24h > 0 else 0, 2)
                                 
                                 # Busca variação 1h
                                 variation_1h = mexc_client.get_variation_1h(pair)
                                 
                                 # Calcula spread
-                                spread_value = ask_price - bid_price if (ask_price and bid_price) else 0
-                                spread_percent = (spread_value / bid_price * 100) if bid_price > 0 else 0
+                                spread_value = format_price(ask_price - bid_price if (ask_price and bid_price) else 0)
+                                spread_percent = round((spread_value / bid_price * 100) if bid_price > 0 else 0, 4)
                                 
                                 # Calcula volatilidade
-                                volatility = ((high_24h - low_24h) / low_24h * 100) if low_24h > 0 else 0
+                                volatility = round(((high_24h - low_24h) / low_24h * 100) if low_24h > 0 else 0, 2)
                                 
                                 # Status do spread
                                 if spread_percent < 0.3:
@@ -212,7 +240,7 @@ class DynamicJobManager:
                                     "ask_price": ask_price,
                                     "spread": {
                                         "value": spread_value,
-                                        "percent": round(spread_percent, 4),
+                                        "percent": spread_percent,
                                         "status": spread_status
                                     },
                                     "24h_stats": {
@@ -220,9 +248,9 @@ class DynamicJobManager:
                                         "low": low_24h,
                                         "open": open_24h,
                                         "change": change_24h,
-                                        "change_percent": round(change_percent_24h, 2),
-                                        "volume_usdt": round(volume_24h, 2),
-                                        "volatility": round(volatility, 2)
+                                        "change_percent": change_percent_24h,
+                                        "volume_usdt": volume_24h,
+                                        "volatility": volatility
                                     },
                                     "1h_stats": {
                                         "change_percent": variation_1h if variation_1h else None
@@ -255,7 +283,7 @@ class DynamicJobManager:
                         execution_log = {
                             "execution_type": "scheduled",
                             "executed_by": "scheduler",
-                            "timestamp": datetime.now().isoformat(),
+                            "timestamp": datetime.now(TZ).isoformat(),
                             "pair": pair,
                             
                             # Resumo da execução (valores formatados)
@@ -273,7 +301,7 @@ class DynamicJobManager:
                             # Resultado da venda (scheduled não vende)
                             "sell_details": {
                                 "status": "no_sells",
-                                "message": "Execução scheduled não realiza vendas",
+                                "message": "Scheduled execution does not perform sells",
                                 "holdings_checked": 0,
                                 "sells_executed": 0,
                                 "total_profit": format_usdt(0)
@@ -283,16 +311,16 @@ class DynamicJobManager:
                             "market_info": market_info
                         }
                         
-                        print(f"SAVE  [{job_id_display}] Log montado, inserindo no MongoDB...", flush=True)
+                        print(f"SAVE  [{job_id_display}] Log assembled, inserting into MongoDB...", flush=True)
                         result_insert = execution_logs_db.insert_one(execution_log)
-                        print(f"OK    [{job_id_display}] Log salvo! ID: {result_insert.inserted_id}", flush=True)
+                        print(f"OK    [{job_id_display}] Log saved! ID: {result_insert.inserted_id}", flush=True)
                         
                     except Exception as e:
-                        print(f"ERROR [{job_id_display}] ERRO ao salvar log no MongoDB: {e}", flush=True)
+                        print(f"ERROR [{job_id_display}] ERROR saving log to MongoDB: {e}", flush=True)
                         import traceback
                         traceback.print_exc()
                 else:
-                    print(f"ERROR [{job_id_display}] execution_logs_db is None - MongoDB não conectado!", flush=True)
+                    print(f"ERROR [{job_id_display}] execution_logs_db is None - MongoDB not connected!", flush=True)
                 
                 # Job executado silenciosamente
                 

@@ -24,10 +24,10 @@ load_dotenv()
 # Conecta ao MongoDB para logs de execução
 try:
     execution_logs_db = connection_mongo("ExecutionLogs")
-    print("OK MongoDB ExecutionLogs conectado com sucesso!", flush=True)
+    print("OK MongoDB ExecutionLogs connected successfully!", flush=True)
 except Exception as e:
     execution_logs_db = None
-    print(f"ERROR ao conectar MongoDB ExecutionLogs: {e}", flush=True)
+    print(f"ERROR connecting MongoDB ExecutionLogs: {e}", flush=True)
 
 API_KEY = os.getenv('API_KEY')
 API_SECRET = os.getenv('API_SECRET')
@@ -1206,7 +1206,7 @@ SYSTEM_BUILD_DATE = "2025-12-03"
 
 # ========== INICIALIZAÇÃO (RODA EM LOCAL E PRODUÇÃO) ==========
 print("\n" + "="*80, flush=True)
-print("MAVERICK - Trading Bot Automático", flush=True)
+print("MAVERICK - Automatic Trading Bot", flush=True)
 print("="*80, flush=True)
 print(f"VERSION: {SYSTEM_VERSION}", flush=True)
 print(f"BUILD:   {SYSTEM_BUILD_DATE}", flush=True)
@@ -1217,30 +1217,30 @@ print("="*80, flush=True)
 # Inicializa scheduler
 try:
     scheduler.start()
-    print("OK Scheduler iniciado com sucesso", flush=True)
-    print(f"   Estado: {scheduler.state}", flush=True)
+    print("OK Scheduler started successfully", flush=True)
+    print(f"   State: {scheduler.state}", flush=True)
     print(f"   Running: {scheduler.running}", flush=True)
 except Exception as e:
-    print(f"ERROR ao iniciar Scheduler: {e}", flush=True)
+    print(f"ERROR starting Scheduler: {e}", flush=True)
     import traceback
     traceback.print_exc()
 
 # Inicializa job manager
 job_mgr = initialize_job_manager(scheduler, API_KEY, API_SECRET)
-print("OK Job Manager inicializado", flush=True)
+print("OK Job Manager initialized", flush=True)
 
 # Carrega jobs do MongoDB
 added, removed = job_mgr.reload_all_jobs()
 
 print("\n" + "="*80, flush=True)
-print("JOBS CONFIGURADOS", flush=True)
+print("CONFIGURED JOBS", flush=True)
 print("="*80, flush=True)
 
 if added == 0:
-    print("WARNING Nenhum job encontrado", flush=True)
+    print("WARNING No jobs found", flush=True)
     print("INFO Configure via: POST /configs", flush=True)
 else:
-    print(f"OK {added} job{'s' if added != 1 else ''} ativo{'s' if added != 1 else ''}\n", flush=True)
+    print(f"OK {added} active job{'s' if added != 1 else ''}\n", flush=True)
     
     status = job_mgr.get_active_jobs_status()
     for idx, job_info in enumerate(status.get('jobs', []), 1):
@@ -1275,7 +1275,7 @@ else:
         print(flush=True)
 
 print("="*80, flush=True)
-print("MAVERICK BOT PRONTO!", flush=True)
+print("MAVERICK BOT READY!", flush=True)
 print("="*80 + "\n", flush=True)
 
 # Inicia timer de countdown (mantém thread viva)
