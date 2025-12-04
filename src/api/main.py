@@ -134,192 +134,155 @@ def home():
 @app.route("/balance", methods=["GET"])
 def balance():
     """
-    Retorna saldo total em USDT
+    Get total balance in USDT
     
-    Response:
-    {
-        "status": "success",
-        "balance": {
-            "total_USDT": 1234.56,
-            "timestamp": "2025-12-02T15:30:00"
-        }
-    }
+    Returns standardized response with balance information
     """
     try:
         mexc_client = MexcClient(API_KEY, API_SECRET)
-        data = mexc_client.get_total_assets_in_USDT()
-        return jsonify({
-            "status": "success",
-            "balance": data
-        })
+        balance_data = mexc_client.get_total_assets_in_USDT()
+        
+        return APIResponse.success(
+            data=balance_data,
+            message="Balance retrieved successfully"
+        )
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": f"Erro ao buscar saldo: {str(e)}"
-        }), 500
+        return APIResponse.server_error(
+            message="Failed to retrieve balance",
+            details={
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+        )
 
 # ========== PRICE ==========
 
 @app.route("/price", methods=["GET"])
 def get_price_by_params():
     """
-    Retorna o preço atual de um par de Tranding (via query params)
+    Get current price of a trading pair (via query params)
     
     Query params:
-        - pair: Par de Tranding (ex: REKT/USDT, BTC/USDT)
+        - pair: Trading pair (ex: REKT/USDT, BTC/USDT)
     
-    Exemplo: GET /price?pair=REKT/USDT
-    
-    Response:
-    {
-        "status": "success",
-        "pair": "REKT/USDT",
-        "price": {
-            "current": 0.001234,
-            "bid": 0.001233,
-            "ask": 0.001235,
-            "high_24h": 0.001300,
-            "low_24h": 0.001200,
-            "volume_24h": 1000000,
-            "change_24h": 2.5,
-            "timestamp": "2025-12-02T15:30:00"
-        }
-    }
+    Example: GET /price?pair=REKT/USDT
     """
     try:
         pair = request.args.get('pair')
         
         if not pair:
-            return jsonify({
-                "status": "error",
-                "message": "Query param 'pair' é obrigatório (ex: /price?pair=REKT/USDT)"
-            }), 400
+            return APIResponse.validation_error(
+                message="Query param 'pair' is required",
+                details={
+                    "example": "/price?pair=REKT/USDT",
+                    "required_params": ["pair"]
+                }
+            )
         
         pair_formatted = pair.upper()
-        
         mexc_client = MexcClient(API_KEY, API_SECRET)
-        
-        # Busca ticker do par
         ticker = mexc_client.client.fetch_ticker(pair_formatted)
         
         price_data = {
+            "pair": pair_formatted,
             "current": ticker.get('last'),
             "bid": ticker.get('bid'),
             "ask": ticker.get('ask'),
             "high_24h": ticker.get('high'),
             "low_24h": ticker.get('low'),
             "volume_24h": ticker.get('baseVolume'),
-            "change_24h": ticker.get('percentage'),
-            "timestamp": datetime.now().isoformat()
+            "change_24h": ticker.get('percentage')
         }
         
-        return jsonify({
-            "status": "success",
-            "pair": pair_formatted,
-            "price": price_data
-        })
+        return APIResponse.success(
+            data=price_data,
+            message="Price retrieved successfully"
+        )
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": f"Erro ao buscar preço: {str(e)}"
-        }), 500
+        return APIResponse.server_error(
+            message="Failed to retrieve price",
+            details={
+                "pair": pair if 'pair' in locals() else None,
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+        )
 
 @app.route("/price/<pair>", methods=["GET"])
 def get_price_by_path(pair):
     """
-    Retorna o preço atual de um par de Tranding (via path)
+    Get current price of a trading pair (via path)
     
     Path param:
-        - pair: Par de Tranding (ex: REKT-USDT ou REKT/USDT)
+        - pair: Trading pair (ex: REKT-USDT or REKT/USDT)
     
-    Exemplo: GET /price/REKT-USDT
-    
-    Response:
-    {
-        "status": "success",
-        "pair": "REKT/USDT",
-        "price": {
-            "current": 0.001234,
-            "bid": 0.001233,
-            "ask": 0.001235,
-            "high_24h": 0.001300,
-            "low_24h": 0.001200,
-            "volume_24h": 1000000,
-            "change_24h": 2.5,
-            "timestamp": "2025-12-02T15:30:00"
-        }
-    }
+    Example: GET /price/REKT-USDT
     """
     try:
-        # Aceita tanto REKT-USDT quanto REKT/USDT (encoded como REKT%2FUSDT)
+        # Accepts both REKT-USDT and REKT/USDT (encoded as REKT%2FUSDT)
         pair_formatted = pair.replace('%2F', '/').replace('-', '/').upper()
         
         mexc_client = MexcClient(API_KEY, API_SECRET)
-        
-        # Busca ticker do par
         ticker = mexc_client.client.fetch_ticker(pair_formatted)
         
         price_data = {
+            "pair": pair_formatted,
             "current": ticker.get('last'),
             "bid": ticker.get('bid'),
             "ask": ticker.get('ask'),
             "high_24h": ticker.get('high'),
             "low_24h": ticker.get('low'),
             "volume_24h": ticker.get('baseVolume'),
-            "change_24h": ticker.get('percentage'),
-            "timestamp": datetime.now().isoformat()
+            "change_24h": ticker.get('percentage')
         }
         
-        return jsonify({
-            "status": "success",
-            "pair": pair_formatted,
-            "price": price_data
-        })
+        return APIResponse.success(
+            data=price_data,
+            message="Price retrieved successfully"
+        )
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": f"Erro ao buscar preço de {pair}: {str(e)}"
-        }), 500
+        return APIResponse.server_error(
+            message=f"Failed to retrieve price for {pair}",
+            details={
+                "pair": pair,
+                "pair_formatted": pair_formatted if 'pair_formatted' in locals() else None,
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+        )
 
 @app.route("/prices", methods=["POST"])
 def get_multiple_prices():
     """
-    Retorna preços de múltiplos pares de Tranding
+    Get prices for multiple trading pairs
     
     Body JSON:
     {
         "pairs": ["REKT/USDT", "BTC/USDT", "ETH/USDT"]
-    }
-    
-    Response:
-    {
-        "status": "success",
-        "prices": {
-            "REKT/USDT": {
-                "current": 0.001234,
-                "change_24h": 2.5,
-                ...
-            },
-            "BTC/USDT": {...}
-        }
     }
     """
     try:
         data = request.get_json()
         
         if not data or 'pairs' not in data:
-            return jsonify({
-                "status": "error",
-                "message": "Campo 'pairs' é obrigatório (array de strings)"
-            }), 400
+            return APIResponse.validation_error(
+                message="Field 'pairs' is required",
+                details={
+                    "required_fields": ["pairs"],
+                    "example": {"pairs": ["REKT/USDT", "BTC/USDT"]}
+                }
+            )
         
         pairs = data['pairs']
         
         if not isinstance(pairs, list):
-            return jsonify({
-                "status": "error",
-                "message": "Campo 'pairs' deve ser um array"
-            }), 400
+            return APIResponse.validation_error(
+                message="Field 'pairs' must be an array",
+                details={
+                    "received_type": type(pairs).__name__,
+                    "expected_type": "array"
+                }
+            )
         
         mexc_client = MexcClient(API_KEY, API_SECRET)
         prices = {}
@@ -340,24 +303,31 @@ def get_multiple_prices():
                     "change_24h": ticker.get('percentage')
                 }
             except Exception as e:
-                errors[pair_formatted] = str(e)
+                errors[pair_formatted if 'pair_formatted' in locals() else pair] = str(e)
         
-        response = {
-            "status": "success",
+        response_data = {
             "prices": prices,
-            "timestamp": datetime.now().isoformat()
+            "total_requested": len(pairs),
+            "total_success": len(prices),
+            "total_errors": len(errors)
         }
         
         if errors:
-            response["errors"] = errors
+            response_data["errors"] = errors
         
-        return jsonify(response)
+        return APIResponse.success(
+            data=response_data,
+            message=f"Prices retrieved: {len(prices)}/{len(pairs)} successful"
+        )
         
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": f"Erro ao buscar preços: {str(e)}"
-        }), 500
+        return APIResponse.server_error(
+            message="Failed to retrieve prices",
+            details={
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+        )
 
 # ========== ORDER ==========
 
