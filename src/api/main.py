@@ -364,10 +364,9 @@ def order():
         if pair:
             config = config_service.get_symbol_config(pair.upper())
             if not config:
-                return jsonify({
-                    "status": "error",
-                    "message": f"Configuração de {pair.upper()} não encontrada no MongoDB"
-                }), 404
+                return APIResponse.not_found(
+                    message=f"Configuration for {pair.upper()} not found in database"
+                )
         
         # Inicializa cliente MEXC com config
         mexc_client = MexcClient(API_KEY, API_SECRET, config)
@@ -541,23 +540,23 @@ def order():
             except Exception as log_error:
                 print(f"   ! Erro ao salvar log: {log_error}")
         
-        return jsonify({
-            "status": "success",
-            "buy_result": buy_result,
-            "sell_result": sell_result,
-            "market_info": market_info,
-            "execution_type": "manual",
-            "summary": summary,
-            "message": "Ordem manual executada - Compra e Venda verificadas"
-        })
+        return APIResponse.success(
+            data={
+                "buy_result": buy_result,
+                "sell_result": sell_result,
+                "market_info": market_info,
+                "summary": summary
+            },
+            message="Manual order executed - Buy and Sell verified"
+        )
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({
-            "status": "error",
-            "message": f"Erro ao executar ordem: {str(e)}"
-        }), 500
+        return APIResponse.server_error(
+            error=e,
+            message="Failed to execute manual order"
+        )
 
 
 # ========== CONFIGS ==========
@@ -577,14 +576,22 @@ def get_all_configs():
         "configs": [ {...}, {...} ]
     }
     """
-    enabled_only = request.args.get('enabled_only', 'false').lower() == 'true'
-    configs = config_service.get_all_configs(enabled_only=enabled_only)
-    
-    return jsonify({
-        "status": "success",
-        "total": len(configs),
-        "configs": configs
-    })
+    try:
+        enabled_only = request.args.get('enabled_only', 'false').lower() == 'true'
+        configs = config_service.get_all_configs(enabled_only=enabled_only)
+        
+        return APIResponse.success(
+            data={
+                "total": len(configs),
+                "configs": configs
+            },
+            message=f"Retrieved {len(configs)} configuration(s)"
+        )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message="Failed to retrieve configurations"
+        )
 
 @app.route("/configs/<pair>", methods=["GET"])
 def get_config_by_pair(pair):
@@ -599,21 +606,26 @@ def get_config_by_pair(pair):
         "config": { ... }
     }
     """
-    # Substitui / por barra para URL encoding
-    pair_formatted = pair.replace('%2F', '/').upper()
-    
-    config = config_service.get_symbol_config(pair_formatted)
-    
-    if config:
-        return jsonify({
-            "status": "success",
-            "config": config
-        })
-    else:
-        return jsonify({
-            "status": "error",
-            "message": f"Configuração de {pair_formatted} não encontrada"
-        }), 404
+    try:
+        # Substitui / por barra para URL encoding
+        pair_formatted = pair.replace('%2F', '/').upper()
+        
+        config = config_service.get_symbol_config(pair_formatted)
+        
+        if config:
+            return APIResponse.success(
+                data={"config": config},
+                message=f"Configuration for {pair_formatted} retrieved successfully"
+            )
+        else:
+            return APIResponse.not_found(
+                message=f"Configuration for {pair_formatted} not found"
+            )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message=f"Failed to retrieve configuration for {pair}"
+        )
 
 @app.route("/configs", methods=["POST"])
 def create_config():
@@ -658,27 +670,32 @@ def create_config():
         "config": { ... }
     }
     """
-    data = request.get_json()
-    
-    if not data:
-        return jsonify({
-            "status": "error",
-            "message": "Body JSON é obrigatório"
-        }), 400
-    
-    success, message, config = config_service.create_symbol_config(data)
-    
-    if success:
-        return jsonify({
-            "status": "success",
-            "message": message,
-            "config": config
-        }), 201
-    else:
-        return jsonify({
-            "status": "error",
-            "message": message
-        }), 400
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return APIResponse.validation_error(
+                message="JSON body is required",
+                details={"error": "Empty request body"}
+            )
+        
+        success, message, config = config_service.create_symbol_config(data)
+        
+        if success:
+            return APIResponse.success(
+                data={"config": config},
+                message=message
+            )
+        else:
+            return APIResponse.validation_error(
+                message=message,
+                details={"validation_errors": "Configuration creation failed"}
+            )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message="Failed to create configuration"
+        )
 
 @app.route("/configs/<pair>", methods=["PUT"])
 def update_config_by_pair(pair):
@@ -702,29 +719,33 @@ def update_config_by_pair(pair):
         "config": { ... }
     }
     """
-    data = request.get_json()
-    
-    if not data:
-        return jsonify({
-            "status": "error",
-            "message": "Body JSON é obrigatório"
-        }), 400
-    
-    pair_formatted = pair.replace('%2F', '/').upper()
-    success, message = config_service.update_symbol_config(pair_formatted, data)
-    
-    if success:
-        updated_config = config_service.get_symbol_config(pair_formatted)
-        return jsonify({
-            "status": "success",
-            "message": message,
-            "config": updated_config
-        })
-    else:
-        return jsonify({
-            "status": "error",
-            "message": message
-        }), 404
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return APIResponse.validation_error(
+                message="JSON body is required",
+                details={"error": "Empty request body"}
+            )
+        
+        pair_formatted = pair.replace('%2F', '/').upper()
+        success, message = config_service.update_symbol_config(pair_formatted, data)
+        
+        if success:
+            updated_config = config_service.get_symbol_config(pair_formatted)
+            return APIResponse.success(
+                data={"config": updated_config},
+                message=message
+            )
+        else:
+            return APIResponse.not_found(
+                message=message
+            )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message=f"Failed to update configuration for {pair}"
+        )
 
 @app.route("/configs/<pair>", methods=["DELETE"])
 def delete_config_by_pair(pair):
@@ -739,19 +760,24 @@ def delete_config_by_pair(pair):
         "message": "Configuração removida"
     }
     """
-    pair_formatted = pair.replace('%2F', '/').upper()
-    success, message = config_service.delete_symbol_config(pair_formatted)
-    
-    if success:
-        return jsonify({
-            "status": "success",
-            "message": message
-        })
-    else:
-        return jsonify({
-            "status": "error",
-            "message": message
-        }), 404
+    try:
+        pair_formatted = pair.replace('%2F', '/').upper()
+        success, message = config_service.delete_symbol_config(pair_formatted)
+        
+        if success:
+            return APIResponse.success(
+                data=None,
+                message=message
+            )
+        else:
+            return APIResponse.not_found(
+                message=message
+            )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message=f"Failed to delete configuration for {pair}"
+        )
 
 # ========== ESTRATÉGIA 1H ==========
 
@@ -773,28 +799,35 @@ def get_strategy_1h_config(pair):
         }
     }
     """
-    pair_formatted = pair.replace('%2F', '/').upper()
-    
-    # Busca configuração do símbolo
-    config = config_service.get_symbol_config(pair_formatted)
-    
-    if not config:
-        return jsonify({
-            "status": "error",
-            "message": f"Configuração não encontrada para {pair_formatted}"
-        }), 404
-    
-    strategy_1h = config.get('strategy_1h', {
-        "enabled": False,
-        "levels": [],
-        "risk_management": {}
-    })
-    
-    return jsonify({
-        "status": "success",
-        "pair": pair_formatted,
-        "strategy_1h": strategy_1h
-    })
+    try:
+        pair_formatted = pair.replace('%2F', '/').upper()
+        
+        # Busca configuração do símbolo
+        config = config_service.get_symbol_config(pair_formatted)
+        
+        if not config:
+            return APIResponse.not_found(
+                message=f"Configuration not found for {pair_formatted}"
+            )
+        
+        strategy_1h = config.get('strategy_1h', {
+            "enabled": False,
+            "levels": [],
+            "risk_management": {}
+        })
+        
+        return APIResponse.success(
+            data={
+                "pair": pair_formatted,
+                "strategy_1h": strategy_1h
+            },
+            message=f"1h strategy for {pair_formatted} retrieved successfully"
+        )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message=f"Failed to retrieve 1h strategy for {pair}"
+        )
 
 @app.route("/configs/<pair>/strategy-1h", methods=["PUT"])
 def update_strategy_1h_config(pair):
@@ -829,61 +862,73 @@ def update_strategy_1h_config(pair):
         "strategy_1h": {...}
     }
     """
-    pair_formatted = pair.replace('%2F', '/').upper()
-    data = request.get_json()
-    
-    # Busca configuração atual
-    config = config_service.get_symbol_config(pair_formatted)
-    
-    if not config:
-        return jsonify({
-            "status": "error",
-            "message": f"Configuração não encontrada para {pair_formatted}"
-        }), 404
-    
-    # Valida campos obrigatórios
-    if 'enabled' not in data:
-        return jsonify({
-            "status": "error",
-            "message": "Campo 'enabled' é obrigatório"
-        }), 400
-    
-    # Atualiza strategy_1h
-    strategy_1h = {
-        "enabled": data.get('enabled', False),
-        "levels": data.get('levels', []),
-        "risk_management": data.get('risk_management', {})
-    }
-    
-    # Valida configuração usando schema
-    from src.models.config_schema import validate_config
-    config_copy = config.copy()
-    config_copy['strategy_1h'] = strategy_1h
-    
-    is_valid, error_msg = validate_config(config_copy)
-    if not is_valid:
-        return jsonify({
-            "status": "error",
-            "message": f"Configuração inválida: {error_msg}"
-        }), 400
-    
-    # Atualiza no MongoDB
-    success, message = config_service.update_symbol_config(pair_formatted, {
-        'strategy_1h': strategy_1h
-    })
-    
-    if success:
-        return jsonify({
-            "status": "success",
-            "message": "Estratégia 1h atualizada com sucesso",
-            "pair": pair_formatted,
-            "strategy_1h": strategy_1h
+    try:
+        pair_formatted = pair.replace('%2F', '/').upper()
+        data = request.get_json()
+        
+        if not data:
+            return APIResponse.validation_error(
+                message="JSON body is required",
+                details={"error": "Empty request body"}
+            )
+        
+        # Busca configuração atual
+        config = config_service.get_symbol_config(pair_formatted)
+        
+        if not config:
+            return APIResponse.not_found(
+                message=f"Configuration not found for {pair_formatted}"
+            )
+        
+        # Valida campos obrigatórios
+        if 'enabled' not in data:
+            return APIResponse.validation_error(
+                message="Field 'enabled' is required",
+                details={"missing_field": "enabled"}
+            )
+        
+        # Atualiza strategy_1h
+        strategy_1h = {
+            "enabled": data.get('enabled', False),
+            "levels": data.get('levels', []),
+            "risk_management": data.get('risk_management', {})
+        }
+        
+        # Valida configuração usando schema
+        from src.models.config_schema import validate_config
+        config_copy = config.copy()
+        config_copy['strategy_1h'] = strategy_1h
+        
+        is_valid, error_msg = validate_config(config_copy)
+        if not is_valid:
+            return APIResponse.validation_error(
+                message=f"Invalid configuration: {error_msg}",
+                details={"validation_error": error_msg}
+            )
+        
+        # Atualiza no MongoDB
+        success, message = config_service.update_symbol_config(pair_formatted, {
+            'strategy_1h': strategy_1h
         })
-    else:
-        return jsonify({
-            "status": "error",
-            "message": message
-        }), 500
+        
+        if success:
+            return APIResponse.success(
+                data={
+                    "pair": pair_formatted,
+                    "strategy_1h": strategy_1h
+                },
+                message="1h strategy updated successfully"
+            )
+        else:
+            return APIResponse.server_error(
+                error=None,
+                message=message
+            )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message=f"Failed to update 1h strategy for {pair}"
+        )
 
 @app.route("/configs/<pair>/strategy-1h/toggle", methods=["POST"])
 def toggle_strategy_1h(pair):
@@ -904,47 +949,59 @@ def toggle_strategy_1h(pair):
         "enabled": true
     }
     """
-    pair_formatted = pair.replace('%2F', '/').upper()
-    data = request.get_json()
-    
-    if 'enabled' not in data:
-        return jsonify({
-            "status": "error",
-            "message": "Campo 'enabled' é obrigatório"
-        }), 400
-    
-    enabled = bool(data['enabled'])
-    
-    # Busca configuração atual
-    config = config_service.get_symbol_config(pair_formatted)
-    
-    if not config:
-        return jsonify({
-            "status": "error",
-            "message": f"Configuração não encontrada para {pair_formatted}"
-        }), 404
-    
-    # Atualiza apenas o campo enabled
-    strategy_1h = config.get('strategy_1h', {})
-    strategy_1h['enabled'] = enabled
-    
-    success, message = config_service.update_symbol_config(pair_formatted, {
-        'strategy_1h': strategy_1h
-    })
-    
-    if success:
-        action = "ativada" if enabled else "desativada"
-        return jsonify({
-            "status": "success",
-            "message": f"Estratégia 1h {action} com sucesso",
-            "pair": pair_formatted,
-            "enabled": enabled
+    try:
+        pair_formatted = pair.replace('%2F', '/').upper()
+        data = request.get_json()
+        
+        if not data:
+            return APIResponse.validation_error(
+                message="JSON body is required",
+                details={"error": "Empty request body"}
+            )
+        
+        if 'enabled' not in data:
+            return APIResponse.validation_error(
+                message="Field 'enabled' is required",
+                details={"missing_field": "enabled"}
+            )
+        
+        enabled = bool(data['enabled'])
+        
+        # Busca configuração atual
+        config = config_service.get_symbol_config(pair_formatted)
+        
+        if not config:
+            return APIResponse.not_found(
+                message=f"Configuration not found for {pair_formatted}"
+            )
+        
+        # Atualiza apenas o campo enabled
+        strategy_1h = config.get('strategy_1h', {})
+        strategy_1h['enabled'] = enabled
+        
+        success, message = config_service.update_symbol_config(pair_formatted, {
+            'strategy_1h': strategy_1h
         })
-    else:
-        return jsonify({
-            "status": "error",
-            "message": message
-        }), 500
+        
+        if success:
+            action = "enabled" if enabled else "disabled"
+            return APIResponse.success(
+                data={
+                    "pair": pair_formatted,
+                    "enabled": enabled
+                },
+                message=f"1h strategy {action} successfully"
+            )
+        else:
+            return APIResponse.server_error(
+                error=None,
+                message=message
+            )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message=f"Failed to toggle 1h strategy for {pair}"
+        )
 
 # ========== JOBS ==========
 
@@ -1079,117 +1136,134 @@ def health_check():
 @app.route("/jobs", methods=["GET"])
 def get_all_jobs():
     """Lista todos os jobs ativos"""
-    from src.services.job_manager import job_manager
-    
-    if not job_manager:
-        return jsonify({
-            "status": "error",
-            "message": "Job manager não inicializado"
-        }), 500
-    
-    status = job_manager.get_active_jobs_status()
-    
-    return jsonify({
-        "status": "success",
-        **status
-    })
+    try:
+        from src.services.job_manager import job_manager
+        
+        if not job_manager:
+            return APIResponse.server_error(
+                error=None,
+                message="Job manager not initialized"
+            )
+        
+        status = job_manager.get_active_jobs_status()
+        
+        return APIResponse.success(
+            data=status,
+            message="Active jobs retrieved successfully"
+        )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message="Failed to retrieve active jobs"
+        )
 
 @app.route("/jobs", methods=["POST"])
 def manage_jobs():
     """Gerencia jobs com actions: start, stop ou reload"""
-    from src.services.job_manager import job_manager
-    
-    if not job_manager:
-        return jsonify({
-            "status": "error",
-            "message": "Job manager não inicializado"
-        }), 500
-    
-    data = request.get_json()
-    
-    if not data or 'action' not in data:
-        return jsonify({
-            "status": "error",
-            "message": "Campo 'action' é obrigatório (start, stop, reload)"
-        }), 400
-    
-    action = data['action'].lower()
-    pairs = data.get('pairs', [])
-    
-    # RELOAD: Recarrega todos os jobs do MongoDB
-    if action == 'reload':
-        added, removed = job_manager.reload_all_jobs()
-        return jsonify({
-            "status": "success",
-            "message": "Jobs recarregados do MongoDB",
-            "details": {
-                "jobs_added": added,
-                "jobs_removed": removed
-            }
-        })
-    
-    # START: Inicia jobs
-    elif action == 'start':
-        if not pairs:
-            return jsonify({
-                "status": "error",
-                "message": "Campo 'pairs' é obrigatório para action=start"
-            }), 400
+    try:
+        from src.services.job_manager import job_manager
         
-        results = []
-        for pair in pairs:
-            pair_formatted = pair.upper()
-            success, message = job_manager.add_job_for_symbol(pair_formatted)
-            results.append({
-                "pair": pair_formatted,
-                "success": success,
-                "message": message
-            })
+        if not job_manager:
+            return APIResponse.server_error(
+                error=None,
+                message="Job manager not initialized"
+            )
         
-        success_count = sum(1 for r in results if r['success'])
+        data = request.get_json()
         
-        return jsonify({
-            "status": "success" if success_count > 0 else "error",
-            "message": f"{success_count}/{len(pairs)} jobs iniciados",
-            "details": results
-        })
-    
-    # STOP: Para jobs
-    elif action == 'stop':
-        # Se não especificar pairs, para TODOS
-        if not pairs:
-            status = job_manager.get_active_jobs_status()
-            pairs = [job['pair'] for job in status.get('jobs', [])]
+        if not data or 'action' not in data:
+            return APIResponse.validation_error(
+                message="Field 'action' is required (start, stop, reload)",
+                details={"missing_field": "action", "allowed_values": ["start", "stop", "reload"]}
+            )
         
-        if not pairs:
-            return jsonify({
-                "status": "success",
-                "message": "Nenhum job ativo para parar"
-            })
+        action = data['action'].lower()
+        pairs = data.get('pairs', [])
         
-        results = []
-        for pair in pairs:
-            pair_formatted = pair.upper()
-            success, message = job_manager.remove_job_for_symbol(pair_formatted)
-            results.append({
-                "pair": pair_formatted,
-                "success": success,
-                "message": message
-            })
+        # RELOAD: Recarrega todos os jobs do MongoDB
+        if action == 'reload':
+            added, removed = job_manager.reload_all_jobs()
+            return APIResponse.success(
+                data={
+                    "jobs_added": added,
+                    "jobs_removed": removed
+                },
+                message="Jobs reloaded from database"
+            )
         
-        success_count = sum(1 for r in results if r['success'])
+        # START: Inicia jobs
+        elif action == 'start':
+            if not pairs:
+                return APIResponse.validation_error(
+                    message="Field 'pairs' is required for action=start",
+                    details={"missing_field": "pairs"}
+                )
+            
+            results = []
+            for pair in pairs:
+                pair_formatted = pair.upper()
+                success, message = job_manager.add_job_for_symbol(pair_formatted)
+                results.append({
+                    "pair": pair_formatted,
+                    "success": success,
+                    "message": message
+                })
+            
+            success_count = sum(1 for r in results if r['success'])
+            
+            return APIResponse.success(
+                data={
+                    "details": results,
+                    "success_count": success_count,
+                    "total_count": len(pairs)
+                },
+                message=f"{success_count}/{len(pairs)} jobs started"
+            )
         
-        return jsonify({
-            "status": "success" if success_count > 0 else "error",
-            "message": f"{success_count}/{len(pairs)} jobs parados",
-            "details": results
-        })
-    
-    else:
-        return jsonify({
-            "status": "error",
-            "message": f"Action inválida: {action}. Use: start, stop ou reload"
-        }), 400
+        # STOP: Para jobs
+        elif action == 'stop':
+            # Se não especificar pairs, para TODOS
+            if not pairs:
+                status = job_manager.get_active_jobs_status()
+                pairs = [job['pair'] for job in status.get('jobs', [])]
+            
+            if not pairs:
+                return APIResponse.success(
+                    data={"details": []},
+                    message="No active jobs to stop"
+                )
+            
+            results = []
+            for pair in pairs:
+                pair_formatted = pair.upper()
+                success, message = job_manager.remove_job_for_symbol(pair_formatted)
+                results.append({
+                    "pair": pair_formatted,
+                    "success": success,
+                    "message": message
+                })
+            
+            success_count = sum(1 for r in results if r['success'])
+            
+            return APIResponse.success(
+                data={
+                    "details": results,
+                    "success_count": success_count,
+                    "total_count": len(pairs)
+                },
+                message=f"{success_count}/{len(pairs)} jobs stopped"
+            )
+        
+        else:
+            return APIResponse.validation_error(
+                message=f"Invalid action: {action}",
+                details={"action": action, "allowed_values": ["start", "stop", "reload"]}
+            )
+    except Exception as e:
+        return APIResponse.server_error(
+            error=e,
+            message="Failed to manage jobs"
+        )
 
 # ========== FIM DOS ENDPOINTS ==========
 
@@ -1271,6 +1345,34 @@ print("="*80, flush=True)
 print("MAVERICK BOT READY!", flush=True)
 print("="*80 + "\n", flush=True)
 
+# ========== GLOBAL ERROR HANDLER ==========
+@app.errorhandler(Exception)
+def handle_uncaught_exception(error):
+    """Captura exceções não tratadas e retorna resposta padronizada"""
+    import traceback
+    traceback.print_exc()
+    
+    return APIResponse.server_error(
+        error=error,
+        message="An unexpected error occurred"
+    )
+
+@app.errorhandler(404)
+def handle_not_found(error):
+    """Captura rotas não encontradas"""
+    return APIResponse.not_found(
+        message=f"Endpoint not found: {request.path}"
+    )
+
+@app.errorhandler(405)
+def handle_method_not_allowed(error):
+    """Captura métodos HTTP não permitidos"""
+    return APIResponse.validation_error(
+        message=f"Method {request.method} not allowed for {request.path}",
+        details={"allowed_methods": error.valid_methods if hasattr(error, 'valid_methods') else []}
+    )
+
+# ========== COUNTDOWN TIMER ==========
 # Inicia timer de countdown (mantém thread viva)
 timer_thread = threading.Thread(target=countdown_timer, args=(COUNTDOWN_INTERVAL_SECONDS,))
 timer_thread.daemon = True
