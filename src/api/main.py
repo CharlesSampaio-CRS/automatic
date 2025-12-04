@@ -183,6 +183,15 @@ def get_price_by_params():
         mexc_client = MexcClient(API_KEY, API_SECRET)
         ticker = mexc_client.client.fetch_ticker(pair_formatted)
         
+        # Calcula variações em múltiplos timeframes
+        variation_1h = mexc_client.get_variation_1h(pair_formatted)
+        variation_4h = mexc_client.get_variation_4h(pair_formatted)
+        variation_24h = mexc_client.get_variation_24h(pair_formatted)
+        
+        # Se get_variation_24h retornar None, usa o percentage do ticker
+        if variation_24h is None:
+            variation_24h = ticker.get('percentage')
+        
         price_data = {
             "pair": pair_formatted,
             "current": ticker.get('last'),
@@ -191,7 +200,9 @@ def get_price_by_params():
             "high_24h": ticker.get('high'),
             "low_24h": ticker.get('low'),
             "volume_24h": ticker.get('baseVolume'),
-            "change_24h": ticker.get('percentage')
+            "change_24h_percent": variation_24h,
+            "change_1h_percent": variation_1h,
+            "change_4h_percent": variation_4h
         }
         
         return APIResponse.success(
@@ -225,6 +236,15 @@ def get_price_by_path(pair):
         mexc_client = MexcClient(API_KEY, API_SECRET)
         ticker = mexc_client.client.fetch_ticker(pair_formatted)
         
+        # Calcula variações em múltiplos timeframes
+        variation_1h = mexc_client.get_variation_1h(pair_formatted)
+        variation_4h = mexc_client.get_variation_4h(pair_formatted)
+        variation_24h = mexc_client.get_variation_24h(pair_formatted)
+        
+        # Se get_variation_24h retornar None, usa o percentage do ticker
+        if variation_24h is None:
+            variation_24h = ticker.get('percentage')
+        
         price_data = {
             "pair": pair_formatted,
             "current": ticker.get('last'),
@@ -233,7 +253,9 @@ def get_price_by_path(pair):
             "high_24h": ticker.get('high'),
             "low_24h": ticker.get('low'),
             "volume_24h": ticker.get('baseVolume'),
-            "change_24h": ticker.get('percentage')
+            "change_24h_percent": variation_24h,
+            "change_1h_percent": variation_1h,
+            "change_4h_percent": variation_4h
         }
         
         return APIResponse.success(
@@ -293,6 +315,15 @@ def get_multiple_prices():
                 pair_formatted = pair.upper()
                 ticker = mexc_client.client.fetch_ticker(pair_formatted)
                 
+                # Calcula variações em múltiplos timeframes
+                variation_1h = mexc_client.get_variation_1h(pair_formatted)
+                variation_4h = mexc_client.get_variation_4h(pair_formatted)
+                variation_24h = mexc_client.get_variation_24h(pair_formatted)
+                
+                # Se get_variation_24h retornar None, usa o percentage do ticker
+                if variation_24h is None:
+                    variation_24h = ticker.get('percentage')
+                
                 prices[pair_formatted] = {
                     "current": ticker.get('last'),
                     "bid": ticker.get('bid'),
@@ -300,7 +331,9 @@ def get_multiple_prices():
                     "high_24h": ticker.get('high'),
                     "low_24h": ticker.get('low'),
                     "volume_24h": ticker.get('baseVolume'),
-                    "change_24h": ticker.get('percentage')
+                    "change_24h_percent": variation_24h,
+                    "change_1h_percent": variation_1h,
+                    "change_4h_percent": variation_4h
                 }
             except Exception as e:
                 errors[pair_formatted if 'pair_formatted' in locals() else pair] = str(e)
