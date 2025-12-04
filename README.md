@@ -1,4 +1,4 @@
-# 🚀 Maverick - Trading Bot
+# Maverick - Trading Bot
 
 Automated bot for periodic cryptocurrency investments on MEXC exchange with dynamic configuration via REST API.
 
@@ -48,7 +48,7 @@ maverick/
     └── CLEANUP.md               # Project cleanup history
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Install dependencies
 ```bash

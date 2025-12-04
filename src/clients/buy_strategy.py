@@ -223,12 +223,12 @@ def example_usage():
     Exemplo de uso da estratégia de compra
     """
     print("\n" + "="*80)
-    print("🎯 ESTRATÉGIA DE COMPRA GRADATIVA NA QUEDA - Exemplo")
+    print(" ESTRATÉGIA DE COMPRA GRADATIVA NA QUEDA - Exemplo")
     print("="*80)
     
     strategy = BuyStrategy()
     
-    print(f"\n📊 RESUMO DA ESTRATÉGIA:")
+    print(f"\n RESUMO DA ESTRATÉGIA:")
     summary = strategy.get_summary()
     print(f"   Tipo: {summary['description']}")
     print(f"   Total de Níveis: {summary['total_levels']}")
@@ -239,7 +239,7 @@ def example_usage():
     
     print(f"\n📈 REGRAS:")
     for rule in summary['rules']:
-        print(f"   ✅ {rule}")
+        print(f"    {rule}")
     
     # Testa diferentes cenários
     scenarios = [
@@ -260,7 +260,7 @@ def example_usage():
     for variation, description in scenarios:
         should_buy, info = strategy.should_buy(variation)
         
-        print(f"\n📊 {description}: {variation:+.1f}%")
+        print(f"\n {description}: {variation:+.1f}%")
         print(f"   Decisão: {'🟢 COMPRAR' if should_buy else '⏸️  AGUARDAR'}")
         print(f"   {info['reason']}")
         
@@ -269,7 +269,7 @@ def example_usage():
             remaining = balance - investment
             print(f"   💰 Investe: ${investment:.2f} USDT ({info['buy_percentage']}% do saldo)")
             print(f"   💵 Reserva: ${remaining:.2f} USDT para quedas maiores")
-            print(f"   📊 Força do Sinal: {info['signal_strength']:.1f}%")
+            print(f"    Força do Sinal: {info['signal_strength']:.1f}%")
     
     print("\n" + "="*80)
 

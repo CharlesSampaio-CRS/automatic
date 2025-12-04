@@ -1,6 +1,6 @@
 # 📮 Postman Collection - MEXC Trading Bot v2.1
 
-## 🚀 How to Import
+## How to Import
 
 1. Open Postman
 2. Click on **Import**
@@ -53,7 +53,7 @@ To change:
 3. Edit the `base_url` value
 ---
 
-## 🎯 Recommended Usage Flow
+##  Recommended Usage Flow
 
 ### 1️⃣ **Check Status**
 ```
@@ -154,12 +154,12 @@ Body: {"action": "reload"}
 
 ---
 
-## 🔍 Important Notes
+##  Important Notes
 
 ### URL Encoding
 When using pairs with `/` in URL, use `%2F`:
-- ✅ Correct: `/configs/REKT%2FUSDT`
-- ❌ Wrong: `/configs/REKT/USDT`
+-  Correct: `/configs/REKT%2FUSDT`
+-  Wrong: `/configs/REKT/USDT`
 
 ### Jobs Actions
 The `POST /jobs` endpoint accepts 3 actions:
@@ -199,12 +199,12 @@ For more details, check:
 
 ## ✨ Collection v2.1 Features
 
-- ✅ Organized by domains (Health, Balance, Order, Configs, Jobs)
-- ✅ Pre-configured body examples
-- ✅ Descriptions in each request
-- ✅ Configurable `base_url` variable
-- ✅ Complete API v2.1 coverage
-- ✅ MongoDB and Dynamic Jobs support
-- ✅ Professional English messages
-- ✅ Formatted values (no scientific notation)
-- ✅ Correct timezone (America/Sao_Paulo)
+-  Organized by domains (Health, Balance, Order, Configs, Jobs)
+-  Pre-configured body examples
+-  Descriptions in each request
+-  Configurable `base_url` variable
+-  Complete API v2.1 coverage
+-  MongoDB and Dynamic Jobs support
+-  Professional English messages
+-  Formatted values (no scientific notation)
+-  Correct timezone (America/Sao_Paulo)

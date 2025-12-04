@@ -19,16 +19,16 @@ def test_concurrent_buy_sell():
     config = db['BotConfigs'].find_one({'pair': 'REKTCOIN/USDT'})
     
     if not config:
-        raise Exception('❌ Config não encontrada!')
+        raise Exception(' Config não encontrada!')
     
     strategy_4h_config = config.get('strategy_4h')
     if not strategy_4h_config:
-        raise Exception('❌ strategy_4h não encontrada!')
+        raise Exception(' strategy_4h não encontrada!')
     
     strategy_4h = BuyStrategy4h(strategy_4h_config)
     min_profit = strategy_4h_config.get('sell_strategy', {}).get('min_profit', 5)
     
-    print(f'\n📊 Configuração:')
+    print(f'\n Configuração:')
     print(f'   Lucro mínimo: {min_profit}%')
     print(f'   Par: REKTCOIN/USDT')
     
@@ -115,16 +115,16 @@ def test_concurrent_buy_sell():
         
         # CRÍTICO: Compra E venda ao mesmo tempo?
         if should_buy and should_sell:
-            issues.append(f'❌ CENÁRIO {i}: COMPRA E VENDA SIMULTÂNEA!')
+            issues.append(f' CENÁRIO {i}: COMPRA E VENDA SIMULTÂNEA!')
             print(f'   ⚠️  PROBLEMA: Compra e venda ao mesmo tempo!')
         elif len(actions) > 0:
-            print(f'   ✅ OK: Apenas {result}')
+            print(f'    OK: Apenas {result}')
         else:
-            print(f'   ✅ OK: Aguardando condições')
+            print(f'    OK: Aguardando condições')
     
     # ANÁLISE DO CÓDIGO REAL
     print('\n' + '='*80)
-    print('🔍 ANÁLISE DO CÓDIGO REAL')
+    print(' ANÁLISE DO CÓDIGO REAL')
     print('='*80)
     
     print('\n1️⃣  ESTRUTURA DE EXECUÇÃO:')
@@ -144,12 +144,12 @@ def test_concurrent_buy_sell():
     
     print('2️⃣  PROTEÇÕES NO CÓDIGO:')
     protections = [
-        '✅ Execução SEQUENCIAL (não paralela)',
-        '✅ Verifica saldo antes de comprar',
-        '✅ Verifica posição antes de vender',
-        '✅ Cooldown de 15 minutos entre operações',
-        '✅ Máximo 3 operações por hora',
-        '✅ Logs de cada operação no MongoDB'
+        ' Execução SEQUENCIAL (não paralela)',
+        ' Verifica saldo antes de comprar',
+        ' Verifica posição antes de vender',
+        ' Cooldown de 15 minutos entre operações',
+        ' Máximo 3 operações por hora',
+        ' Logs de cada operação no MongoDB'
     ]
     
     for protection in protections:
@@ -192,7 +192,7 @@ def test_concurrent_buy_sell():
     # Verifica se há posições abertas
     open_positions = list(db['OpenPositions'].find({'pair': 'REKTCOIN/USDT', 'status': 'open'}))
     
-    print(f'\n📊 Posições abertas: {len(open_positions)}')
+    print(f'\n Posições abertas: {len(open_positions)}')
     
     if open_positions:
         for pos in open_positions[:3]:  # Mostra até 3
@@ -207,20 +207,20 @@ def test_concurrent_buy_sell():
             profit_pct = ((current_price - pos.get("average_price", 0)) / pos.get("average_price", 1)) * 100
             
             if profit_pct >= min_profit:
-                print(f'   - Lucro atual: {profit_pct:.2f}% ✅ PODE VENDER')
+                print(f'   - Lucro atual: {profit_pct:.2f}%  PODE VENDER')
             else:
                 print(f'   - Lucro atual: {profit_pct:.2f}% ⏳ AGUARDANDO')
     else:
         print('   ℹ️  Nenhuma posição aberta no momento')
-        print('   ✅ Bot pode COMPRAR quando houver queda')
+        print('    Bot pode COMPRAR quando houver queda')
     
     # RESULTADO FINAL
     print('\n' + '='*80)
-    print('🎯 RESULTADO FINAL')
+    print(' RESULTADO FINAL')
     print('='*80)
     
     if issues:
-        print(f'\n❌ PROBLEMAS ENCONTRADOS: {len(issues)}')
+        print(f'\n PROBLEMAS ENCONTRADOS: {len(issues)}')
         for issue in issues:
             print(f'   {issue}')
         print('\n🚨 RISCO DE COMPRA E VENDA SIMULTÂNEA!')
@@ -231,12 +231,12 @@ def test_concurrent_buy_sell():
         for warning in warnings:
             print(f'   {warning}')
     
-    print(f'\n✅ SISTEMA SEGURO!')
+    print(f'\n SISTEMA SEGURO!')
     print(f'   • Não há risco de compra e venda simultânea')
     print(f'   • Execução sequencial garante uma ação por vez')
     print(f'   • Cooldown de 15 minutos entre operações')
     print(f'   • Verificações de saldo e posição antes de operar')
-    print('\n🚀 APROVADO - Sem risco de operações concorrentes!')
+    print('\nAPROVADO - Sem risco de operações concorrentes!')
     
     return True
 
@@ -262,7 +262,7 @@ def test_cooldown_protection():
     cooldown_minutes = risk_mgmt.get('cooldown_minutes', 15)
     max_orders_per_hour = risk_mgmt.get('max_orders_per_hour', 3)
     
-    print(f'\n📊 Configuração de Cooldown:')
+    print(f'\n Configuração de Cooldown:')
     print(f'   Tempo entre operações: {cooldown_minutes} minutos')
     print(f'   Máximo por hora: {max_orders_per_hour} operações')
     
@@ -282,7 +282,7 @@ def test_cooldown_protection():
     else:
         print('   ℹ️  Nenhuma operação registrada ainda')
     
-    print(f'\n✅ Proteção de Cooldown:')
+    print(f'\n Proteção de Cooldown:')
     print(f'   • Aguarda {cooldown_minutes} min entre compras')
     print(f'   • Limita a {max_orders_per_hour} operações/hora')
     print(f'   • Previne trading excessivo')

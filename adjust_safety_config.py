@@ -15,7 +15,7 @@ def adjust_min_profit():
     )
     
     if result.modified_count > 0:
-        print('   ✅ Lucro mínimo atualizado: 1% → 5%')
+        print('    Lucro mínimo atualizado: 1% → 5%')
         return True
     else:
         print('   ⚠️  Nenhuma alteração (valor já era 5%)')
@@ -46,7 +46,7 @@ def fix_threshold_overlap():
         )
         
         if result.modified_count > 0:
-            print('   ✅ Threshold 24h ajustado: -10% → -12%')
+            print('    Threshold 24h ajustado: -10% → -12%')
             print('   ℹ️  Agora: 4h usa -10%, 24h usa -12% (sem sobreposição)')
             return True
     
@@ -81,7 +81,7 @@ def reduce_exposure():
     )
     
     if result.modified_count > 0:
-        print('   ✅ Percentuais ajustados:')
+        print('    Percentuais ajustados:')
         print('      -3%: 10% → 8%')
         print('      -5%: 20% → 15%')
         print('     -10%: 30% → 20%')
@@ -122,7 +122,7 @@ def main():
     choice = show_menu()
     
     if choice == '0':
-        print('\n❌ Cancelado. Nenhuma alteração feita.')
+        print('\n Cancelado. Nenhuma alteração feita.')
         return
     
     print('\n' + '='*80)
@@ -151,12 +151,12 @@ def main():
         print()
     
     if choice not in ['1', '2', '3', '4']:
-        print('❌ Opção inválida!')
+        print(' Opção inválida!')
         return
     
     print('='*80)
     if changes_made:
-        print('✅ AJUSTES CONCLUÍDOS!')
+        print(' AJUSTES CONCLUÍDOS!')
         print()
         print('⚠️  IMPORTANTE: Reinicie o scheduler para aplicar as mudanças:')
         print('   1. Pare o processo atual (Ctrl+C)')

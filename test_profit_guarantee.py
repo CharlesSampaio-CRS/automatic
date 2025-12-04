@@ -16,11 +16,11 @@ def simulate_buy_sell_cycle():
     config = db['BotConfigs'].find_one({'pair': 'REKTCOIN/USDT'})
     
     if not config:
-        raise Exception('❌ Config não encontrada no MongoDB!')
+        raise Exception(' Config não encontrada no MongoDB!')
     
     strategy_4h_config = config.get('strategy_4h')
     if not strategy_4h_config:
-        raise Exception('❌ strategy_4h não encontrada na config!')
+        raise Exception(' strategy_4h não encontrada na config!')
     
     strategy_4h = BuyStrategy4h(strategy_4h_config)
     strategy_24h = BuyStrategy(config.get('trading_strategy'))
@@ -31,7 +31,7 @@ def simulate_buy_sell_cycle():
     print('='*80)
     print('🧪 SIMULAÇÃO DE GARANTIA DE LUCRO')
     print('='*80)
-    print(f'\n📊 Configuração:')
+    print(f'\n Configuração:')
     print(f'   Lucro mínimo configurado: {min_profit_target}%')
     print(f'   Simulações: 1000 operações')
     
@@ -135,7 +135,7 @@ def analyze_results(results, min_profit_target):
     Analisa resultados e identifica problemas
     """
     print('\n' + '='*80)
-    print('📊 RESULTADOS DA SIMULAÇÃO')
+    print(' RESULTADOS DA SIMULAÇÃO')
     print('='*80)
     
     print(f'\n🔢 ESTATÍSTICAS GERAIS:')
@@ -158,7 +158,7 @@ def analyze_results(results, min_profit_target):
     
     # ANÁLISE CRÍTICA
     print('\n' + '='*80)
-    print('🔍 ANÁLISE CRÍTICA - GARANTIA DE LUCRO')
+    print(' ANÁLISE CRÍTICA - GARANTIA DE LUCRO')
     print('='*80)
     
     issues = []
@@ -166,8 +166,8 @@ def analyze_results(results, min_profit_target):
     
     # 1. Verifica se há prejuízos
     if results['losses'] > 0:
-        issues.append(f'❌ CRÍTICO: {results["losses"]} operações COM PREJUÍZO!')
-        print(f'\n❌ PROBLEMA 1: OPERAÇÕES COM PREJUÍZO')
+        issues.append(f' CRÍTICO: {results["losses"]} operações COM PREJUÍZO!')
+        print(f'\n PROBLEMA 1: OPERAÇÕES COM PREJUÍZO')
         print(f'   Total: {results["losses"]} operações')
         print(f'   Taxa de prejuízo: {results["losses"]/results["total_operations"]*100:.2f}%')
         
@@ -177,8 +177,8 @@ def analyze_results(results, min_profit_target):
     
     # 2. Verifica se min_profit está sendo respeitado
     if results['min_profit_seen'] < min_profit_target:
-        issues.append(f'❌ CRÍTICO: Lucro mínimo ({results["min_profit_seen"]:.2f}%) abaixo do configurado ({min_profit_target}%)!')
-        print(f'\n❌ PROBLEMA 2: LUCRO MÍNIMO NÃO RESPEITADO')
+        issues.append(f' CRÍTICO: Lucro mínimo ({results["min_profit_seen"]:.2f}%) abaixo do configurado ({min_profit_target}%)!')
+        print(f'\n PROBLEMA 2: LUCRO MÍNIMO NÃO RESPEITADO')
         print(f'   Configurado: {min_profit_target}%')
         print(f'   Menor lucro visto: {results["min_profit_seen"]:.2f}%')
         print(f'   Diferença: {min_profit_target - results["min_profit_seen"]:.2f}%')
@@ -201,11 +201,11 @@ def analyze_results(results, min_profit_target):
     
     # RESULTADO FINAL
     print('\n' + '='*80)
-    print('🎯 RESULTADO FINAL - GARANTIA DE LUCRO')
+    print(' RESULTADO FINAL - GARANTIA DE LUCRO')
     print('='*80)
     
     if issues:
-        print(f'\n❌ SISTEMA NÃO GARANTE LUCRO MÍNIMO!')
+        print(f'\n SISTEMA NÃO GARANTE LUCRO MÍNIMO!')
         print(f'   {len(issues)} problema(s) crítico(s):')
         for issue in issues:
             print(f'   {issue}')
@@ -220,12 +220,12 @@ def analyze_results(results, min_profit_target):
         print('\n💡 Pode usar, mas monitore de perto')
         return True
     
-    print(f'\n✅ SISTEMA GARANTE LUCRO MÍNIMO!')
+    print(f'\n SISTEMA GARANTE LUCRO MÍNIMO!')
     print(f'   • {results["profitable"]} operações lucrativas ({success_rate:.1f}%)')
     print(f'   • Lucro mínimo respeitado: {results["min_profit_seen"]:.2f}% ≥ {min_profit_target}%')
     print(f'   • Nenhuma operação com prejuízo')
     print(f'   • Lucro médio: ${avg_profit:.2f} por operação')
-    print('\n🚀 APROVADO PARA PRODUÇÃO!')
+    print('\nAPROVADO PARA PRODUÇÃO!')
     
     return True
 
@@ -241,11 +241,11 @@ def test_edge_cases():
     config = db['BotConfigs'].find_one({'pair': 'REKTCOIN/USDT'})
     
     if not config:
-        raise Exception('❌ Config não encontrada no MongoDB!')
+        raise Exception(' Config não encontrada no MongoDB!')
     
     strategy_4h_config = config.get('strategy_4h')
     if not strategy_4h_config:
-        raise Exception('❌ strategy_4h não encontrada na config!')
+        raise Exception(' strategy_4h não encontrada na config!')
     
     strategy_4h = BuyStrategy4h(strategy_4h_config)
     strategy_24h = BuyStrategy(config.get('trading_strategy'))
@@ -296,11 +296,11 @@ def test_edge_cases():
         profit_pct = (profit / investment) * 100
         
         if profit_pct >= min_profit:
-            result = f'✅ VENDE com lucro de {profit_pct:.2f}%'
+            result = f' VENDE com lucro de {profit_pct:.2f}%'
         elif profit_pct >= 0:
             result = f'⏭️  NÃO VENDE (lucro {profit_pct:.2f}% < mínimo {min_profit}%)'
         else:
-            result = f'❌ NÃO VENDE (prejuízo de {profit_pct:.2f}%)'
+            result = f' NÃO VENDE (prejuízo de {profit_pct:.2f}%)'
         
         print(f'   Resultado: {result}')
         print(f'   Esperado: {test["expected"]}')

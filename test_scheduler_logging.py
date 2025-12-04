@@ -25,7 +25,7 @@ def test_logging_behavior():
         'timestamp': {'$gte': two_hours_ago.isoformat()}
     }).sort('timestamp', -1))
     
-    print(f'\n📊 LOGS SCHEDULED NAS ÚLTIMAS 2 HORAS: {len(all_scheduled)}')
+    print(f'\n LOGS SCHEDULED NAS ÚLTIMAS 2 HORAS: {len(all_scheduled)}')
     
     if len(all_scheduled) == 0:
         print('\n⚠️  Nenhum log scheduled encontrado nas últimas 2 horas')
@@ -52,13 +52,13 @@ def test_logging_behavior():
     
     print('\n📈 ESTATÍSTICAS POR STATUS:')
     print('-'*80)
-    print(f'  ✅ SUCCESS: {len(success_logs)} logs')
+    print(f'   SUCCESS: {len(success_logs)} logs')
     print(f'  ⏭️  SKIPPED: {len(skipped_logs)} logs')
-    print(f'  ❌ ERROR: {len(error_logs)} logs')
+    print(f'   ERROR: {len(error_logs)} logs')
     
     # Mostra detalhes dos logs
     if success_logs:
-        print('\n✅ LOGS DE SUCESSO:')
+        print('\n LOGS DE SUCESSO:')
         print('-'*80)
         for log in success_logs[:3]:  # Mostra até 3
             timestamp = log.get('timestamp')
@@ -77,7 +77,7 @@ def test_logging_behavior():
             print(f'  {timestamp} | {pair:<20} | Reason: {reason[:50]}')
     
     if error_logs:
-        print('\n❌ LOGS DE ERRO:')
+        print('\n LOGS DE ERRO:')
         print('-'*80)
         for log in error_logs[:3]:  # Mostra até 3
             timestamp = log.get('timestamp')
@@ -113,7 +113,7 @@ def test_logging_behavior():
                 print(f'  ⚠️  ATENÇÃO: Intervalo médio maior que 12 minutos!')
                 print(f'     Configurado para 10 minutos, mas executando a cada {avg_interval:.1f}')
             else:
-                print(f'  ✅ Intervalo adequado (configurado: 10 minutos)')
+                print(f'   Intervalo adequado (configurado: 10 minutos)')
     
     # Verifica última execução
     last_log = all_scheduled[0]
@@ -132,15 +132,15 @@ def test_logging_behavior():
         print(f'\n  ⚠️  ATENÇÃO: Última execução há mais de 15 minutos!')
         print(f'     Scheduler pode não estar rodando')
     else:
-        print(f'\n  ✅ Scheduler está ativo (última execução recente)')
+        print(f'\n   Scheduler está ativo (última execução recente)')
     
     # Resultado final
     print('\n'+'='*80)
-    print('🎯 RESULTADO DO TESTE:')
+    print(' RESULTADO DO TESTE:')
     print('='*80)
     
     if error_logs:
-        print('❌ FALHA: Scheduler teve erros nas execuções')
+        print(' FALHA: Scheduler teve erros nas execuções')
         print(f'   {len(error_logs)} erro(s) detectado(s)')
     elif len(all_scheduled) < 2:
         print('⚠️  ATENÇÃO: Apenas 1 execução encontrada')
@@ -149,7 +149,7 @@ def test_logging_behavior():
         print('⚠️  ATENÇÃO: Scheduler parou de executar')
         print('   Última execução foi há mais de 15 minutos')
     else:
-        print('✅ SUCESSO: Scheduler está funcionando corretamente!')
+        print(' SUCESSO: Scheduler está funcionando corretamente!')
         print(f'   {len(all_scheduled)} execuções nas últimas 2 horas')
         print(f'   Intervalo médio: {avg_interval:.1f} minutos' if len(all_scheduled) > 1 else '')
         print('   Logs estão sendo salvos em todos os cenários')

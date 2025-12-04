@@ -136,7 +136,7 @@ class SellStrategy4h:
             if matching_level:
                 return True, {
                     "should_sell": True,
-                    "reason": f"✅ Alvo atingido: {profit_percent:.2f}% → {matching_level['description']}",
+                    "reason": f" Alvo atingido: {profit_percent:.2f}% → {matching_level['description']}",
                     "profit_percent": profit_percent,
                     "sell_percentage": matching_level['sell_percentage'],
                     "level": matching_level['name'],

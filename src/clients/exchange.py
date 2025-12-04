@@ -67,7 +67,7 @@ class MexcClient:
             # Valida se strategy_4h_config existe quando config é fornecido
             if not strategy_4h_config:
                 raise ValueError(
-                    '❌ strategy_4h não encontrada na configuração! '
+                    ' strategy_4h não encontrada na configuração! '
                     'Verifique se o documento no MongoDB possui a chave "strategy_4h".'
                 )
             
@@ -248,7 +248,7 @@ class MexcClient:
         # Busca símbolos configurados no MongoDB
         if db is not None:
             symbols_config = list(db['BotConfigs'].find({'enabled': True}))
-            print(f"🔍 Símbolos configurados no MongoDB: {len(symbols_config)}")
+            print(f" Símbolos configurados no MongoDB: {len(symbols_config)}")
             
             for config in symbols_config:
                 symbol = config.get('pair')
@@ -260,7 +260,7 @@ class MexcClient:
         else:
             print("⚠️  MongoDB não disponível - usando lista vazia")
         
-        print(f"📊 Total de variações coletadas: {len(variations)}")
+        print(f" Total de variações coletadas: {len(variations)}")
         return sorted(variations, key=lambda x: x['variation_24h'])
 
     def get_symbol_variation(self, symbol):
@@ -454,7 +454,7 @@ class MexcClient:
         if dry_run:
             print("🧪 MODO SIMULAÇÃO - NENHUMA ORDEM SERÁ EXECUTADA")
         
-        print(f"🚀 CREATE_ORDER - Tipo: {execution_type}")
+        print(f"CREATE_ORDER - Tipo: {execution_type}")
         
         usdt_balance = self.get_usdt_available()
         
@@ -491,7 +491,7 @@ class MexcClient:
         # Calcula métricas de performance
         performance_metrics = self.calculate_performance_metrics(results)
         
-        print(f"✅ Orders executed with strategy: {len(results)} orders")
+        print(f" Orders executed with strategy: {len(results)} orders")
         return {
             "status": "success",
             "orders": results,
@@ -506,7 +506,7 @@ class MexcClient:
         Delega lógica de compra para as classes especializadas
         Prioriza estratégia de 1h se habilitada e atende critérios
         """
-        print(f"🎯 Analisando {len(symbol_variations)} símbolos")
+        print(f" Analisando {len(symbol_variations)} símbolos")
         
         # Busca configs DIRETAMENTE do MongoDB (não usa BotConfig legado)
         symbols_config = []
@@ -538,10 +538,10 @@ class MexcClient:
                 continue
             
             if strategy_4h_config.get('enabled', False):
-                print(f"✅ {symbol}: Strategy 4h está HABILITADA")
+                print(f" {symbol}: Strategy 4h está HABILITADA")
                 # Busca variação de 4h (mais estável que 1h)
                 variation_4h = self.get_variation_4h(symbol)
-                print(f"📊 {symbol}: Variação 4h = {variation_4h}%")
+                print(f" {symbol}: Variação 4h = {variation_4h}%")
                 
                 if variation_4h is not None:
                     # 🔥 PASSA A CONFIG COMPLETA DO strategy_4h (não monta manualmente)
@@ -562,12 +562,12 @@ class MexcClient:
                             'variation_4h': variation_4h,
                             'strategy': '4h'
                         })
-                        print(f"✅ {symbol}: ADICIONADO à lista de compra (estratégia 4h)")
+                        print(f" {symbol}: ADICIONADO à lista de compra (estratégia 4h)")
                         continue  # Não verifica estratégia 24h se 4h já ativou
                     else:
-                        print(f"❌ {symbol}: NÃO passou no filtro da estratégia 4h")
+                        print(f" {symbol}: NÃO passou no filtro da estratégia 4h")
             else:
-                print(f"❌ {symbol}: Strategy 4h está DESABILITADA")
+                print(f" {symbol}: Strategy 4h está DESABILITADA")
             
             # Se não ativou estratégia 4h, verifica estratégia 24h
             # Usa a estratégia de compra 24h para filtrar símbolo
@@ -659,9 +659,9 @@ class MexcClient:
                 # Identifica qual estratégia foi usada
                 strategy_label = order.get('strategy', '24h')
                 if strategy_label == '1h' and order.get('variation_4h') is not None:
-                    print(f"📊 {symbol}: [4H] Queda de {order.get('variation_4h', 0):.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
+                    print(f" {symbol}: [4H] Queda de {order.get('variation_4h', 0):.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
                 else:
-                    print(f"📊 {symbol}: [24H] Queda de {order['variation']:.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
+                    print(f" {symbol}: [24H] Queda de {order['variation']:.1f}% → Investe {buy_percentage}% do saldo (${order['value']:.2f})")
             else:
                 order['value'] = 0
                 print(f"⏸️  {symbol}: Valor muito baixo (${investment_amount:.2f} < ${MIN_VALUE_PER_SYMBOL})")
@@ -706,7 +706,7 @@ class MexcClient:
                 'expected_roi': f"+{order['expected_profit_pct']}%",
                 'risk_reward_ratio': round(order['expected_profit_pct'] / 5, 2),  # 5% é o stop loss
                 
-                # ✅ NOVO: Tracking de execução
+                #  NOVO: Tracking de execução
                 'execution_type': execution_type,
                 'executed_by': 'user' if execution_type == 'manual' else 'scheduler'
                 }
@@ -715,10 +715,10 @@ class MexcClient:
                 # Salvar no banco com informações de lucro
                 self.save_to_db_with_profit_tracking(symbol, result)
                 
-                print(f"{'✅' if success else '❌'} Order {status}: {symbol}")
+                print(f"{'' if success else ''} Order {status}: {symbol}")
                 print(f"   💰 Investido: ${order['value']:.2f} USDT")
-                print(f"   📊 Quantidade: {amount_bought:,.2f} tokens")
-                print(f"   🎯 Take Profit: ${order['take_profit_price']:.8f} (+{order['expected_profit_pct']}%)")
+                print(f"    Quantidade: {amount_bought:,.2f} tokens")
+                print(f"    Take Profit: ${order['take_profit_price']:.8f} (+{order['expected_profit_pct']}%)")
                 print(f"   🛡️  Stop Loss: ${order['stop_loss_price']:.8f} (-5%)")
                 print(f"   💵 Lucro Esperado: ${order['expected_profit_usdt']:.2f} USDT")
         
@@ -768,7 +768,7 @@ class MexcClient:
             "stop_loss_price": result['stop_loss_price'],
             "risk_reward_ratio": result['risk_reward_ratio'],
             
-            # ✅ NOVO: Tracking de execução
+            #  NOVO: Tracking de execução
             "execution_type": result.get('execution_type', 'unknown'),
             "executed_by": result.get('executed_by', 'unknown'),
             
@@ -790,7 +790,7 @@ class MexcClient:
                 print(f"   ⚠ MongoDB disabled - Order logged: {symbol}")
                 return False
         except Exception as e:
-            print(f"   ❌ {ERROR_DB_SAVE}: {e}")
+            print(f"    {ERROR_DB_SAVE}: {e}")
             return False
 
     def initialize_symbol_orders(self, symbol_variations):
@@ -876,8 +876,8 @@ class MexcClient:
             if dry_run:
                 # 🧪 MODO SIMULAÇÃO - NÃO EXECUTA ORDEM REAL
                 print(f"   🧪 [SIMULAÇÃO] Ordem NÃO foi executada na exchange")
-                print(f"   📊 [SIMULAÇÃO] Tipo: {'LIMIT' if use_limit else 'MARKET'}")
-                print(f"   📊 [SIMULAÇÃO] Amount: {amount} | Price: ${last_price:.10f} | Value: ${value:.2f}")
+                print(f"    [SIMULAÇÃO] Tipo: {'LIMIT' if use_limit else 'MARKET'}")
+                print(f"    [SIMULAÇÃO] Amount: {amount} | Price: ${last_price:.10f} | Value: ${value:.2f}")
                 
                 # Retorna ordem simulada
                 simulated_order = {
@@ -899,12 +899,12 @@ class MexcClient:
                 buy_price = self.client.price_to_precision(symbol, buy_price)
                 
                 order = self.client.create_limit_buy_order(symbol, float(amount), float(buy_price))
-                print(f"   ✅ Order created (LIMIT): {symbol}")
+                print(f"    Order created (LIMIT): {symbol}")
                 print(f"      Amount: {amount} | Price: ${buy_price:.10f} | Value: ${value:.2f}")
             else:
                 # MERCADO ILÍQUIDO: Ordem MERCADO para garantir execução
                 order = self.client.create_market_buy_order(symbol, float(amount))
-                print(f"   ✅ Order created (MARKET): {symbol}")
+                print(f"    Order created (MARKET): {symbol}")
                 print(f"      Amount: {amount} | Price: ~${last_price:.10f} | Value: ${value:.2f}")
             
             return True, order
@@ -1058,25 +1058,25 @@ class MexcClient:
                                 "usdt_received": round(holding_value_usdt, 2),
                                 "order_id": order.get("id"),
                                 "sell_type": "complete",
-                                "message": f"✅ Venda COMPLETA de {currency} - Lucro {profit_percent:+.2f}%!"
+                                "message": f" Venda COMPLETA de {currency} - Lucro {profit_percent:+.2f}%!"
                             }
                             
                             sells_executed.append(sell_result)
                             total_profit += holding_value_usdt
                             
                         except Exception as e:
-                            print(f"   ❌ ERRO ao executar venda completa: {e}\n")
+                            print(f"    ERRO ao executar venda completa: {e}\n")
                             sells_executed.append({
                                 "success": False,
                                 "symbol": trading_symbol,
                                 "error": str(e),
-                                "message": f"❌ Erro ao vender {currency}: {e}"
+                                "message": f" Erro ao vender {currency}: {e}"
                             })
                     
                     elif profit_percent >= min_profit:
                         # Lucro entre min_profit e 40%: VENDA GRADATIVA
-                        print(f"   📊 VENDA GRADATIVA ({profit_percent:+.2f}% < 40%)")
-                        print(f"   🎯 Calculando níveis de venda progressiva...")
+                        print(f"    VENDA GRADATIVA ({profit_percent:+.2f}% < 40%)")
+                        print(f"    Calculando níveis de venda progressiva...")
                         
                         # Calcula alvos de venda usando SellStrategy
                         investment_value = balance * buy_price  # Valor investido estimado
@@ -1093,10 +1093,10 @@ class MexcClient:
                         )
                         
                         if levels_to_sell:
-                            print(f"   ✅ {len(levels_to_sell)} NÍVEL(IS) ATINGIDO(S)!")
+                            print(f"    {len(levels_to_sell)} NÍVEL(IS) ATINGIDO(S)!")
                             
                             for level in levels_to_sell:
-                                print(f"\n   🎯 {level['name']} - Alvo: +{level['profit_target_pct']}%")
+                                print(f"\n    {level['name']} - Alvo: +{level['profit_target_pct']}%")
                                 print(f"      Vender: {level['sell_percentage']}% do saldo")
                                 print(f"      Preço alvo: ${level['target_price']:.10f}")
                                 print(f"      Lucro esperado: ${level['profit_usdt']:.2f} USDT")
@@ -1140,24 +1140,24 @@ class MexcClient:
                                         "usdt_received": round(usdt_received, 2),
                                         "order_id": order.get("id"),
                                         "sell_type": "gradual",
-                                        "message": f"✅ {level['name']} executado - {level['sell_percentage']}% vendido!"
+                                        "message": f" {level['name']} executado - {level['sell_percentage']}% vendido!"
                                     }
                                     
                                     sells_executed.append(sell_result)
                                     total_profit += usdt_received
                                     
                                 except Exception as e:
-                                    print(f"      ❌ ERRO ao executar {level['name']}: {e}")
+                                    print(f"       ERRO ao executar {level['name']}: {e}")
                                     sells_executed.append({
                                         "success": False,
                                         "symbol": trading_symbol,
                                         "level": level['level'],
                                         "level_name": level['name'],
                                         "error": str(e),
-                                        "message": f"❌ Erro ao executar {level['name']}: {e}"
+                                        "message": f" Erro ao executar {level['name']}: {e}"
                                     })
                             
-                            print(f"\n   📊 Resumo da venda gradativa:")
+                            print(f"\n    Resumo da venda gradativa:")
                             print(f"      Níveis executados: {len([l for l in levels_to_sell if l.get('success', True)])}")
                             print(f"      Total vendido: {sum(l['sell_percentage'] for l in levels_to_sell)}%")
                             print(f"      USDT recebido nesta operação: ${sum(s.get('usdt_received', 0) for s in sells_executed[-len(levels_to_sell):]):.2f}")
@@ -1194,7 +1194,7 @@ class MexcClient:
             }
             
         except Exception as e:
-            print(f"❌ ERRO FATAL ao verificar vendas: {e}")
+            print(f" ERRO FATAL ao verificar vendas: {e}")
             import traceback
             traceback.print_exc()
             return {

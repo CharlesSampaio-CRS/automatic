@@ -207,7 +207,7 @@ class SellStrategy:
                 "usdt_received": round(usdt_received, 2),
                 "profit": target["actual_profit"],
                 "order_id": order.get("id"),
-                "message": f"✅ {target['name']} executado com sucesso!"
+                "message": f" {target['name']} executado com sucesso!"
             }
             
         except Exception as e:
@@ -216,7 +216,7 @@ class SellStrategy:
                 "level": target["level"],
                 "name": target["name"],
                 "error": str(e),
-                "message": f"❌ Erro ao executar {target['name']}: {e}"
+                "message": f" Erro ao executar {target['name']}: {e}"
             }
     
     def get_summary(self, sell_targets: List[Dict], 
@@ -256,7 +256,7 @@ def example_usage():
     Exemplo de uso da estratégia de venda progressiva
     """
     print("\n" + "="*80)
-    print("🎯 ESTRATÉGIA DE VENDA PROGRESSIVA - Exemplo")
+    print(" ESTRATÉGIA DE VENDA PROGRESSIVA - Exemplo")
     print("="*80)
     
     # Configuração da compra
@@ -264,7 +264,7 @@ def example_usage():
     amount_bought = 74074074.07
     investment = 100.00
     
-    print(f"\n📊 POSIÇÃO COMPRADA:")
+    print(f"\n POSIÇÃO COMPRADA:")
     print(f"   Preço de Compra: ${buy_price:.8f}")
     print(f"   Quantidade: {amount_bought:,.2f} REKT")
     print(f"   Investimento: ${investment:.2f} USDT")
@@ -275,7 +275,7 @@ def example_usage():
     # Calcula alvos de venda
     sell_targets = strategy.calculate_sell_targets(buy_price, amount_bought, investment)
     
-    print(f"\n🎯 ALVOS DE VENDA CONFIGURADOS:")
+    print(f"\n ALVOS DE VENDA CONFIGURADOS:")
     print(f"   {'Nível':<8} {'% Venda':<10} {'Preço Alvo':<15} {'Lucro':<10} {'Recebe':<12} {'Lucro $':<10}")
     print(f"   {'-'*75}")
     
@@ -304,9 +304,9 @@ def example_usage():
         to_sell = strategy.check_sell_opportunities(current_price, sell_targets)
         
         if to_sell:
-            print(f"\n✅ VENDAS A EXECUTAR: {len(to_sell)} nível(is)")
+            print(f"\n VENDAS A EXECUTAR: {len(to_sell)} nível(is)")
             for target in to_sell:
-                print(f"\n   🎯 {target['name']}")
+                print(f"\n    {target['name']}")
                 print(f"      Vender: {target['sell_amount']:,.2f} REKT ({target['sell_percentage']}%)")
                 print(f"      Preço: ${target['actual_price']:.8f}")
                 print(f"      Receber: ${target['sell_amount'] * target['actual_price']:.2f} USDT")
@@ -319,7 +319,7 @@ def example_usage():
         
         # Mostra resumo
         summary = strategy.get_summary(sell_targets, buy_price, current_price)
-        print(f"\n📊 RESUMO DA POSIÇÃO:")
+        print(f"\n RESUMO DA POSIÇÃO:")
         print(f"   Lucro Atual: {summary['current_profit_pct']:+.2f}%")
         print(f"   Níveis Executados: {summary['executed_levels']}/{summary['total_levels']}")
         print(f"   Lucro Realizado: ${summary['realized_profit']:.2f}")
@@ -328,18 +328,18 @@ def example_usage():
         
         if summary['next_target']:
             next_t = summary['next_target']
-            print(f"\n   🎯 Próximo Alvo: {next_t['name']}")
+            print(f"\n    Próximo Alvo: {next_t['name']}")
             print(f"      Preço: ${next_t['target_price']:.8f} (+{next_t['profit_target_pct']}%)")
             print(f"      Lucro Esperado: +${next_t['profit_usdt']:.2f}")
     
     print("\n" + "="*80)
     print("💡 VANTAGENS DA VENDA PROGRESSIVA:")
     print("="*80)
-    print("✅ Garante lucro em diferentes níveis")
-    print("✅ Não precisa acertar o topo do mercado")
-    print("✅ Reduz risco de perder todos os ganhos")
-    print("✅ Maximiza lucro se continuar subindo")
-    print("✅ Realiza lucros parciais no caminho")
+    print(" Garante lucro em diferentes níveis")
+    print(" Não precisa acertar o topo do mercado")
+    print(" Reduz risco de perder todos os ganhos")
+    print(" Maximiza lucro se continuar subindo")
+    print(" Realiza lucros parciais no caminho")
     print("="*80 + "\n")
 
 

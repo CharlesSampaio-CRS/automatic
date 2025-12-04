@@ -47,7 +47,7 @@ class MultiScenarioBacktest:
         self.client = MexcClient(API_KEY, API_SECRET)
         
         # Carrega configuração do MongoDB
-        print(f"🔍 Carregando configuração do MongoDB...")
+        print(f" Carregando configuração do MongoDB...")
         self.config = self._load_config_from_db()
         
         # Resultados por cenário
@@ -61,10 +61,10 @@ class MultiScenarioBacktest:
             config = bot_configs.find_one({'pair': self.symbol})
             
             if config:
-                print(f"✅ Config carregada: {self.symbol}")
+                print(f" Config carregada: {self.symbol}")
                 strategy_4h = config.get('strategy_4h', {})
                 strategy_24h = config.get('trading_strategy', {})
-                print(f"   4h: {'✅' if strategy_4h.get('enabled') else '❌'} | 24h: {'✅' if strategy_24h.get('enabled') else '❌'}")
+                print(f"   4h: {'' if strategy_4h.get('enabled') else ''} | 24h: {'' if strategy_24h.get('enabled') else ''}")
                 return config
             
             return self._get_default_config()
@@ -109,12 +109,12 @@ class MultiScenarioBacktest:
         print(f"\n{'='*80}")
         print("🧪 BACKTESTING - 3 CENÁRIOS")
         print(f"{'='*80}")
-        print(f"📊 Par: {self.symbol}")
+        print(f" Par: {self.symbol}")
         print(f"💰 Capital inicial por cenário: ${self.initial_balance:.2f}")
         print(f"\nTestando 3 períodos diferentes de 30 dias para detectar:")
-        print("   🎉 ÓTIMO: Quedas + recuperações")
+        print("    ÓTIMO: Quedas + recuperações")
         print("   ⚠️  BÁSICO: Baixa volatilidade")
-        print("   ❌ RUIM: Queda contínua")
+        print("    RUIM: Queda contínua")
         
         # Busca dados históricos longos (90 dias = 3 períodos de 30)
         print(f"\n🔄 Buscando dados históricos (90 dias)...")
@@ -128,7 +128,7 @@ class MultiScenarioBacktest:
             print(f"⚠️  Dados insuficientes: {len(ohlcv_data)} candles (mínimo 180)")
             print("   Testando apenas com dados disponíveis...")
         
-        print(f"✅ {len(ohlcv_data)} candles obtidos")
+        print(f" {len(ohlcv_data)} candles obtidos")
         
         # Divide em 3 períodos de 15 dias (90 candles cada) para ter 3 cenários
         period_length = 90  # 15 dias * 6 candles/dia
@@ -153,7 +153,7 @@ class MultiScenarioBacktest:
                 print(f"   Testando período mais recente (15 dias)...")
                 periods = [ohlcv_data[-90:]]
         else:
-            print(f"\n✅ {num_periods} períodos de 15 dias disponíveis, usando os 3 mais recentes")
+            print(f"\n {num_periods} períodos de 15 dias disponíveis, usando os 3 mais recentes")
             periods = [
                 ohlcv_data[-270:-180],  # Período 1 (mais antigo)
                 ohlcv_data[-180:-90],   # Período 2 (meio)
@@ -189,7 +189,7 @@ class MultiScenarioBacktest:
         # Estratégias
         strategy_4h_config = self.config.get('strategy_4h')
         if not strategy_4h_config:
-            raise ValueError('❌ strategy_4h não encontrada na configuração!')
+            raise ValueError(' strategy_4h não encontrada na configuração!')
             
         buy_strategy_4h = BuyStrategy4h(strategy_4h_config)
         buy_strategy_24h = BuyStrategy(self.config.get('trading_strategy'))
@@ -286,13 +286,13 @@ class MultiScenarioBacktest:
         # Classifica cenário
         if roi > 10:
             scenario_type = "ÓTIMO"
-            emoji = "🎉"
+            emoji = ""
         elif roi > 0:
             scenario_type = "BÁSICO"
             emoji = "⚠️"
         else:
             scenario_type = "RUIM"
-            emoji = "❌"
+            emoji = ""
         
         # Estatísticas
         buys = [t for t in trades if t['type'] == 'BUY']
@@ -334,7 +334,7 @@ class MultiScenarioBacktest:
         Mostra comparação entre os cenários
         """
         print(f"\n{'='*80}")
-        print("📊 COMPARAÇÃO DOS CENÁRIOS")
+        print(" COMPARAÇÃO DOS CENÁRIOS")
         print(f"{'='*80}")
         
         print(f"\n{'Período':<12} {'Datas':<25} {'Cenário':<12} {'ROI':<12} {'Trades':<15}")
@@ -374,10 +374,10 @@ class MultiScenarioBacktest:
         basicos = len([s for s in self.scenarios if s['scenario_type'] == 'BÁSICO'])
         ruins = len([s for s in self.scenarios if s['scenario_type'] == 'RUIM'])
         
-        print(f"\n📊 Distribuição:")
-        print(f"   🎉 ÓTIMO: {otimos}/{len(self.scenarios)}")
+        print(f"\n Distribuição:")
+        print(f"    ÓTIMO: {otimos}/{len(self.scenarios)}")
         print(f"   ⚠️  BÁSICO: {basicos}/{len(self.scenarios)}")
-        print(f"   ❌ RUIM: {ruins}/{len(self.scenarios)}")
+        print(f"    RUIM: {ruins}/{len(self.scenarios)}")
         
         # Análise de estratégias
         total_buys_4h = sum(s['buys_4h'] for s in self.scenarios)
@@ -391,7 +391,7 @@ class MultiScenarioBacktest:
         
         # Conclusão e recomendações
         print(f"\n{'='*80}")
-        print("🎯 CONCLUSÃO E RECOMENDAÇÕES")
+        print(" CONCLUSÃO E RECOMENDAÇÕES")
         print(f"{'='*80}")
         
         if ruins > 0:
@@ -401,7 +401,7 @@ class MultiScenarioBacktest:
             print(f"   Período: {worst_scenario['start_date']} a {worst_scenario['end_date']}")
             
             if worst_loss < -30:
-                print(f"\n❌ PREJUÍZO ALTO (>{-worst_loss:.0f}%):")
+                print(f"\n PREJUÍZO ALTO (>{-worst_loss:.0f}%):")
                 print(f"   • URGENTE: Implementar stop loss global")
                 print(f"   • Sugestão: Stop loss em -20% do capital inicial")
                 print(f"   • Considerar desativar bot em quedas contínuas")
@@ -411,12 +411,12 @@ class MultiScenarioBacktest:
                 print(f"   • Monitorar tendência de mercado")
                 print(f"   • Considerar reduzir investimento por trade")
             else:
-                print(f"\n✅ PREJUÍZO CONTROLADO ({worst_loss:.1f}%):")
+                print(f"\n PREJUÍZO CONTROLADO ({worst_loss:.1f}%):")
                 print(f"   • Sistema gerenciou risco adequadamente")
                 print(f"   • Manter configuração atual")
         
         if avg_roi > 10:
-            print(f"\n✅ SISTEMA VALIDADO:")
+            print(f"\n SISTEMA VALIDADO:")
             print(f"   • ROI médio excelente: {avg_roi:+.2f}%")
             print(f"   • Aprovado para produção")
             print(f"   • Manter monitoramento contínuo")
@@ -426,7 +426,7 @@ class MultiScenarioBacktest:
             print(f"   • Considerar otimização de thresholds")
             print(f"   • Testar ajustes para melhorar performance")
         else:
-            print(f"\n❌ SISTEMA PRECISA AJUSTES:")
+            print(f"\n SISTEMA PRECISA AJUSTES:")
             print(f"   • ROI médio negativo: {avg_roi:.2f}%")
             print(f"   • Revisar configuração")
             print(f"   • Implementar proteções adicionais")
@@ -437,7 +437,7 @@ def main():
     """
     Executa backtesting em 3 cenários
     """
-    print("\n🚀 BACKTESTING - 3 CENÁRIOS")
+    print("\nBACKTESTING - 3 CENÁRIOS")
     print("Valida estratégia híbrida em diferentes condições de mercado\n")
     
     SYMBOL = "REKTCOIN/USDT"

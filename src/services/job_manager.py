@@ -353,7 +353,7 @@ class DynamicJobManager:
                     "status": "error"
                 })
                 
-                # ✅ SALVA LOG DE ERRO TAMBÉM
+                #  SALVA LOG DE ERRO TAMBÉM
                 if execution_logs_db is not None:
                     try:
                         error_log = {

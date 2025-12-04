@@ -3,12 +3,12 @@ Teste de Validação de Regras do Sistema
 Valida todas as regras de negócio da estratégia híbrida
 
 Este teste verifica:
-1. ✅ Priorização: 4h é verificado ANTES de 24h
-2. ✅ Thresholds: Compras só ocorrem nos níveis corretos
-3. ✅ Stop loss: Sistema para de comprar em cenários ruins
-4. ✅ Gestão de risco: Limites de investimento são respeitados
-5. ✅ Vendas: Lucro mínimo é respeitado
-6. ✅ Comportamento em 3 cenários: ÓTIMO, BÁSICO e RUIM
+1.  Priorização: 4h é verificado ANTES de 24h
+2.  Thresholds: Compras só ocorrem nos níveis corretos
+3.  Stop loss: Sistema para de comprar em cenários ruins
+4.  Gestão de risco: Limites de investimento são respeitados
+5.  Vendas: Lucro mínimo é respeitado
+6.  Comportamento em 3 cenários: ÓTIMO, BÁSICO e RUIM
 
 Uso:
     python3 test_system_rules.py
@@ -78,9 +78,9 @@ class SystemRulesValidator:
     def run_all_validations(self):
         """Executa todas as validações"""
         print(f"\n{'='*80}")
-        print("🔍 VALIDAÇÃO DE REGRAS DO SISTEMA")
+        print(" VALIDAÇÃO DE REGRAS DO SISTEMA")
         print(f"{'='*80}")
-        print(f"📊 Par: {self.symbol}")
+        print(f" Par: {self.symbol}")
         print(f"\nValidando:")
         print("   1️⃣  Priorização (4h → 24h)")
         print("   2️⃣  Thresholds de compra")
@@ -118,7 +118,7 @@ class SystemRulesValidator:
             # Cria novas instâncias para cada teste (evita cooldown)
             strategy_4h_config = self.config.get('strategy_4h')
             if not strategy_4h_config:
-                print(f'❌ ERRO: strategy_4h não encontrada!')
+                print(f' ERRO: strategy_4h não encontrada!')
                 return False
                 
             strategy_4h = BuyStrategy4h(strategy_4h_config)
@@ -134,17 +134,17 @@ class SystemRulesValidator:
                 result = '24h' if should_buy_24h else 'nenhuma'
             
             if result == test['expected']:
-                print(f"   ✅ {test['reason']}")
+                print(f"    {test['reason']}")
                 passed += 1
             else:
-                print(f"   ❌ {test['reason']} (obteve: {result})")
+                print(f"    {test['reason']} (obteve: {result})")
                 failed += 1
         
         self.validation_results.append({
             'rule': 'Priorização',
             'passed': passed,
             'failed': failed,
-            'status': '✅' if failed == 0 else '❌'
+            'status': '' if failed == 0 else ''
         })
     
     def validate_thresholds(self):
@@ -157,7 +157,7 @@ class SystemRulesValidator:
         
         strategy_4h_config = self.config.get('strategy_4h')
         if not strategy_4h_config:
-            print(f'❌ ERRO: strategy_4h não encontrada!')
+            print(f' ERRO: strategy_4h não encontrada!')
             return False
             
         strategy_4h = BuyStrategy4h(strategy_4h_config)
@@ -182,7 +182,7 @@ class SystemRulesValidator:
         
         strategy_4h_config = self.config.get('strategy_4h')
         if not strategy_4h_config:
-            print(f'❌ ERRO: strategy_4h não encontrada!')
+            print(f' ERRO: strategy_4h não encontrada!')
             return False
         
         print("\n   Strategy 4h:")
@@ -193,16 +193,16 @@ class SystemRulesValidator:
             
             if should_buy == test['should_buy']:
                 if should_buy and info['buy_percentage'] == test['percentage']:
-                    print(f"      ✅ {test['reason']}")
+                    print(f"       {test['reason']}")
                     passed += 1
                 elif not should_buy:
-                    print(f"      ✅ {test['reason']}")
+                    print(f"       {test['reason']}")
                     passed += 1
                 else:
-                    print(f"      ❌ {test['reason']} (percentual errado: {info['buy_percentage']}%)")
+                    print(f"       {test['reason']} (percentual errado: {info['buy_percentage']}%)")
                     failed += 1
             else:
-                print(f"      ❌ {test['reason']}")
+                print(f"       {test['reason']}")
                 failed += 1
         
         print("\n   Strategy 24h:")
@@ -211,23 +211,23 @@ class SystemRulesValidator:
             
             if should_buy == test['should_buy']:
                 if should_buy and info['buy_percentage'] == test['percentage']:
-                    print(f"      ✅ {test['reason']}")
+                    print(f"       {test['reason']}")
                     passed += 1
                 elif not should_buy:
-                    print(f"      ✅ {test['reason']}")
+                    print(f"       {test['reason']}")
                     passed += 1
                 else:
-                    print(f"      ❌ {test['reason']} (percentual errado: {info['buy_percentage']}%)")
+                    print(f"       {test['reason']} (percentual errado: {info['buy_percentage']}%)")
                     failed += 1
             else:
-                print(f"      ❌ {test['reason']}")
+                print(f"       {test['reason']}")
                 failed += 1
         
         self.validation_results.append({
             'rule': 'Thresholds',
             'passed': passed,
             'failed': failed,
-            'status': '✅' if failed == 0 else '❌'
+            'status': '' if failed == 0 else ''
         })
     
     def validate_risk_management(self):
@@ -254,10 +254,10 @@ class SystemRulesValidator:
             should_sell = test['profit'] >= min_profit
             
             if should_sell == test['should_sell']:
-                print(f"      ✅ {test['reason']}")
+                print(f"       {test['reason']}")
                 passed += 1
             else:
-                print(f"      ❌ {test['reason']}")
+                print(f"       {test['reason']}")
                 failed += 1
         
         # Valida limites de investimento
@@ -273,17 +273,17 @@ class SystemRulesValidator:
             is_valid = test['percentage'] <= 30
             
             if is_valid == test['valid']:
-                print(f"      ✅ {test['reason']}")
+                print(f"       {test['reason']}")
                 passed += 1
             else:
-                print(f"      ❌ {test['reason']}")
+                print(f"       {test['reason']}")
                 failed += 1
         
         self.validation_results.append({
             'rule': 'Gestão de Risco',
             'passed': passed,
             'failed': failed,
-            'status': '✅' if failed == 0 else '❌'
+            'status': '' if failed == 0 else ''
         })
     
     def validate_scenarios(self):
@@ -320,13 +320,13 @@ class SystemRulesValidator:
             
             if roi > 10:
                 scenario = "ÓTIMO"
-                emoji = "🎉"
+                emoji = ""
             elif roi > 0:
                 scenario = "BÁSICO"
                 emoji = "⚠️"
             else:
                 scenario = "RUIM"
-                emoji = "❌"
+                emoji = ""
             
             results.append({'period': i, 'roi': roi, 'scenario': scenario, 'emoji': emoji})
         
@@ -347,10 +347,10 @@ class SystemRulesValidator:
                 print(f"      ⚠️  Prejuízo alto ({r['roi']:.1f}%) - Requer stop loss")
                 failed += 1
             elif r['scenario'] == 'RUIM' and r['roi'] >= -20:
-                print(f"      ✅ Prejuízo controlado ({r['roi']:.1f}%)")
+                print(f"       Prejuízo controlado ({r['roi']:.1f}%)")
                 passed += 1
             else:
-                print(f"      ✅ Comportamento adequado")
+                print(f"       Comportamento adequado")
                 passed += 1
         
         # Valida ROI médio
@@ -358,17 +358,17 @@ class SystemRulesValidator:
         print(f"\n   ROI médio: {avg_roi:+.2f}%")
         
         if avg_roi > 0:
-            print(f"      ✅ ROI médio positivo")
+            print(f"       ROI médio positivo")
             passed += 1
         else:
-            print(f"      ❌ ROI médio negativo")
+            print(f"       ROI médio negativo")
             failed += 1
         
         self.validation_results.append({
             'rule': 'Cenários',
             'passed': passed,
             'failed': failed,
-            'status': '✅' if failed == 0 else '⚠️'
+            'status': '' if failed == 0 else '⚠️'
         })
     
     def _simulate_period(self, ohlcv_data):
@@ -378,7 +378,7 @@ class SystemRulesValidator:
         
         strategy_4h_config = self.config.get('strategy_4h')
         if not strategy_4h_config:
-            raise ValueError('❌ strategy_4h não encontrada na configuração!')
+            raise ValueError(' strategy_4h não encontrada na configuração!')
             
         strategy_4h = BuyStrategy4h(strategy_4h_config)
         strategy_24h = BuyStrategy(self.config.get('trading_strategy'))
@@ -434,7 +434,7 @@ class SystemRulesValidator:
     def show_results(self):
         """Mostra resultado final das validações"""
         print(f"\n{'='*80}")
-        print("📊 RESULTADO DAS VALIDAÇÕES")
+        print(" RESULTADO DAS VALIDAÇÕES")
         print(f"{'='*80}")
         
         print(f"\n{'Regra':<25} {'Status':<10} {'Passou':<10} {'Falhou':<10}")
@@ -456,20 +456,20 @@ class SystemRulesValidator:
         print(f"Taxa de sucesso: {success_rate:.1f}%")
         
         if total_failed == 0:
-            print(f"\n✅ TODAS AS REGRAS VALIDADAS COM SUCESSO!")
+            print(f"\n TODAS AS REGRAS VALIDADAS COM SUCESSO!")
             print(f"Sistema aprovado para produção 🚀")
         elif success_rate >= 80:
             print(f"\n⚠️  SISTEMA FUNCIONAL MAS COM RESSALVAS")
             print(f"Revisar {total_failed} teste(s) que falharam")
         else:
-            print(f"\n❌ SISTEMA PRECISA DE CORREÇÕES")
+            print(f"\n SISTEMA PRECISA DE CORREÇÕES")
             print(f"Corrigir {total_failed} teste(s) antes de produção")
         
         print(f"\n{'='*80}\n")
 
 def main():
     """Executa validação completa das regras"""
-    print("\n🔍 VALIDAÇÃO DE REGRAS DO SISTEMA")
+    print("\n VALIDAÇÃO DE REGRAS DO SISTEMA")
     print("Testa todas as regras de negócio da estratégia híbrida\n")
     
     SYMBOL = "REKTCOIN/USDT"

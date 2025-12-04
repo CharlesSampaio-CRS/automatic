@@ -57,14 +57,14 @@ class HybridBacktestSimulator:
         self.client = MexcClient(API_KEY, API_SECRET)
         
         # Busca configuração REAL do MongoDB
-        print(f"🔍 Buscando configuração real do MongoDB para {symbol}...")
+        print(f" Buscando configuração real do MongoDB para {symbol}...")
         config = self._load_config_from_db()
         
         if not config:
             print(f"⚠️  Configuração não encontrada no MongoDB, usando padrão")
             config = self._get_default_config()
         else:
-            print(f"✅ Configuração carregada do MongoDB")
+            print(f" Configuração carregada do MongoDB")
         
         # Estratégias
         self.buy_strategy_4h = self._init_buy_strategy_4h(config)
@@ -89,15 +89,15 @@ class HybridBacktestSimulator:
                 strategy_4h = config.get('strategy_4h', {})
                 strategy_24h = config.get('trading_strategy', {})
                 
-                print(f"   Strategy 4h: {'✅ Habilitada' if strategy_4h.get('enabled') else '❌ Desabilitada'}")
-                print(f"   Strategy 24h: {'✅ Habilitada' if strategy_24h.get('enabled') else '❌ Desabilitada'}")
+                print(f"   Strategy 4h: {' Habilitada' if strategy_4h.get('enabled') else ' Desabilitada'}")
+                print(f"   Strategy 24h: {' Habilitada' if strategy_24h.get('enabled') else ' Desabilitada'}")
                 
                 return config
             
             return None
             
         except Exception as e:
-            print(f"❌ Erro ao carregar config do MongoDB: {e}")
+            print(f" Erro ao carregar config do MongoDB: {e}")
             return None
     
     def _get_default_config(self):
@@ -133,7 +133,7 @@ class HybridBacktestSimulator:
         """Inicializa estratégia de compra 4h usando config do MongoDB"""
         strategy_4h = config.get('strategy_4h', {})
         if not strategy_4h:
-            raise ValueError('❌ strategy_4h não encontrada na configuração!')
+            raise ValueError(' strategy_4h não encontrada na configuração!')
         return BuyStrategy4h(strategy_4h)
     
     def _init_buy_strategy_24h(self, config):
@@ -178,7 +178,7 @@ class HybridBacktestSimulator:
             return ohlcv
             
         except Exception as e:
-            print(f"❌ Erro ao buscar dados históricos: {e}")
+            print(f" Erro ao buscar dados históricos: {e}")
             return []
     
     def calculate_variation(self, current_price, reference_price):
@@ -330,19 +330,19 @@ class HybridBacktestSimulator:
         print(f"\n{'='*80}")
         print(f"🧪 BACKTESTING HÍBRIDO - {self.days} DIAS")
         print(f"{'='*80}")
-        print(f"📊 Símbolo: {self.symbol}")
+        print(f" Símbolo: {self.symbol}")
         print(f"💰 Saldo inicial: ${self.initial_balance:.2f} USDT")
         print(f"📅 Período: {self.days} dias")
         
         # Busca dados históricos
-        print(f"\n📊 Buscando dados históricos...")
+        print(f"\n Buscando dados históricos...")
         ohlcv_data = self.fetch_historical_data('4h')
         
         if not ohlcv_data or len(ohlcv_data) < 7:
-            print("❌ Dados históricos insuficientes")
+            print(" Dados históricos insuficientes")
             return
         
-        print(f"✅ {len(ohlcv_data)} candles obtidos")
+        print(f" {len(ohlcv_data)} candles obtidos")
         print(f"\n🔄 Executando simulação...\n")
         
         # Simula trading em cada candle
@@ -405,7 +405,7 @@ class HybridBacktestSimulator:
         
         # Calcula valor final
         if not self.portfolio_history:
-            print("❌ Sem dados")
+            print(" Sem dados")
             return
         
         final_price = self.portfolio_history[-1]['price']
@@ -428,7 +428,7 @@ class HybridBacktestSimulator:
         buys_4h = [t for t in buys if t['strategy'] == '4h']
         buys_24h = [t for t in buys if t['strategy'] == '24h']
         
-        print(f"\n📊 Trades:")
+        print(f"\n Trades:")
         print(f"   Compras: {len(buys)} (4h: {len(buys_4h)}, 24h: {len(buys_24h)})")
         print(f"   Vendas: {len(sells)}")
         
@@ -450,18 +450,18 @@ class HybridBacktestSimulator:
         # Conclusão
         print(f"\n{'='*80}")
         if profit_loss_pct > 10:
-            print(f"🎉 CENÁRIO ÓTIMO: {profit_loss_pct:+.2f}%")
+            print(f" CENÁRIO ÓTIMO: {profit_loss_pct:+.2f}%")
         elif profit_loss_pct > 0:
             print(f"⚠️  CENÁRIO BÁSICO: {profit_loss_pct:+.2f}%")
         else:
-            print(f"❌ CENÁRIO RUIM: {profit_loss_pct:.2f}%")
+            print(f" CENÁRIO RUIM: {profit_loss_pct:.2f}%")
         print(f"{'='*80}\n")
 
 def main():
     """
     Executa backtesting híbrido de 30 dias com config do MongoDB
     """
-    print("\n🚀 BACKTESTING HÍBRIDO - CONFIG DO MONGODB")
+    print("\nBACKTESTING HÍBRIDO - CONFIG DO MONGODB")
     print("=" * 80)
     
     # Configuração

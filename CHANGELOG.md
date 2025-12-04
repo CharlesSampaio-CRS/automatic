@@ -3,31 +3,31 @@
 ## Version 2.1.0 - December 3, 2025
 
 ### 🌍 Internationalization
-- ✅ All system messages translated to English
-- ✅ Professional log prefixes (WARNING, ERROR, START, END, etc.)
-- ✅ MongoDB messages in English
-- ✅ API responses in English
-- ✅ Documentation updated to English
+-  All system messages translated to English
+-  Professional log prefixes (WARNING, ERROR, START, END, etc.)
+-  MongoDB messages in English
+-  API responses in English
+-  Documentation updated to English
 
-### 📊 MongoDB Logs Improvements
-- ✅ **Fixed timezone**: Now saves correct America/Sao_Paulo time (was UTC+3)
-- ✅ **Formatted values**: No more scientific notation (0.0000003373 instead of 3.373e-7)
-- ✅ **8 decimal places**: Consistent crypto price formatting
-- ✅ **Rounded percentages**: 2-4 decimal places for better readability
+###  MongoDB Logs Improvements
+-  **Fixed timezone**: Now saves correct America/Sao_Paulo time (was UTC+3)
+-  **Formatted values**: No more scientific notation (0.0000003373 instead of 3.373e-7)
+-  **8 decimal places**: Consistent crypto price formatting
+-  **Rounded percentages**: 2-4 decimal places for better readability
 
 ### 🔧 Technical Changes
-- ✅ Added `format_price()` function to avoid scientific notation
-- ✅ Timestamp now uses `datetime.now(TZ)` for correct timezone
-- ✅ All prices formatted to 8 decimals
-- ✅ Percentages rounded (spread: 4, change: 2, volume: 2, volatility: 2)
+-  Added `format_price()` function to avoid scientific notation
+-  Timestamp now uses `datetime.now(TZ)` for correct timezone
+-  All prices formatted to 8 decimals
+-  Percentages rounded (spread: 4, change: 2, volume: 2, volatility: 2)
 
 ### 📚 Documentation
-- ✅ README.md translated to English
-- ✅ postman/README.md translated to English
-- ✅ Added LOGS_MONGODB_AJUSTADOS.md with detailed changes
-- ✅ Updated Postman collection examples
+-  README.md translated to English
+-  postman/README.md translated to English
+-  Added LOGS_MONGODB_AJUSTADOS.md with detailed changes
+-  Updated Postman collection examples
 
-### 🎯 Example Log Before/After
+###  Example Log Before/After
 
 **BEFORE:**
 ```json
@@ -66,38 +66,38 @@
 
 ## Version 2.0.0 - December 2, 2025
 
-### 🚀 Production Ready
-- ✅ Fixed Gunicorn multi-worker issue (--workers=1)
-- ✅ Scheduler initialization outside __main__
-- ✅ Added /health endpoint for monitoring
-- ✅ Removed verbose debug logs
-- ✅ Production robustness improvements
+### Production Ready
+-  Fixed Gunicorn multi-worker issue (--workers=1)
+-  Scheduler initialization outside __main__
+-  Added /health endpoint for monitoring
+-  Removed verbose debug logs
+-  Production robustness improvements
 
 ### 📝 Logging Enhancements
-- ✅ Detailed execution logs with job ID
-- ✅ No swallowed exceptions (all errors printed)
-- ✅ Startup screen with version info
-- ✅ Next execution time display
+-  Detailed execution logs with job ID
+-  No swallowed exceptions (all errors printed)
+-  Startup screen with version info
+-  Next execution time display
 
 ### 🎨 Professional Logs
-- ✅ Removed ALL emojis from logs
-- ✅ Standardized ASCII prefixes
-- ✅ grep-friendly format
-- ✅ Parsing-compatible structure
+-  Removed ALL emojis from logs
+-  Standardized ASCII prefixes
+-  grep-friendly format
+-  Parsing-compatible structure
 
 ---
 
 ## Version 1.0.0 - November 2025
 
-### 🎯 Initial Release
-- ✅ MEXC integration via CCXT
-- ✅ MongoDB configuration storage
-- ✅ APScheduler dynamic jobs
-- ✅ 4h scalping strategy
-- ✅ Profit guarantee system (100% success rate)
-- ✅ Multi-level buy strategy (-3%, -5%, -10%)
-- ✅ Flask REST API
-- ✅ Postman collection v1.0
+###  Initial Release
+-  MEXC integration via CCXT
+-  MongoDB configuration storage
+-  APScheduler dynamic jobs
+-  4h scalping strategy
+-  Profit guarantee system (100% success rate)
+-  Multi-level buy strategy (-3%, -5%, -10%)
+-  Flask REST API
+-  Postman collection v1.0
 
 ---
 

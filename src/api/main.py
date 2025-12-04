@@ -62,11 +62,11 @@ def _get_Tranding_recommendation(change_percent, spread_percent, volume):
     
     # Análise de spread
     if spread_percent < 0.3:
-        recommendations.append("✅ Spread baixo (favorável)")
+        recommendations.append(" Spread baixo (favorável)")
     elif spread_percent < 1.0:
         recommendations.append("⚠️ Spread médio (aceitável)")
     else:
-        recommendations.append("❌ Spread alto (desfavorável)")
+        recommendations.append(" Spread alto (desfavorável)")
     
     # Análise de tendência
     if change_percent > 10:
@@ -97,7 +97,7 @@ def scheduled_order():
     current_hour = get_current_hour()
     if BUSINESS_HOURS_START <= current_hour < BUSINESS_HOURS_END:
         mexc_client = MexcClient(API_KEY, API_SECRET)
-        data = mexc_client.create_order(execution_type="scheduled")  # ✅ SCHEDULED
+        data = mexc_client.create_order(execution_type="scheduled")  #  SCHEDULED
         print(f"{MSG_SCHEDULED_ORDER_EXECUTED} {data}")
         print(f"⏰ Próxima execução em {SCHEDULE_INTERVAL_HOURS} horas")
     else:

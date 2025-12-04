@@ -130,7 +130,7 @@ class ConfigService:
                 config["_id"] = str(config["_id"])
             return config
         except Exception as e:
-            print(f"❌ Erro ao buscar configuração: {e}")
+            print(f" Erro ao buscar configuração: {e}")
             return None
     
     def get_all_configs(self, enabled_only: bool = False) -> List[Dict]:
@@ -156,7 +156,7 @@ class ConfigService:
             
             return configs
         except Exception as e:
-            print(f"❌ Erro ao listar configurações: {e}")
+            print(f" Erro ao listar configurações: {e}")
             return []
     
     def delete_symbol_config(self, pair: str) -> tuple[bool, str]:
