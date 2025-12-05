@@ -1,170 +1,97 @@
 """
-Estratégia Inteligente de Investimento
-Maximiza lucro ajustando percentuais baseado no saldo disponível
+Estratégia Inteligente de Investimento - SIMPLIFICADA E SEGURA
+Ajusta investimento com limites de segurança sempre ativos
 """
 
 from typing import Dict, Tuple
-from src.config.bot_config import SMALL_BALANCE_THRESHOLD, SMALL_BALANCE_USE_FULL, MIN_VALUE_PER_SYMBOL
 
 class SmartInvestmentStrategy:
     """
-    Estratégia inteligente que ajusta investimento baseado no saldo
+    Estratégia segura que SEMPRE limita risco
     
-    Lógica:
-    - Saldo < $10: Usa 100% do saldo (ignora percentuais) para maximizar ganhos
-    - Saldo >= $10: Usa percentuais da estratégia (gestão de risco)
+    NOVA LÓGICA (MAIS SEGURA):
+    - Saldo < $20: Usa no máximo 30% (proteção contra perda total)
+    - Saldo >= $20: Usa percentual da estratégia (max 30%)
+    - NUNCA usa 100% do saldo (muito arriscado)
     
-    Exemplo com $9.01:
-        Estratégia diz: "Investe 50%"
-        Smart Strategy diz: "Saldo baixo! Investe 100% ($9.01) para maximizar lucro"
-    
-    Exemplo com $50.00:
-        Estratégia diz: "Investe 50%"
-        Smart Strategy diz: "Saldo bom, investe 50% ($25.00) com gestão de risco"
+    REMOVIDO: Lógica antiga de usar 100% com saldo baixo (perigoso!)
     """
     
-    def __init__(self, 
-                 small_balance_threshold: float = SMALL_BALANCE_THRESHOLD,
-                 use_full_on_small: bool = SMALL_BALANCE_USE_FULL):
-        """
-        Inicializa estratégia inteligente
-        
-        Args:
-            small_balance_threshold: Limite para considerar saldo "pequeno" (default: $10)
-            use_full_on_small: Se True, usa 100% quando saldo < threshold
-        """
-        self.small_balance_threshold = small_balance_threshold
-        self.use_full_on_small = use_full_on_small
+    def __init__(self):
+        """Inicializa estratégia com limites seguros"""
+        self.max_position_percent = 30.0  # Máximo 30% por operação
+        self.min_investment = 5.0  # Mínimo $5 por operação
     
     def calculate_smart_investment(self, 
                                    available_balance: float,
                                    strategy_percentage: float,
                                    strategy_name: str = "unknown") -> Tuple[float, Dict]:
         """
-        Calcula investimento inteligente baseado no saldo
+        Calcula investimento com limites de segurança
+        
+        SEGURANÇA SEMPRE ATIVA:
+        - Máximo 30% do saldo por operação
+        - Mínimo $5 para investir
         
         Args:
             available_balance: Saldo USDT disponível
-            strategy_percentage: Percentual sugerido pela estratégia (ex: 50 para 50%)
-            strategy_name: Nome da estratégia (4h ou 24h) para logging
+            strategy_percentage: Percentual sugerido pela estratégia
+            strategy_name: Nome da estratégia (para logging)
         
         Returns:
-            Tupla (investment_amount, info) onde:
-            - investment_amount: Valor em USDT a investir
-            - info: Dicionário com detalhes da decisão
+            (investment_amount, info_dict)
         """
-        
-        # Se não tem saldo, não investe
+        # Sem saldo = sem investimento
         if available_balance <= 0:
             return 0.0, {
                 "investment": 0.0,
                 "original_percentage": strategy_percentage,
                 "adjusted_percentage": 0,
                 "reason": "Saldo insuficiente",
-                "is_small_balance": False,
-                "used_smart_logic": False
+                "safe_limit_applied": False
             }
         
-        # Verifica se é saldo pequeno
-        is_small_balance = available_balance < self.small_balance_threshold
+        # Aplica limite de segurança (max 30%)
+        safe_percentage = min(strategy_percentage, self.max_position_percent)
         
-        # Se saldo pequeno E flag habilitada: usa 100%
-        if is_small_balance and self.use_full_on_small:
-            # Garante que respeita o mínimo por símbolo
-            investment = available_balance
-            
-            # Se investimento calculado for menor que mínimo, retorna 0
-            if investment < MIN_VALUE_PER_SYMBOL:
-                return 0.0, {
-                    "investment": 0.0,
-                    "original_percentage": strategy_percentage,
-                    "adjusted_percentage": 0,
-                    "reason": f"Investimento (${investment:.2f}) menor que mínimo (${MIN_VALUE_PER_SYMBOL})",
-                    "is_small_balance": True,
-                    "used_smart_logic": True
-                }
-            
-            return investment, {
-                "investment": investment,
-                "original_percentage": strategy_percentage,
-                "adjusted_percentage": 100,
-                "reason": f"🎯 SALDO PEQUENO (<${self.small_balance_threshold}) - Usando 100% para maximizar lucro",
-                "is_small_balance": True,
-                "used_smart_logic": True,
-                "strategy": strategy_name
-            }
+        # Calcula investimento
+        investment = (available_balance * safe_percentage) / 100
         
-        # Saldo normal: usa percentual da estratégia
-        investment = (available_balance * strategy_percentage) / 100
-        
-        # Se investimento calculado for menor que mínimo, retorna 0
-        if investment < MIN_VALUE_PER_SYMBOL:
+        # Verifica mínimo
+        if investment < self.min_investment:
             return 0.0, {
                 "investment": 0.0,
                 "original_percentage": strategy_percentage,
-                "adjusted_percentage": strategy_percentage,
-                "reason": f"Investimento (${investment:.2f}) menor que mínimo (${MIN_VALUE_PER_SYMBOL})",
-                "is_small_balance": False,
-                "used_smart_logic": False
+                "adjusted_percentage": safe_percentage,
+                "reason": f"Investimento ${investment:.2f} < mínimo ${self.min_investment}",
+                "safe_limit_applied": True
             }
+        
+        # Determina se limite foi aplicado
+        limit_applied = strategy_percentage > self.max_position_percent
         
         return investment, {
             "investment": investment,
             "original_percentage": strategy_percentage,
-            "adjusted_percentage": strategy_percentage,
-            "reason": f"Saldo normal (>=${self.small_balance_threshold}) - Usando {strategy_percentage}% da estratégia",
-            "is_small_balance": False,
-            "used_smart_logic": False,
-            "strategy": strategy_name
+            "adjusted_percentage": safe_percentage,
+            "reason": f"{'⚠️ Limite de segurança aplicado' if limit_applied else '✅ Dentro do limite seguro'}",
+            "safe_limit_applied": limit_applied,
+            "strategy": strategy_name,
+            "balance": available_balance
         }
     
-    def get_adjusted_percentage(self, 
-                                available_balance: float,
-                                strategy_percentage: float) -> float:
-        """
-        Retorna apenas o percentual ajustado
-        
-        Args:
-            available_balance: Saldo USDT disponível
-            strategy_percentage: Percentual sugerido pela estratégia
-        
-        Returns:
-            Percentual ajustado (0-100)
-        """
-        is_small_balance = available_balance < self.small_balance_threshold
-        
-        if is_small_balance and self.use_full_on_small:
-            return 100.0
-        
-        return strategy_percentage
-    
-    def should_use_full_balance(self, available_balance: float) -> bool:
-        """
-        Verifica se deve usar saldo completo
-        
-        Args:
-            available_balance: Saldo USDT disponível
-        
-        Returns:
-            True se deve usar 100%, False caso contrário
-        """
-        return (available_balance < self.small_balance_threshold and 
-                self.use_full_on_small)
-    
-    def get_info(self) -> Dict:
-        """
-        Retorna informações sobre a estratégia
-        
-        Returns:
-            Dicionário com configurações atuais
-        """
+    def get_config(self) -> Dict:
+        """Retorna configuração da estratégia"""
         return {
-            "name": "Smart Investment Strategy",
-            "description": "Ajusta investimento baseado no saldo para maximizar lucro",
-            "small_balance_threshold": self.small_balance_threshold,
-            "use_full_on_small": self.use_full_on_small,
-            "logic": {
-                "small_balance": f"Saldo < ${self.small_balance_threshold}: Usa 100%",
-                "normal_balance": f"Saldo >= ${self.small_balance_threshold}: Usa % da estratégia"
+            "name": "Smart Investment Strategy - Safe Mode",
+            "description": "Limita investimento para proteger capital",
+            "limits": {
+                "max_position_percent": f"{self.max_position_percent}%",
+                "min_investment": f"${self.min_investment}"
+            },
+            "safety": {
+                "max_risk_per_trade": f"{self.max_position_percent}%",
+                "never_use_full_balance": True,
+                "reason": "Protege contra perda total do capital"
             }
         }
