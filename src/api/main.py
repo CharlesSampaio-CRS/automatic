@@ -691,8 +691,11 @@ def order():
         import traceback
         traceback.print_exc()
         return APIResponse.server_error(
-            error=e,
-            message="Failed to execute manual order"
+            message="Failed to execute manual order",
+            details={
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
         )
 
 

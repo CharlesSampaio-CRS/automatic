@@ -653,16 +653,31 @@ class MexcClient:
                 print(f" {symbol}: Strategy 4h está DESABILITADA")
             
             # Se não ativou estratégia 4h, verifica estratégia 24h
-            # Usa a estratégia de compra 24h para filtrar símbolo
-            filtered_24h = self.buy_strategy.filter_symbols([variation_data], symbols_config)
-            
-            if filtered_24h:
-                # Adiciona à lista com info da estratégia 24h
-                item = filtered_24h[0]
-                item['strategy'] = '24h'
-                if 'variation_4h' not in item:
-                    item['variation_4h'] = None
-                filtered.append(item)
+            strategy_24h_config = symbol_config.get('strategy_24h', {})
+            if strategy_24h_config.get('enabled', False):
+                print(f" {symbol}: Strategy 24h está HABILITADA")
+                variation_24h = variation_data.get('variation')
+                
+                if variation_24h is not None:
+                    # Usa estratégia unificada BuyStrategy com método should_buy_24h
+                    should_buy_24h, buy_info_24h = self.buy_strategy.should_buy_24h(variation_24h, symbol)
+                    
+                    if should_buy_24h:
+                        # Adiciona à lista com info da estratégia 24h
+                        filtered.append({
+                            **variation_data,
+                            'config': symbol_config,
+                            'signal_strength': buy_info_24h.get('signal_strength', 'medium'),
+                            'reason': buy_info_24h.get('reason', 'Queda significativa 24h'),
+                            'buy_percentage': buy_info_24h.get('buy_percentage', 20),
+                            'variation_4h': None,
+                            'strategy': '24h'
+                        })
+                        print(f" {symbol}: ADICIONADO à lista de compra (estratégia 24h)")
+                    else:
+                        print(f" {symbol}: NÃO passou no filtro da estratégia 24h")
+            else:
+                print(f" {symbol}: Strategy 24h está DESABILITADA")
         
         # Adiciona cálculo de lucro esperado
         for item in filtered:
