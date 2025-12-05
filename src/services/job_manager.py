@@ -213,7 +213,7 @@ class DynamicJobManager:
                             return float(f"{value:.{decimals}f}")
                         
                         # Busca informações de mercado do par (somente se client foi criado)
-                        market_info = None
+                        market_snapshot = None  # Inicializa aqui para evitar UnboundLocalError
                         try:
                             if mexc_client:
                                 ticker = mexc_client.client.fetch_ticker(pair)

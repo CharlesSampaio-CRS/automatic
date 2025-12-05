@@ -60,13 +60,8 @@ class MexcClient:
         
         # Inicializa estratégias com config do MongoDB (se fornecido)
         if config:
-            # Valida se strategy_4h_config existe quando config é fornecido
-            strategy_4h_config = config.get('strategy_4h')
-            if not strategy_4h_config:
-                raise ValueError(
-                    ' strategy_4h não encontrada na configuração! '
-                    'Verifique se o documento no MongoDB possui a chave "strategy_4h".'
-                )
+            # Busca strategy_4h_config (opcional, para retrocompatibilidade)
+            strategy_4h_config = config.get('strategy_4h', {})
             
             # Inicializa estratégias unificadas com estrutura simplificada
             # trading_mode pode ser "safe" ou "aggressive"
@@ -78,7 +73,8 @@ class MexcClient:
                 'buy_strategy': config.get('buy_strategy', {}),
                 # Suporte para estrutura antiga (retrocompatibilidade)
                 'trading_strategy': config.get('trading_strategy'),
-                'strategy_4h': strategy_4h_config
+                'strategy_4h': strategy_4h_config,
+                'risk_management': config.get('risk_management', {})
             })
             
             # SellStrategy recebe a configuração simplificada
