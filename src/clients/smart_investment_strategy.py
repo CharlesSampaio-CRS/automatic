@@ -27,11 +27,12 @@ class SmartInvestmentStrategy:
                                    strategy_percentage: float,
                                    strategy_name: str = "unknown") -> Tuple[float, Dict]:
         """
-        Calcula investimento com limites de segurança
+        Calcula investimento com limites de segurança e regra de "all-in" para saldo baixo.
         
-        SEGURANÇA SEMPRE ATIVA:
-        - Máximo 30% do saldo por operação
-        - Mínimo $5 para investir
+        REGRAS:
+        - Saldo < $15: Usa 100% do saldo (all-in) para garantir a ordem.
+        - Saldo >= $15: Usa o percentual da estratégia, limitado a self.max_position_percent.
+        - Mínimo $5 para investir (se saldo >= $15).
         
         Args:
             available_balance: Saldo USDT disponível
@@ -44,39 +45,40 @@ class SmartInvestmentStrategy:
         # Sem saldo = sem investimento
         if available_balance <= 0:
             return 0.0, {
-                "investment": 0.0,
-                "original_percentage": strategy_percentage,
-                "adjusted_percentage": 0,
-                "reason": "Saldo insuficiente",
+                "investment": 0.0, "original_percentage": strategy_percentage,
+                "adjusted_percentage": 0, "reason": "Saldo insuficiente",
                 "safe_limit_applied": False
             }
+
+        limit_applied = False
         
-        # Aplica limite de segurança (max 30%)
-        safe_percentage = min(strategy_percentage, self.max_position_percent)
-        
+        # NOVA REGRA: All-in para saldos baixos
+        if available_balance < 15.0:
+            safe_percentage = 100.0
+            reason = f"🎯 Saldo baixo (${available_balance:.2f} < $15), usando 100% (all-in)"
+            limit_applied = True
+        else:
+            # Lógica padrão: aplica limite de segurança (max 30%)
+            safe_percentage = min(strategy_percentage, self.max_position_percent)
+            limit_applied = strategy_percentage > self.max_position_percent
+            reason = f"{'⚠️ Limite de segurança aplicado' if limit_applied else '✅ Dentro do limite seguro'}"
+
         # Calcula investimento
         investment = (available_balance * safe_percentage) / 100
         
-        # Verifica mínimo
-        if investment < self.min_investment:
+        # Verifica mínimo, mas permite a compra all-in de baixo valor
+        if investment < self.min_investment and available_balance >= 15.0:
             return 0.0, {
-                "investment": 0.0,
-                "original_percentage": strategy_percentage,
+                "investment": 0.0, "original_percentage": strategy_percentage,
                 "adjusted_percentage": safe_percentage,
                 "reason": f"Investimento ${investment:.2f} < mínimo ${self.min_investment}",
                 "safe_limit_applied": True
             }
         
-        # Determina se limite foi aplicado
-        limit_applied = strategy_percentage > self.max_position_percent
-        
         return investment, {
-            "investment": investment,
-            "original_percentage": strategy_percentage,
-            "adjusted_percentage": safe_percentage,
-            "reason": f"{'⚠️ Limite de segurança aplicado' if limit_applied else '✅ Dentro do limite seguro'}",
-            "safe_limit_applied": limit_applied,
-            "strategy": strategy_name,
+            "investment": investment, "original_percentage": strategy_percentage,
+            "adjusted_percentage": safe_percentage, "reason": reason,
+            "safe_limit_applied": limit_applied, "strategy": strategy_name,
             "balance": available_balance
         }
     
