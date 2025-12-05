@@ -86,8 +86,8 @@ class MexcClient:
                 'strategy_4h': strategy_4h_config
             })
             
-            # SmartInvestmentStrategy usa o trading_mode
-            self.smart_strategy = SmartInvestmentStrategy(trading_mode)
+            # SmartInvestmentStrategy não precisa de config (usa limites fixos)
+            self.smart_strategy = SmartInvestmentStrategy()
         else:
             # Sem config: inicializa com None (operações básicas como get_balance)
             self.buy_strategy = None
