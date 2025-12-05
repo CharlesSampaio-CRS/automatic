@@ -1170,8 +1170,8 @@ class MexcClient:
                     if profit_percent > 100:
                         continue
                     
-                    min_profit = self.sell_strategy.get_min_profit_for_symbol(trading_symbol)
-                    # Lucro mínimo verificado
+                    # Define lucro mínimo baseado na estratégia (24h por padrão para verificação automática)
+                    min_profit = self.sell_strategy.min_profit_24h
                     
                     # Decide se usa venda gradativa ou venda completa
                     if profit_percent >= 40:
