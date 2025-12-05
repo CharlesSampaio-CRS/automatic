@@ -2,6 +2,8 @@ import ccxt
 from datetime import datetime
 import sys
 import os
+import requests
+from typing import Optional, Dict
 
 # Adiciona o diretório raiz ao path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -94,6 +96,64 @@ class MexcClient:
         
         # Blacklist de moedas que NUNCA devem ser consideradas pelo bot
         self.BLACKLIST = ['ICG']  # Adicione mais moedas aqui se necessário
+        
+        # URL base da API interna (endpoint /prices)
+        self.API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:5000')
+        
+    def get_price_data(self, symbol: str) -> Optional[Dict]:
+        """
+        Busca dados de preço do endpoint /prices/{symbol}
+        
+        Retorna estrutura completa com:
+        - current: Preço atual (last)
+        - ask: Preço de compra (o que você paga)
+        - bid: Preço de venda (o que você recebe)
+        - change_1h_percent: Variação 1h
+        - change_4h_percent: Variação 4h
+        - change_24h_percent: Variação 24h
+        - high_24h, low_24h, volume_24h
+        
+        Args:
+            symbol: Par de trading (ex: BTC/USDT)
+        
+        Returns:
+            Dict com dados do preço ou None se falhar
+        """
+        try:
+            # Remove / do símbolo para URL
+            url_symbol = symbol.replace('/', '')
+            url = f"{self.API_BASE_URL}/prices/{url_symbol}"
+            
+            # Faz request com timeout curto
+            response = requests.get(url, timeout=3)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if data.get('success') and data.get('data'):
+                    price_data = data['data']
+                    
+                    # Retorna dados estruturados
+                    return {
+                        'symbol': symbol,
+                        'current': price_data.get('current', 0),
+                        'ask': price_data.get('ask', 0),
+                        'bid': price_data.get('bid', 0),
+                        'change_1h_percent': price_data.get('change_1h_percent', 0),
+                        'change_4h_percent': price_data.get('change_4h_percent', 0),
+                        'change_24h_percent': price_data.get('change_24h_percent', 0),
+                        'high_24h': price_data.get('high_24h', 0),
+                        'low_24h': price_data.get('low_24h', 0),
+                        'volume_24h': price_data.get('volume_24h', 0),
+                        'source': 'api_endpoint'
+                    }
+            
+            # Se falhar, retorna None para usar fallback
+            return None
+            
+        except Exception as e:
+            # Erro silencioso - usa fallback
+            return None
         
     def should_use_limit_order(self, symbol: str) -> tuple[bool, str]:
         """
@@ -295,12 +355,21 @@ class MexcClient:
         """
         Retorna a variação de preço na última hora
         
+        OTIMIZADO: Usa endpoint /prices primeiro (mais rápido)
+        Fallback: Calcula usando candles se endpoint falhar
+        
         Args:
             symbol: Par de trading (ex: REKTCOIN/USDT)
         
         Returns:
             Variação percentual da última hora ou None em caso de erro
         """
+        # 🚀 PRIORIDADE: Tenta buscar do endpoint /prices
+        price_data = self.get_price_data(symbol)
+        if price_data and price_data.get('change_1h_percent') is not None:
+            return round(price_data['change_1h_percent'], 2)
+        
+        # 🔄 FALLBACK: Calcula usando candles (método antigo)
         try:
             # Busca o preço atual
             ticker = self.client.fetch_ticker(symbol)
@@ -332,6 +401,9 @@ class MexcClient:
         """
         Retorna a variação de preço nas últimas 4 horas
         
+        OTIMIZADO: Usa endpoint /prices primeiro (mais rápido e consistente)
+        Fallback: Calcula usando candles se endpoint falhar
+        
         🔧 Usa candles de 1h para consistência com exchange
         - 4 horas = 5 candles de 1h (4h atrás + atual)
         - Alinhado com o que a exchange mostra na interface
@@ -343,6 +415,12 @@ class MexcClient:
         Returns:
             Variação percentual das últimas 4 horas ou None em caso de erro
         """
+        # 🚀 PRIORIDADE: Tenta buscar do endpoint /prices
+        price_data = self.get_price_data(symbol)
+        if price_data and price_data.get('change_4h_percent') is not None:
+            return round(price_data['change_4h_percent'], 2)
+        
+        # 🔄 FALLBACK: Calcula usando candles (método antigo)
         try:
             # Busca o preço atual
             ticker = self.client.fetch_ticker(symbol)
@@ -891,15 +969,28 @@ class MexcClient:
             - Mercados líquidos (volume > $1M/24h): ordem LIMITADA
         - Mercados ilíquidos (volume < $1M/24h): ordem MERCADO
         
+        OTIMIZADO: Usa endpoint /prices para obter ask/bid corretos
+        
         Args:
             symbol: Par de negociação
             value: Valor em USDT a investir
             dry_run: Se True, apenas simula sem executar ordem real
         """
         try:
-            # Busca o preço atual para calcular a quantidade
-            ticker = self.client.fetch_ticker(symbol)
-            last_price = float(ticker['last'])
+            # 🚀 PRIORIDADE: Tenta buscar dados do endpoint /prices
+            price_data = self.get_price_data(symbol)
+            
+            if price_data:
+                # Usa dados do endpoint (mais rápido e completo)
+                last_price = price_data['current']
+                ask_price = price_data['ask']
+                bid_price = price_data['bid']
+            else:
+                # 🔄 FALLBACK: Busca via CCXT
+                ticker = self.client.fetch_ticker(symbol)
+                last_price = float(ticker['last'])
+                ask_price = float(ticker.get('ask', last_price))
+                bid_price = float(ticker.get('bid', last_price))
             
             # Calcula a quantidade baseada no valor em USDT
             amount = value / last_price
@@ -935,8 +1026,8 @@ class MexcClient:
                 return True, simulated_order
             
             if use_limit:
-                # MERCADO LÍQUIDO: Ordem LIMITADA para melhor preço
-                buy_price = float(ticker['ask']) if ticker.get('ask') else last_price
+                # MERCADO LÍQUIDO: Ordem LIMITADA usando ASK (preço real de compra)
+                buy_price = ask_price if ask_price > 0 else last_price
                 buy_price = self.client.price_to_precision(symbol, buy_price)
                 
                 order = self.client.create_limit_buy_order(symbol, float(amount), float(buy_price))
@@ -998,17 +1089,26 @@ class MexcClient:
                 # Monta o símbolo de trading
                 trading_symbol = f"{currency}/USDT"
                 
-                # Verifica se símbolo existe na exchange
-                try:
-                    ticker = self.client.fetch_ticker(trading_symbol)
-                    current_price = float(ticker['last'])
-                except Exception as e:
-                    error_msg = str(e)
-                    if "does not have market symbol" in error_msg:
-                        print(f"   ! {trading_symbol} sem par USDT")
-                    else:
-                        print(f"   ! Erro ao buscar preço: {e}")
-                    continue
+                # 🚀 PRIORIDADE: Busca dados do endpoint /prices
+                price_data = self.get_price_data(trading_symbol)
+                
+                if price_data:
+                    # Usa dados do endpoint (mais rápido e completo)
+                    current_price = price_data['current']
+                    bid_price = price_data['bid']
+                else:
+                    # 🔄 FALLBACK: Verifica se símbolo existe na exchange via CCXT
+                    try:
+                        ticker = self.client.fetch_ticker(trading_symbol)
+                        current_price = float(ticker['last'])
+                        bid_price = float(ticker.get('bid', current_price))
+                    except Exception as e:
+                        error_msg = str(e)
+                        if "does not have market symbol" in error_msg:
+                            print(f"   ! {trading_symbol} sem par USDT")
+                        else:
+                            print(f"   ! Erro ao buscar preço: {e}")
+                        continue
                 
                 # Calcula valor em USDT do holding
                 holding_value_usdt = balance * current_price
@@ -1074,9 +1174,8 @@ class MexcClient:
                             
                             
                             if use_limit:
-                                # MERCADO LÍQUIDO: Ordem LIMITADA
-                                ticker_fresh = self.client.fetch_ticker(trading_symbol)
-                                sell_price = float(ticker_fresh['bid']) if ticker_fresh.get('bid') else current_price
+                                # MERCADO LÍQUIDO: Ordem LIMITADA usando BID (preço real de venda)
+                                sell_price = bid_price if bid_price > 0 else current_price
                                 sell_price = self.client.price_to_precision(trading_symbol, sell_price)
                                 
                                 
