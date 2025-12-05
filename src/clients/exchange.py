@@ -639,9 +639,9 @@ class MexcClient:
                         filtered.append({
                             **variation_data,
                             'config': symbol_config,
-                            'signal_strength': buy_info_4h['signal_strength'],
-                            'reason': buy_info_4h['reason'],
-                            'buy_percentage': buy_info_4h['buy_percentage'],
+                            'signal_strength': buy_info_4h.get('signal_strength', 'medium'),
+                            'reason': buy_info_4h.get('reason', 'Queda significativa 4h'),
+                            'buy_percentage': buy_info_4h.get('buy_percentage', buy_info_4h.get('invest_percent', 15)),
                             'variation_4h': variation_4h,
                             'strategy': '4h'
                         })
