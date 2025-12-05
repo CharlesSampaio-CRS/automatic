@@ -267,49 +267,24 @@ class DynamicJobManager:
                                 # Análise de liquidez
                                 if volume_24h > 1000000:
                                     liquidity = "HIGH"
+                                # Análise de liquidez
+                                if volume_24h > 1000000:
+                                    liquidity = "HIGH"
                                 elif volume_24h > 100000:
                                     liquidity = "MEDIUM"
                                 else:
                                     liquidity = "LOW"
                                 
-                                market_info = {
-                                    "pair": pair,
-                                    "current_price": last_price,
-                                    "bid_price": bid_price,
-                                    "ask_price": ask_price,
-                                    "spread": {
-                                        "value": spread_value,
-                                        "percent": spread_percent,
-                                        "status": spread_status
-                                    },
-                                    "24h_stats": {
-                                        "high": high_24h,
-                                        "low": low_24h,
-                                        "open": open_24h,
-                                        "change": change_24h,
-                                        "change_percent": change_percent_24h,
-                                        "volume_usdt": volume_24h,
-                                        "volatility": volatility
-                                    },
-                                    "1h_stats": {
-                                        "change_percent": variation_1h if variation_1h else None
-                                    },
-                                    "trading_fees": {
-                                        "maker_fee": 0,
-                                        "taker_fee": 0,
-                                        "estimated_buy_cost": last_price,
-                                        "estimated_sell_return": last_price
-                                    },
-                                    "market_analysis": {
-                                        "trend": trend,
-                                        "momentum": momentum,
-                                        "liquidity": liquidity,
-                                        "recommendation": f"Spread {spread_status} | {trend} | {liquidity}"
-                                    }
+                                # Cria snapshot simplificado do mercado
+                                market_snapshot = {
+                                    "price": last_price,
+                                    "change_24h": round(change_percent_24h, 2),
+                                    "change_4h": 0,  # Será calculado se houver histórico
+                                    "volume_24h": round(volume_24h, 2)
                                 }
                         except Exception as market_error:
                             print(f"WARN  [{job_id_display}] Could not fetch market info: {market_error}", flush=True)
-                            market_info = None
+                            market_snapshot = None
                         
                         # Monta resumo (com verificação de result)
                         if not result:
@@ -343,37 +318,13 @@ class DynamicJobManager:
                             "pair": pair,
                             "status": execution_status,  # ✨ NOVO: Status padronizado
                             
-                            # Informações de agendamento
-                            "schedule_info": {
-                                "interval": interval_display if 'interval_display' in locals() else "unknown",
-                                "next_execution": next_run.isoformat() if next_run else None,
-                                "next_execution_formatted": next_run.strftime('%d/%m/%Y %H:%M:%S') if next_run else None
-                            },
-                            
                             # Resumo da execução (valores formatados)
-                            "summary": summary,
-                            
-                            # Resultado da compra
-                            "buy_details": {
-                                "status": result.get('status'),
-                                "message": result.get('message'),
-                                "symbols_analyzed": result.get('symbols_analyzed', 0),
-                                "orders_executed": len(result.get('orders', [])),
-                                "total_invested": format_usdt(result.get('total_invested', 0))
-                            },
-                            
-                            # Resultado da venda (scheduled não vende)
-                            "sell_details": {
-                                "status": "no_sells",
-                                "message": "Scheduled execution does not perform sells",
-                                "holdings_checked": 0,
-                                "sells_executed": 0,
-                                "total_profit": format_usdt(0)
-                            },
-                            
-                            # Informações de mercado
-                            "market_info": market_info
+                            "summary": summary
                         }
+                        
+                        # Adiciona market_snapshot se disponível
+                        if market_snapshot:
+                            execution_log["market_snapshot"] = market_snapshot
                         
                         print(f"SAVE  [{job_id_display}] Log assembled, inserting into MongoDB...", flush=True)
                         result_insert = execution_logs_db.insert_one(execution_log)
