@@ -22,28 +22,45 @@ class BuyStrategy:
         
         Args:
             config: Configuração do MongoDB com:
-                   - strategy_4h: Configuração de compra rápida
-                   - trading_strategy: Configuração de compra lenta (opcional)
+                   - buy_strategy: Nova estrutura simplificada (preferencial)
+                   - trading_mode: Modo safe ou aggressive
+                   - strategy_4h/trading_strategy: Estrutura antiga (retrocompatibilidade)
         """
         config = config or {}
         
-        # Configuração principal (strategy_4h)
-        strategy_4h = config.get('strategy_4h', {})
+        # Lê trading_mode (safe ou aggressive)
+        trading_mode = config.get('trading_mode', 'safe')
         
-        # Quedas que ativam compra
-        self.min_drop_4h = abs(strategy_4h.get('min_variation_to_buy', -5.0))
-        self.min_drop_24h = abs(config.get('trading_strategy', {}).get('min_variation_to_buy', -8.0))
+        # NOVA ESTRUTURA SIMPLIFICADA (preferencial)
+        buy_config = config.get('buy_strategy', {})
         
-        # Percentuais de investimento
-        self.invest_percent_4h = strategy_4h.get('investment_percentage', 15.0)
-        self.invest_percent_24h = config.get('trading_strategy', {}).get('investment_percentage', 20.0)
+        if buy_config:
+            # Usa estrutura simplificada
+            self.min_drop_4h = abs(buy_config.get('min_drop_4h', 5.0))
+            self.min_drop_24h = abs(buy_config.get('min_drop_24h', 6.0))
+            self.invest_percent_4h = buy_config.get('invest_percent_4h', 15.0)
+            self.invest_percent_24h = buy_config.get('invest_percent_24h', 20.0)
+            self.cooldown_hours = buy_config.get('cooldown_hours', 4)
+        else:
+            # RETROCOMPATIBILIDADE: Lê estrutura antiga
+            strategy_4h = config.get('strategy_4h', {})
+            trading_strategy = config.get('trading_strategy', {})
+            
+            self.min_drop_4h = abs(strategy_4h.get('min_variation_to_buy', 5.0))
+            self.min_drop_24h = abs(trading_strategy.get('min_variation_to_buy', 6.0))
+            self.invest_percent_4h = strategy_4h.get('investment_percentage', 15.0)
+            self.invest_percent_24h = trading_strategy.get('investment_percentage', 20.0)
+            self.cooldown_hours = 4
         
-        # Limites de segurança (SEMPRE ATIVOS)
-        self.max_position_percent = 30.0  # Nunca mais que 30% do saldo
+        # Salva trading_mode para referência
+        self.trading_mode = trading_mode
+        
+        # Limites de segurança (lidos de risk_management ou padrão)
+        risk_mgmt = config.get('risk_management', {})
+        self.max_position_percent = risk_mgmt.get('max_position_percent', 30.0)
         self.min_investment = 5.0  # Mínimo $5 por operação
         
         # Cooldown entre compras do mesmo token
-        self.cooldown_hours = 4
         self.last_buy_times = {}  # {symbol: datetime}
     
     def should_buy_4h(self, variation_4h: float, symbol: str) -> Tuple[bool, Dict]:

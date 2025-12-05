@@ -68,26 +68,35 @@ class MexcClient:
                     'Verifique se o documento no MongoDB possui a chave "strategy_4h".'
                 )
             
-            # Inicializa estratégias unificadas
-            # BuyStrategy agora suporta both trading_strategy (24h) e strategy_4h (4h)
+            # Inicializa estratégias unificadas com estrutura simplificada
+            # trading_mode pode ser "safe" ou "aggressive"
+            trading_mode = config.get('trading_mode', 'safe')
+            
+            # BuyStrategy recebe a configuração simplificada
             self.buy_strategy = BuyStrategy({
+                'trading_mode': trading_mode,
+                'buy_strategy': config.get('buy_strategy', {}),
+                # Suporte para estrutura antiga (retrocompatibilidade)
                 'trading_strategy': config.get('trading_strategy'),
                 'strategy_4h': strategy_4h_config
             })
             
-            # SellStrategy agora suporta both sell_strategy e strategy_4h
+            # SellStrategy recebe a configuração simplificada
             self.sell_strategy = SellStrategy({
-                'sell_strategy': config.get('sell_strategy'),
+                'trading_mode': trading_mode,
+                'sell_strategy': config.get('sell_strategy', {}),
+                'risk_management': config.get('risk_management', {}),
+                # Suporte para estrutura antiga (retrocompatibilidade)
                 'strategy_4h': strategy_4h_config
             })
+            
+            # SmartInvestmentStrategy usa o trading_mode
+            self.smart_strategy = SmartInvestmentStrategy(trading_mode)
         else:
             # Sem config: inicializa com None (operações básicas como get_balance)
             self.buy_strategy = None
             self.sell_strategy = None
-        
-        # Estratégia inteligente de investimento (sempre ativa)
-        # Ajusta percentuais baseado no saldo para maximizar lucro
-        self.smart_strategy = SmartInvestmentStrategy()
+            self.smart_strategy = SmartInvestmentStrategy()  # Usa modo safe por padrão
         
         # Threshold de volume para decidir entre market/limit
         # Mercados com volume > $1M/24h usam limit (boa liquidez)

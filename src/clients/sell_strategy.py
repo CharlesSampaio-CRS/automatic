@@ -21,23 +21,38 @@ class SellStrategy:
         
         Args:
             config: Configuração do MongoDB com:
-                   - strategy_4h: Configuração de venda rápida (4h)
-                   - trading_strategy: Configuração de venda lenta (24h)
+                   - sell_strategy: Nova estrutura simplificada (preferencial)
+                   - trading_mode: Modo safe ou aggressive
+                   - strategy_4h/trading_strategy: Estrutura antiga (retrocompatibilidade)
+                   - risk_management: Configuração de stop loss
         """
         config = config or {}
         
-        # Lucro mínimo para estratégia 4h (scalping)
-        strategy_4h = config.get('strategy_4h', {})
-        self.min_profit_4h = strategy_4h.get('quick_profit_target', 6.0)
+        # Lê trading_mode (safe ou aggressive)
+        trading_mode = config.get('trading_mode', 'safe')
         
-        # Lucro mínimo para estratégia 24h (swing)
-        trading_strategy = config.get('trading_strategy', {})
-        self.min_profit_24h = trading_strategy.get('profit_target', 8.0)
+        # NOVA ESTRUTURA SIMPLIFICADA (preferencial)
+        sell_config = config.get('sell_strategy', {})
+        
+        if sell_config:
+            # Usa estrutura simplificada
+            self.min_profit_4h = sell_config.get('min_profit_4h', 6.0)
+            self.min_profit_24h = sell_config.get('min_profit_24h', 8.0)
+        else:
+            # RETROCOMPATIBILIDADE: Lê estrutura antiga
+            strategy_4h = config.get('strategy_4h', {})
+            trading_strategy = config.get('trading_strategy', {})
+            
+            self.min_profit_4h = strategy_4h.get('quick_profit_target', 6.0)
+            self.min_profit_24h = trading_strategy.get('profit_target', 8.0)
+        
+        # Salva trading_mode para referência
+        self.trading_mode = trading_mode
         
         # Lucro padrão (usa 4h por padrão)
         self.min_profit_percent = self.min_profit_4h
         
-        # Configuração de stop loss (pode ser desativado por config)
+        # Configuração de stop loss (lida de risk_management)
         risk_mgmt = config.get('risk_management', {})
         self.stop_loss_enabled = risk_mgmt.get('stop_loss_enabled', True)  # Ativo por padrão
         self.stop_loss_percent = abs(risk_mgmt.get('stop_loss_percent', 3.0))
