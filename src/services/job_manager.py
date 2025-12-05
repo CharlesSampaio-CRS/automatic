@@ -180,7 +180,7 @@ class DynamicJobManager:
                 
                 # Atualiza metadata (SEMPRE, mesmo em caso de erro)
                 metadata_updates = {
-                    "last_execution": datetime.now(),
+                    "last_execution": datetime.now(TZ),
                     "status": "active" if result and result.get('status') == 'success' else "error" if execution_error else "skipped"
                 }
                 
@@ -413,7 +413,7 @@ class DynamicJobManager:
                 
                 # Atualiza status para erro
                 config_service.update_metadata(pair, {
-                    "last_execution": datetime.now(),
+                    "last_execution": datetime.now(TZ),
                     "status": "error"
                 })
                 

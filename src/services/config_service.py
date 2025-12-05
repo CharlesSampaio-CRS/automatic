@@ -6,6 +6,7 @@ Gerencia CRUD de configurações por símbolo (criptomoeda)
 
 import os
 import sys
+import pytz
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -13,6 +14,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 from src.database.mongodb_connection import connection_mongo
 from src.models.config_schema import validate_config, EXAMPLE_CONFIG
+
+# Timezone São Paulo
+TZ = pytz.timezone("America/Sao_Paulo")
 
 # Collection de configurações
 CONFIG_COLLECTION = "BotConfigs"
@@ -55,8 +59,8 @@ class ConfigService:
             return False, f"Configuração para {pair} já existe. Use update.", None
         
         # Adiciona timestamps
-        config["created_at"] = datetime.now()
-        config["updated_at"] = datetime.now()
+        config["created_at"] = datetime.now(TZ)
+        config["updated_at"] = datetime.now(TZ)
         
         # Inicializa metadata se não existir
         if "metadata" not in config:
@@ -95,7 +99,7 @@ class ConfigService:
         
         # Merge das atualizações
         updated_config = {**existing, **updates}
-        updated_config["updated_at"] = datetime.now()
+        updated_config["updated_at"] = datetime.now(TZ)
         
         # Valida configuração atualizada
         is_valid, error = validate_config(updated_config)
@@ -105,7 +109,7 @@ class ConfigService:
         try:
             self.collection.update_one(
                 {"pair": pair},
-                {"$set": {**updates, "updated_at": datetime.now()}}
+                {"$set": {**updates, "updated_at": datetime.now(TZ)}}
             )
             return True, f"Configuração de {pair} atualizada"
         except Exception as e:
@@ -128,10 +132,34 @@ class ConfigService:
             config = self.collection.find_one({"pair": pair})
             if config:
                 config["_id"] = str(config["_id"])
+                # Converte timestamps do MongoDB (UTC) para São Paulo
+                self._convert_timestamps_to_tz(config)
             return config
         except Exception as e:
             print(f" Erro ao buscar configuração: {e}")
             return None
+    
+    def _convert_timestamps_to_tz(self, config: Dict) -> None:
+        """
+        Converte timestamps do MongoDB (UTC) para timezone São Paulo
+        Modifica o dict in-place
+        """
+        if not config:
+            return
+        
+        # Converte timestamps principais
+        for field in ['created_at', 'updated_at']:
+            if field in config and config[field]:
+                if hasattr(config[field], 'replace'):
+                    # Se for datetime naive do MongoDB, adiciona UTC e converte para SP
+                    config[field] = config[field].replace(tzinfo=pytz.UTC).astimezone(TZ)
+        
+        # Converte timestamps no metadata
+        if 'metadata' in config:
+            metadata = config['metadata']
+            if 'last_execution' in metadata and metadata['last_execution']:
+                if hasattr(metadata['last_execution'], 'replace'):
+                    metadata['last_execution'] = metadata['last_execution'].replace(tzinfo=pytz.UTC).astimezone(TZ)
     
     def get_all_configs(self, enabled_only: bool = False) -> List[Dict]:
         """
@@ -150,9 +178,10 @@ class ConfigService:
             query = {"enabled": True} if enabled_only else {}
             configs = list(self.collection.find(query))
             
-            # Converte ObjectId para string
+            # Converte ObjectId para string e timestamps para TZ
             for config in configs:
                 config["_id"] = str(config["_id"])
+                self._convert_timestamps_to_tz(config)
             
             return configs
         except Exception as e:
@@ -221,7 +250,7 @@ class ConfigService:
                 {"pair": pair},
                 {"$set": {
                     "metadata": updated_metadata,
-                    "updated_at": datetime.now()
+                    "updated_at": datetime.now(TZ)
                 }}
             )
             return True, f"Metadata de {pair} atualizada"
