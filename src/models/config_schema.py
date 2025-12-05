@@ -72,6 +72,7 @@ SYMBOL_CONFIG_SCHEMA = {
             }
         ],
         "risk_management": {
+            "stop_loss_enabled": "boolean",         # Ativa/desativa stop loss automático (padrão: True)
             "stop_loss_percent": "number",          # Ex: -3.0 para -3%
             "cooldown_minutes": "number",           # Ex: 15 minutos
             "max_trades_per_hour": "number",        # Ex: 3 trades

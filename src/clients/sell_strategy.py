@@ -37,8 +37,9 @@ class SellStrategy:
         # Lucro padrão (usa 4h por padrão)
         self.min_profit_percent = self.min_profit_4h
         
-        # Configuração de stop loss
-        risk_mgmt = strategy_4h.get('risk_management', {})
+        # Configuração de stop loss (pode ser desativado por config)
+        risk_mgmt = config.get('risk_management', {})
+        self.stop_loss_enabled = risk_mgmt.get('stop_loss_enabled', True)  # Ativo por padrão
         self.stop_loss_percent = abs(risk_mgmt.get('stop_loss_percent', 3.0))
     
     def should_sell(self, current_price: float, buy_price: float, symbol: str = None, 
@@ -83,8 +84,8 @@ class SellStrategy:
                 "timeframe": timeframe
             }
         
-        # Verifica stop loss
-        if profit_percent <= -self.stop_loss_percent:
+        # Verifica stop loss (APENAS SE HABILITADO)
+        if self.stop_loss_enabled and profit_percent <= -self.stop_loss_percent:
             return True, {
                 "should_sell": True,
                 "reason": f"🛑 Stop loss ativado: prejuízo de {profit_percent:.2f}%",
@@ -106,16 +107,18 @@ class SellStrategy:
     
     def get_config(self) -> Dict:
         """Retorna configuração atual da estratégia"""
+        stop_loss_status = "🟢 Ativo" if self.stop_loss_enabled else "🔴 Desativado"
         return {
             "sell_triggers": {
                 "min_profit_4h": f"{self.min_profit_4h}%",
                 "min_profit_24h": f"{self.min_profit_24h}%",
-                "stop_loss": f"-{self.stop_loss_percent}%"
+                "stop_loss": f"-{self.stop_loss_percent}% ({stop_loss_status})"
             },
             "behavior": {
                 "mode": "simple",
                 "sell_amount": "100%",
                 "description": "Vende tudo quando atinge meta ou stop loss",
+                "stop_loss_enabled": self.stop_loss_enabled,
                 "timeframes": {
                     "4h_scalping": f"{self.min_profit_4h}% (operações rápidas)",
                     "24h_swing": f"{self.min_profit_24h}% (operações lentas)"
