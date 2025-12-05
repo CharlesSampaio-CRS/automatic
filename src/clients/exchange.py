@@ -9,13 +9,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 from src.config.bot_config import MIN_VALUE_PER_CREATE_ORDER, MIN_VALUE_PER_SYMBOL, SYMBOLS, BASE_CURRENCY
 from src.utils.number_formatter import format_price, format_amount, format_usdt, format_percent
 
-# Importa estratégias de compra e venda
+# Importa estratégias unificadas de compra e venda
 from src.clients.buy_strategy import BuyStrategy
 from src.clients.sell_strategy import SellStrategy
-
-# Importa estratégias de 4 horas (scalping)
-from src.clients.buy_strategy_4h import BuyStrategy4h
-from src.clients.sell_strategy_4h import SellStrategy4h
 
 # Importa estratégia inteligente de investimento
 from src.clients.smart_investment_strategy import SmartInvestmentStrategy
@@ -61,31 +57,31 @@ class MexcClient:
         })
         
         # Inicializa estratégias com config do MongoDB (se fornecido)
-        trading_strategy = config.get('trading_strategy') if config else None
-        sell_strategy_config = config.get('sell_strategy') if config else None
-        strategy_4h_config = config.get('strategy_4h') if config else None
-        
-        # Inicializa estratégias apenas se config fornecido
         if config:
             # Valida se strategy_4h_config existe quando config é fornecido
+            strategy_4h_config = config.get('strategy_4h')
             if not strategy_4h_config:
                 raise ValueError(
                     ' strategy_4h não encontrada na configuração! '
                     'Verifique se o documento no MongoDB possui a chave "strategy_4h".'
                 )
             
-            self.buy_strategy = BuyStrategy(trading_strategy)
-            self.sell_strategy = SellStrategy(sell_strategy_config)
+            # Inicializa estratégias unificadas
+            # BuyStrategy agora suporta both trading_strategy (24h) e strategy_4h (4h)
+            self.buy_strategy = BuyStrategy({
+                'trading_strategy': config.get('trading_strategy'),
+                'strategy_4h': strategy_4h_config
+            })
             
-            # Estratégias de 4 horas (scalping)
-            self.buy_strategy_4h = BuyStrategy4h(strategy_4h_config)
-            self.sell_strategy_4h = SellStrategy4h(strategy_4h_config)
+            # SellStrategy agora suporta both sell_strategy e strategy_4h
+            self.sell_strategy = SellStrategy({
+                'sell_strategy': config.get('sell_strategy'),
+                'strategy_4h': strategy_4h_config
+            })
         else:
             # Sem config: inicializa com None (operações básicas como get_balance)
             self.buy_strategy = None
             self.sell_strategy = None
-            self.buy_strategy_4h = None
-            self.sell_strategy_4h = None
         
         # Estratégia inteligente de investimento (sempre ativa)
         # Ajusta percentuais baseado no saldo para maximizar lucro
@@ -336,6 +332,11 @@ class MexcClient:
         """
         Retorna a variação de preço nas últimas 4 horas
         
+        🔧 Usa candles de 1h para consistência com exchange
+        - 4 horas = 5 candles de 1h (4h atrás + atual)
+        - Alinhado com o que a exchange mostra na interface
+        - Mais confiável para decisões de compra/venda
+        
         Args:
             symbol: Par de trading (ex: REKTCOIN/USDT)
         
@@ -350,14 +351,15 @@ class MexcClient:
             if current_price <= 0:
                 return None
             
-            # Busca candles de 4 horas (pega 3 para garantir que temos dados completos)
-            ohlcv = self.client.fetch_ohlcv(symbol, '4h', limit=3)
+            # 🔧 Usa candles de 1h para consistência com exchange
+            # 4 horas = 5 candles de 1h (índice 0 = 4h atrás)
+            ohlcv = self.client.fetch_ohlcv(symbol, '1h', limit=5)
             
-            if len(ohlcv) >= 2:
-                # O último candle [-1] pode estar em formação (não completo)
-                # O penúltimo candle [-2] é o último candle COMPLETO de 4h atrás
-                # Usamos o CLOSE do penúltimo candle como referência de 4h atrás
-                price_4h_ago = float(ohlcv[-2][4])  # [4] = preço de fechamento (close)
+            if len(ohlcv) >= 5:
+                # ohlcv[0] = 4 horas atrás (candle completo)
+                # ohlcv[-1] = agora (último candle, pode estar em formação)
+                # Usamos o CLOSE do candle de 4h atrás
+                price_4h_ago = float(ohlcv[0][4])  # [4] = preço de fechamento (close)
                 
                 if price_4h_ago > 0:
                     variation_4h = ((current_price - price_4h_ago) / price_4h_ago) * 100
@@ -551,12 +553,8 @@ class MexcClient:
                 print(f" {symbol}: Variação 4h = {variation_4h}%")
                 
                 if variation_4h is not None:
-                    # 🔥 PASSA A CONFIG COMPLETA DO strategy_4h (não monta manualmente)
-                    # BuyStrategy4h já sabe extrair buy_strategy.levels internamente
-                    buy_strategy_4h_symbol = BuyStrategy4h(strategy_4h_config)
-                    
-                    # Verifica se deve comprar pela estratégia de 4h (usando variação 4h)
-                    should_buy_4h, buy_info_4h = buy_strategy_4h_symbol.should_buy(variation_4h, symbol)
+                    # Usa estratégia unificada BuyStrategy com método should_buy_4h
+                    should_buy_4h, buy_info_4h = self.buy_strategy.should_buy_4h(variation_4h, symbol)
                     
                     if should_buy_4h:
                         # Adiciona à lista com info da estratégia 4h
@@ -672,19 +670,11 @@ class MexcClient:
                     adjusted_percentage = min(adjusted_percentage, max_allowed)
                 # Para estratégia 24h, o limite já é aplicado internamente
             
-            # Calcula o investimento baseado na estratégia utilizada
-            if strategy_used == '4h' and self.buy_strategy_4h:
-                # Usa cálculo da estratégia 4h com percentual ajustado
-                investment_amount = self.buy_strategy_4h.calculate_position_size(
-                    usdt_balance,
-                    adjusted_percentage
-                )
-            else:
-                # Usa cálculo da estratégia 24h com percentual ajustado
-                investment_amount = self.buy_strategy.calculate_investment_amount(
-                    usdt_balance, 
-                    adjusted_percentage
-                )
+            # Calcula o investimento usando estratégia unificada
+            investment_amount = self.buy_strategy.calculate_position_size(
+                usdt_balance,
+                adjusted_percentage
+            )
             
             # Verifica se aplicou lógica inteligente
             used_smart_logic = adjusted_percentage != buy_percentage

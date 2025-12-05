@@ -1,80 +1,149 @@
 """
-Estratégia de Venda Progressiva (Scaling Out)
-Vende em partes conforme o preço aumenta
+Estratégia de Venda Unificada
+Suporta vendas progressivas (scaling out) e vendas rápidas (scalping)
 """
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
+
 
 class SellStrategy:
     """
-    Gerencia vendas progressivas em múltiplos níveis
-    Recebe configurações do MongoDB
+    Estratégia de venda unificada
+    
+    ESTRATÉGIAS DISPONÍVEIS:
+    1. Venda progressiva (scaling out): Vende em partes conforme lucro aumenta
+    2. Venda simples: Vende tudo quando atinge lucro mínimo
+    
+    Por padrão, usa VENDA SIMPLES com lucro mínimo de 5%
     """
     
-    def __init__(self, sell_strategy: Optional[Dict] = None):
+    def __init__(self, config: Optional[Dict] = None):
         """
         Inicializa estratégia com configuração do MongoDB
         
         Args:
-            sell_strategy: Configuração de sell_strategy do MongoDB
-                          Se None, usa níveis padrão
+            config: Configuração completa do MongoDB contendo:
+                   - sell_strategy: Níveis de venda progressiva (opcional)
+                   - strategy_4h: Configuração de venda rápida (opcional)
         """
-        if sell_strategy and isinstance(sell_strategy, dict):
-            levels_config = sell_strategy.get('levels', [])
-            
-            # Converte configuração para formato interno
-            self.sell_levels = []
-            for level in levels_config:
-                self.sell_levels.append({
-                    "percentage": level.get('sell_percent', level.get('sell_percentage', 33)),
-                    "profit_target": level.get('profit_percent', level.get('profit_target', 5.0)),
-                    "name": level.get('name', f"Nível {len(self.sell_levels) + 1}"),
-                    "description": level.get('description', '')
-                })
-            
-            if not self.sell_levels:
-                self.sell_levels = self._get_default_levels()
+        # Inicializa venda progressiva (se disponível)
+        if config and 'sell_strategy' in config:
+            self._init_progressive_sell(config['sell_strategy'])
         else:
-            self.sell_levels = self._get_default_levels()
+            self._init_progressive_sell_defaults()
+        
+        # Inicializa venda rápida (se disponível)
+        if config and 'strategy_4h' in config:
+            self._init_quick_sell(config['strategy_4h'])
+        else:
+            self._init_quick_sell_defaults()
+        
+        # Modo de operação: 'simple' ou 'progressive'
+        # Simple = vende tudo quando atinge lucro mínimo
+        # Progressive = vende em partes conforme lucro aumenta
+        self.mode = 'simple'  # Padrão: venda simples
     
-    def _get_default_levels(self):
-        """Retorna níveis de venda padrão"""
+    # ========================================================================
+    # INICIALIZAÇÃO - VENDA PROGRESSIVA (SCALING OUT)
+    # ========================================================================
+    
+    def _init_progressive_sell(self, sell_strategy: Dict):
+        """Inicializa venda progressiva a partir do MongoDB"""
+        levels_config = sell_strategy.get('levels', [])
+        
+        self.progressive_levels = []
+        for level in levels_config:
+            self.progressive_levels.append({
+                "percentage": level.get('sell_percent', level.get('sell_percentage', 33)),
+                "profit_target": level.get('profit_percent', level.get('profit_target', 5.0)),
+                "name": level.get('name', f"Nível {len(self.progressive_levels) + 1}"),
+                "description": level.get('description', '')
+            })
+        
+        if not self.progressive_levels:
+            self.progressive_levels = self._get_default_progressive_levels()
+    
+    def _init_progressive_sell_defaults(self):
+        """Inicializa venda progressiva com valores padrão"""
+        self.progressive_levels = self._get_default_progressive_levels()
+    
+    def _get_default_progressive_levels(self):
+        """Níveis padrão para venda progressiva"""
         return [
             {"percentage": 33, "profit_target": 5.0,  "name": "Nível 1 - Lucro Seguro"},
             {"percentage": 33, "profit_target": 10.0, "name": "Nível 2 - Lucro Médio"},
             {"percentage": 34, "profit_target": 15.0, "name": "Nível 3 - Lucro Máximo"}
         ]
     
+    # ========================================================================
+    # INICIALIZAÇÃO - VENDA RÁPIDA (SCALPING)
+    # ========================================================================
+    
+    def _init_quick_sell(self, strategy_4h: Dict):
+        """Inicializa venda rápida a partir do MongoDB"""
+        self.quick_sell_enabled = strategy_4h.get('enabled', False)
+        
+        # Lucro alvo para venda rápida (padrão: 5%)
+        self.quick_profit_target = strategy_4h.get('quick_profit_target', 5.0)
+        
+        # Stop loss (padrão: -3%)
+        risk_mgmt = strategy_4h.get('risk_management', {})
+        self.stop_loss_percent = risk_mgmt.get('stop_loss_percent', -3.0)
+    
+    def _init_quick_sell_defaults(self):
+        """Inicializa venda rápida com valores padrão"""
+        self.quick_sell_enabled = False
+        self.quick_profit_target = 5.0
+        self.stop_loss_percent = -3.0
+    
+    # ========================================================================
+    # VENDA SIMPLES (PADRÃO)
+    # ========================================================================
+    
     def get_min_profit_for_symbol(self, symbol: str) -> float:
         """
         Retorna o lucro mínimo configurado para o símbolo
-        Usa o primeiro nível de venda como referência (mais conservador)
         
         Args:
-            symbol: Par de Tranding (ex: REKTCOIN/USDT)
+            symbol: Par de trading (ex: REKTCOIN/USDT)
         
         Returns:
             Percentual de lucro mínimo (ex: 5.0 para 5%)
         """
-        if self.sell_levels and len(self.sell_levels) > 0:
-            return self.sell_levels[0]["profit_target"]
-        return 5.0  # Padrão: 5% de lucro mínimo
+        # Se venda rápida está habilitada, usa seu lucro alvo
+        if self.quick_sell_enabled:
+            return self.quick_profit_target
+        
+        # Caso contrário, usa o primeiro nível progressivo
+        if self.progressive_levels and len(self.progressive_levels) > 0:
+            return self.progressive_levels[0]["profit_target"]
+        
+        return 5.0  # Padrão: 5%
     
-    def should_sell(self, current_price: float, buy_price: float, symbol: str) -> bool:
+    def should_sell(self, current_price: float, buy_price: float, symbol: str) -> tuple[bool, Dict]:
         """
-        Verifica se deve vender baseado no lucro mínimo configurado
+        Verifica se deve vender baseado no lucro atual
+        
+        VENDA SIMPLES (padrão):
+        - Vende 100% da posição quando lucro >= lucro mínimo
+        - Lucro mínimo: 5% (configurável)
         
         Args:
             current_price: Preço atual do ativo
             buy_price: Preço de compra do ativo
-            symbol: Par de Tranding (ex: REKTCOIN/USDT)
+            symbol: Par de trading (ex: REKTCOIN/USDT)
         
         Returns:
-            True se deve vender, False caso contrário
+            (deve_vender, info_dict)
         """
         if buy_price <= 0:
-            return False
+            return False, {
+                "should_sell": False,
+                "reason": "Preço de compra inválido",
+                "current_profit": 0.0,
+                "target_profit": 0.0
+            }
         
         # Calcula lucro percentual
         profit_percent = ((current_price - buy_price) / buy_price) * 100
@@ -82,13 +151,39 @@ class SellStrategy:
         # Busca lucro mínimo configurado
         min_profit = self.get_min_profit_for_symbol(symbol)
         
-        # Vende se lucro atual >= lucro mínimo
-        return profit_percent >= min_profit
+        # Decide se vende
+        if profit_percent >= min_profit:
+            return True, {
+                "should_sell": True,
+                "reason": f"Lucro de {profit_percent:.2f}% atingiu meta de {min_profit:.1f}%",
+                "current_profit": profit_percent,
+                "target_profit": min_profit,
+                "sell_percentage": 100  # Vende tudo
+            }
+        else:
+            return False, {
+                "should_sell": False,
+                "reason": f"Lucro de {profit_percent:.2f}% ainda não atingiu meta de {min_profit:.1f}%",
+                "current_profit": profit_percent,
+                "target_profit": min_profit
+            }
+    
+    # ========================================================================
+    # VENDA PROGRESSIVA (SCALING OUT)
+    # ========================================================================
+    
+    def set_mode_progressive(self):
+        """Ativa modo de venda progressiva"""
+        self.mode = 'progressive'
+    
+    def set_mode_simple(self):
+        """Ativa modo de venda simples (padrão)"""
+        self.mode = 'simple'
     
     def calculate_sell_targets(self, buy_price: float, amount_bought: float, 
                                investment_value: float) -> List[Dict]:
         """
-        Calcula os alvos de venda em múltiplos níveis
+        Calcula os alvos de venda em múltiplos níveis (VENDA PROGRESSIVA)
         
         Args:
             buy_price: Preço de compra
@@ -99,16 +194,15 @@ class SellStrategy:
             Lista de alvos de venda com preços e quantidades
         """
         targets = []
-        remaining_amount = amount_bought
         
-        for level in self.sell_levels:
+        for level in self.progressive_levels:
             # Calcula quantidade a vender neste nível
             sell_amount = (amount_bought * level["percentage"]) / 100
             
             # Calcula preço alvo (buy_price + lucro%)
             target_price = buy_price * (1 + level["profit_target"] / 100)
             
-            # Calcula valor que vai receber (ANTES de arredondar para evitar perda de precisão)
+            # Calcula valor que vai receber
             usdt_received = sell_amount * target_price
             
             # Calcula lucro deste nível
@@ -123,23 +217,21 @@ class SellStrategy:
                 "sell_amount": round(sell_amount, 8),
                 "target_price": round(target_price, 8),
                 "profit_target_pct": profit_pct,
-                "usdt_received": round(usdt_received, 2),  # Arredonda DEPOIS do cálculo
-                "profit_usdt": round(profit_usdt, 2),  # Arredonda DEPOIS do cálculo
+                "usdt_received": round(usdt_received, 2),
+                "profit_usdt": round(profit_usdt, 2),
                 "invested_in_level": round(invested_in_level, 2),
                 "executed": False,
                 "execution_date": None,
                 "actual_price": None,
                 "actual_profit": None
             })
-            
-            remaining_amount -= sell_amount
         
         return targets
     
     def check_sell_opportunities(self, current_price: float, 
                                   sell_targets: List[Dict]) -> List[Dict]:
         """
-        Verifica quais níveis de venda devem ser executados
+        Verifica quais níveis de venda devem ser executados (VENDA PROGRESSIVA)
         
         Args:
             current_price: Preço atual do ativo
@@ -148,200 +240,70 @@ class SellStrategy:
         Returns:
             Lista de vendas a executar
         """
-        to_execute = []
+        opportunities = []
         
         for target in sell_targets:
-            # Se já foi executado, pula
-            if target["executed"]:
+            # Pula níveis já executados
+            if target.get('executed', False):
                 continue
             
-            # Se preço atual >= preço alvo, vende
-            if current_price >= target["target_price"]:
-                target["actual_price"] = current_price
-                target["actual_profit"] = round(
-                    (target["sell_amount"] * current_price) - target["invested_in_level"], 
-                    2
-                )
-                to_execute.append(target)
+            # Verifica se preço atual atingiu o alvo
+            if current_price >= target['target_price']:
+                opportunities.append(target)
         
-        return to_execute
+        return opportunities
     
-    def execute_sell_level(self, symbol: str, target: Dict, 
-                           actual_price: float, mexc_client) -> Dict:
+    # ========================================================================
+    # STOP LOSS
+    # ========================================================================
+    
+    def should_stop_loss(self, current_price: float, buy_price: float) -> tuple[bool, Dict]:
         """
-        Executa venda de um nível específico
+        Verifica se deve acionar stop loss
         
         Args:
-            symbol: Par de Tranding (ex: REKT/USDT)
-            target: Alvo de venda a executar
-            actual_price: Preço atual
-            mexc_client: Cliente MEXC para executar ordem
+            current_price: Preço atual
+            buy_price: Preço de compra
         
         Returns:
-            Resultado da execução
+            (deve_stop_loss, info_dict)
         """
-        try:
-            # Cria ordem de venda no mercado
-            order = mexc_client.client.create_market_sell_order(
-                symbol, 
-                float(target["sell_amount"])
-            )
-            
-            target["executed"] = True
-            target["execution_date"] = datetime.now()
-            target["actual_price"] = actual_price
-            
-            # Calcula lucro real
-            usdt_received = target["sell_amount"] * actual_price
-            target["actual_profit"] = round(
-                usdt_received - target["invested_in_level"], 
-                2
-            )
-            
-            return {
-                "success": True,
-                "level": target["level"],
-                "name": target["name"],
-                "amount_sold": target["sell_amount"],
-                "sell_price": actual_price,
-                "usdt_received": round(usdt_received, 2),
-                "profit": target["actual_profit"],
-                "order_id": order.get("id"),
-                "message": f" {target['name']} executado com sucesso!"
+        if buy_price <= 0:
+            return False, {"should_stop": False, "reason": "Preço de compra inválido"}
+        
+        # Calcula prejuízo percentual
+        loss_percent = ((current_price - buy_price) / buy_price) * 100
+        
+        # Verifica se atingiu stop loss
+        if loss_percent <= self.stop_loss_percent:
+            return True, {
+                "should_stop": True,
+                "reason": f"Stop loss ativado: prejuízo de {loss_percent:.2f}%",
+                "current_loss": loss_percent,
+                "stop_loss_threshold": self.stop_loss_percent
             }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "level": target["level"],
-                "name": target["name"],
-                "error": str(e),
-                "message": f" Erro ao executar {target['name']}: {e}"
-            }
-    
-    def get_summary(self, sell_targets: List[Dict], 
-                    buy_price: float, current_price: float) -> Dict:
-        """
-        Retorna um resumo do progresso das vendas
-        """
-        executed = [t for t in sell_targets if t["executed"]]
-        pending = [t for t in sell_targets if not t["executed"]]
         
-        total_invested = sum(t["invested_in_level"] for t in sell_targets)
-        total_profit_expected = sum(t["profit_usdt"] for t in sell_targets)
-        realized_profit = sum(t.get("actual_profit", 0) for t in executed)
-        pending_profit = sum(t["profit_usdt"] for t in pending)
-        
-        # Calcula progresso
-        current_profit_pct = ((current_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0
-        
-        return {
-            "buy_price": buy_price,
-            "current_price": current_price,
-            "current_profit_pct": round(current_profit_pct, 2),
-            "total_invested": round(total_invested, 2),
-            "total_levels": len(sell_targets),
-            "executed_levels": len(executed),
-            "pending_levels": len(pending),
-            "realized_profit": round(realized_profit, 2),
-            "pending_profit": round(pending_profit, 2),
-            "total_expected_profit": round(total_profit_expected, 2),
-            "completion_pct": round((len(executed) / len(sell_targets)) * 100, 2) if sell_targets else 0,
-            "next_target": pending[0] if pending else None
+        return False, {
+            "should_stop": False,
+            "reason": "Prejuízo ainda não atingiu stop loss",
+            "current_loss": loss_percent,
+            "stop_loss_threshold": self.stop_loss_percent
         }
-
-
-def example_usage():
-    """
-    Exemplo de uso da estratégia de venda progressiva
-    """
-    print("\n" + "="*80)
-    print(" ESTRATÉGIA DE VENDA PROGRESSIVA - Exemplo")
-    print("="*80)
     
-    # Configuração da compra
-    buy_price = 0.00000135
-    amount_bought = 74074074.07
-    investment = 100.00
+    # ========================================================================
+    # INFORMAÇÕES
+    # ========================================================================
     
-    print(f"\n POSIÇÃO COMPRADA:")
-    print(f"   Preço de Compra: ${buy_price:.8f}")
-    print(f"   Quantidade: {amount_bought:,.2f} REKT")
-    print(f"   Investimento: ${investment:.2f} USDT")
-    
-    # Cria estratégia
-    strategy = SellStrategy()
-    
-    # Calcula alvos de venda
-    sell_targets = strategy.calculate_sell_targets(buy_price, amount_bought, investment)
-    
-    print(f"\n ALVOS DE VENDA CONFIGURADOS:")
-    print(f"   {'Nível':<8} {'% Venda':<10} {'Preço Alvo':<15} {'Lucro':<10} {'Recebe':<12} {'Lucro $':<10}")
-    print(f"   {'-'*75}")
-    
-    for target in sell_targets:
-        print(f"   Nível {target['level']:<3} "
-              f"{target['sell_percentage']}%{' '*6} "
-              f"${target['target_price']:.8f}  "
-              f"+{target['profit_target_pct']}%{' '*5} "
-              f"${target['usdt_received']:.2f}{' '*5} "
-              f"+${target['profit_usdt']:.2f}")
-    
-    # Simula diferentes cenários de preço
-    scenarios = [
-        (0.00000140, "Pequena alta +3.7%"),
-        (0.00000142, "Alta de +5.2%"),
-        (0.00000149, "Alta de +10.4%"),
-        (0.00000156, "Alta de +15.6%")
-    ]
-    
-    for current_price, description in scenarios:
-        print(f"\n{'='*80}")
-        print(f"📈 CENÁRIO: Preço atual ${current_price:.8f} ({description})")
-        print(f"{'='*80}")
-        
-        # Verifica oportunidades de venda
-        to_sell = strategy.check_sell_opportunities(current_price, sell_targets)
-        
-        if to_sell:
-            print(f"\n VENDAS A EXECUTAR: {len(to_sell)} nível(is)")
-            for target in to_sell:
-                print(f"\n    {target['name']}")
-                print(f"      Vender: {target['sell_amount']:,.2f} REKT ({target['sell_percentage']}%)")
-                print(f"      Preço: ${target['actual_price']:.8f}")
-                print(f"      Receber: ${target['sell_amount'] * target['actual_price']:.2f} USDT")
-                print(f"      Lucro: +${target['actual_profit']:.2f} USDT")
-                
-                # Marca como executado para próxima iteração
-                target["executed"] = True
-        else:
-            print(f"\n⏸️  Nenhuma venda a executar neste preço")
-        
-        # Mostra resumo
-        summary = strategy.get_summary(sell_targets, buy_price, current_price)
-        print(f"\n RESUMO DA POSIÇÃO:")
-        print(f"   Lucro Atual: {summary['current_profit_pct']:+.2f}%")
-        print(f"   Níveis Executados: {summary['executed_levels']}/{summary['total_levels']}")
-        print(f"   Lucro Realizado: ${summary['realized_profit']:.2f}")
-        print(f"   Lucro Pendente: ${summary['pending_profit']:.2f}")
-        print(f"   Progresso: {summary['completion_pct']:.1f}%")
-        
-        if summary['next_target']:
-            next_t = summary['next_target']
-            print(f"\n    Próximo Alvo: {next_t['name']}")
-            print(f"      Preço: ${next_t['target_price']:.8f} (+{next_t['profit_target_pct']}%)")
-            print(f"      Lucro Esperado: +${next_t['profit_usdt']:.2f}")
-    
-    print("\n" + "="*80)
-    print("💡 VANTAGENS DA VENDA PROGRESSIVA:")
-    print("="*80)
-    print(" Garante lucro em diferentes níveis")
-    print(" Não precisa acertar o topo do mercado")
-    print(" Reduz risco de perder todos os ganhos")
-    print(" Maximiza lucro se continuar subindo")
-    print(" Realiza lucros parciais no caminho")
-    print("="*80 + "\n")
-
-
-if __name__ == "__main__":
-    example_usage()
+    def get_strategy_info(self) -> Dict:
+        """Retorna informações da estratégia de venda"""
+        return {
+            "mode": self.mode,
+            "quick_sell": {
+                "enabled": self.quick_sell_enabled,
+                "profit_target": self.quick_profit_target,
+                "stop_loss": self.stop_loss_percent
+            },
+            "progressive_sell": {
+                "levels": self.progressive_levels
+            }
+        }

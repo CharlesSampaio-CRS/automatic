@@ -299,11 +299,37 @@ def get_price_by_path(pair):
 @app.route("/prices", methods=["POST"])
 def get_multiple_prices():
     """
-    Get prices for multiple trading pairs
+    Get complete information for multiple trading pairs including prices, variations, 
+    market info, icons and links
     
     Body JSON:
     {
         "pairs": ["REKT/USDT", "BTC/USDT", "ETH/USDT"]
+    }
+    
+    Returns:
+    {
+        "prices": {
+            "BTC/USDT": {
+                "symbol": "BTC/USDT",
+                "base_asset": "BTC",
+                "quote_asset": "USDT",
+                "full_name": "Bitcoin",
+                "current_price": 92600.00,
+                "bid": 92599.99,
+                "ask": 92600.00,
+                "high_24h": 94068.00,
+                "low_24h": 90877.98,
+                "volume_24h": 10874.27,
+                "quote_volume_24h": 1008168136.93,
+                "change_24h_percent": -1.26,
+                "change_4h_percent": -2.5,
+                "change_1h_percent": -0.5,
+                "timestamp": 1764902958578,
+                "market_url": "https://www.mexc.com/exchange/BTC_USDT",
+                "icon_url": "https://assets.coingecko.com/coins/images/1/small/bitcoin.png"
+            }
+        }
     }
     """
     try:
@@ -330,13 +356,27 @@ def get_multiple_prices():
             )
         
         mexc_client = MexcClient(API_KEY, API_SECRET)
+        
+        # Carrega informações de mercados para obter fullName
+        mexc_client.client.load_markets()
+        
         prices = {}
         errors = {}
         
         for pair in pairs:
             try:
                 pair_formatted = pair.upper()
+                
+                # Busca ticker com informações de preço
                 ticker = mexc_client.client.fetch_ticker(pair_formatted)
+                
+                # Busca informações do mercado (fullName, etc)
+                market_info = mexc_client.client.market(pair_formatted)
+                
+                # Extrai base asset (ex: BTC de BTC/USDT)
+                base_asset = market_info.get('base', '')
+                quote_asset = market_info.get('quote', '')
+                full_name = market_info.get('info', {}).get('fullName', base_asset)
                 
                 # Calcula variações em múltiplos timeframes
                 variation_1h = mexc_client.get_variation_1h(pair_formatted)
@@ -347,16 +387,49 @@ def get_multiple_prices():
                 if variation_24h is None:
                     variation_24h = ticker.get('percentage')
                 
+                # Gera URLs
+                market_url = f"https://www.mexc.com/exchange/{base_asset}_{quote_asset}"
+                
+                # Mapeamento de ícones para moedas populares (CoinGecko)
+                # Para ícones reais, seria ideal integrar com CoinGecko API
+                icon_mapping = {
+                    'BTC': 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',
+                    'ETH': 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+                    'BNB': 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
+                    'XRP': 'https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png',
+                    'SOL': 'https://assets.coingecko.com/coins/images/4128/small/solana.png',
+                    'USDC': 'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png',
+                    'ADA': 'https://assets.coingecko.com/coins/images/975/small/cardano.png',
+                    'DOGE': 'https://assets.coingecko.com/coins/images/5/small/dogecoin.png',
+                    'TRX': 'https://assets.coingecko.com/coins/images/1094/small/tron-logo.png',
+                    'DOT': 'https://assets.coingecko.com/coins/images/12171/small/polkadot.png',
+                    'MATIC': 'https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png',
+                    'AVAX': 'https://assets.coingecko.com/coins/images/12559/small/coin-round-red.png',
+                    'LINK': 'https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png',
+                    'SHIB': 'https://assets.coingecko.com/coins/images/11939/small/shiba.png',
+                }
+                
+                # Usa ícone mapeado ou fallback genérico
+                icon_url = icon_mapping.get(base_asset, f"https://www.mexc.com/api/platform/spot/market/symbol/icon?symbol={base_asset}")
+                
                 prices[pair_formatted] = {
-                    "current": ticker.get('last'),
+                    "symbol": pair_formatted,
+                    "base_asset": base_asset,
+                    "quote_asset": quote_asset,
+                    "full_name": full_name,
+                    "current_price": ticker.get('last'),
                     "bid": ticker.get('bid'),
                     "ask": ticker.get('ask'),
                     "high_24h": ticker.get('high'),
                     "low_24h": ticker.get('low'),
                     "volume_24h": ticker.get('baseVolume'),
+                    "quote_volume_24h": ticker.get('quoteVolume'),
                     "change_24h_percent": variation_24h,
+                    "change_4h_percent": variation_4h,
                     "change_1h_percent": variation_1h,
-                    "change_4h_percent": variation_4h
+                    "timestamp": ticker.get('timestamp'),
+                    "market_url": market_url,
+                    "icon_url": icon_url
                 }
             except Exception as e:
                 errors[pair_formatted if 'pair_formatted' in locals() else pair] = str(e)
