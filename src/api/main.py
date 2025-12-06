@@ -13,6 +13,7 @@ from datetime import datetime
 from src.security.encryption import get_encryption_service
 from src.validators.exchange_validator import ExchangeValidator
 from src.services.balance_service import get_balance_service
+from src.services.balance_history_service import get_balance_history_service
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -61,7 +62,7 @@ def index():
             'exchanges_available': '/api/v1/exchanges/available?user_id=<user_id>',
             'exchanges_link': '/api/v1/exchanges/link',
             'exchanges_linked': '/api/v1/exchanges/linked?user_id=<user_id>',
-            'exchanges_unlink': '/api/v1/exchanges/unlink/<link_id>',
+            'exchanges_unlink': '/api/v1/exchanges/unlink',
             'balances': '/api/v1/balances?user_id=<user_id>&force_refresh=<true|false>',
             'balances_clear_cache': '/api/v1/balances/clear-cache'
         }
@@ -74,7 +75,8 @@ def index():
 @app.route('/api/v1/exchanges/available', methods=['GET'])
 def get_available_exchanges():
     """
-    Lista exchanges disponíveis para vinculação (excluindo as já vinculadas)
+    Lista exchanges disponíveis para vinculação (NOVA ESTRUTURA COM ARRAY)
+    Exclui as exchanges já vinculadas pelo usuário
     
     Query Params:
         user_id (required): ID do usuário para filtrar exchanges já vinculadas
@@ -107,20 +109,22 @@ def get_available_exchanges():
             }
         ).sort('nome', 1))
         
-        # Buscar exchanges já vinculadas pelo usuário
-        linked_exchange_ids = [
-            link['exchange_id'] 
-            for link in db.user_exchanges.find(
-                {'user_id': user_id, 'is_active': True},
-                {'exchange_id': 1}
-            )
-        ]
+        # Buscar documento do usuário e extrair exchange_ids vinculadas ativas
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
+        
+        linked_exchange_ids = []
+        if user_doc and 'exchanges' in user_doc:
+            linked_exchange_ids = [
+                ex['exchange_id']
+                for ex in user_doc['exchanges']
+                if ex.get('is_active', True)
+            ]
         
         # Filtrar exchanges que NÃO estão vinculadas
         exchanges = [
             ex for ex in exchanges 
             if ObjectId(ex['_id']) not in linked_exchange_ids
-            ]
+        ]
         
         # Converte ObjectId para string
         for exchange in exchanges:
@@ -245,59 +249,91 @@ def link_exchange():
         print(f"✅ Credentials encrypted")
         
         # ============================================
-        # SALVAR NO BANCO DE DADOS
+        # SALVAR NO BANCO DE DADOS (NOVA ESTRUTURA COM ARRAY)
         # ============================================
         
-        # Verificar se usuário já tem essa exchange vinculada
-        existing_link = db.user_exchanges.find_one({
-            'user_id': user_id,
-            'exchange_id': ObjectId(exchange_id)
-        })
+        # Busca ou cria documento do usuário
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
         
-        if existing_link:
-            # Atualizar credenciais existentes
-            result = db.user_exchanges.update_one(
-                {'_id': existing_link['_id']},
-                {
-                    '$set': {
-                        'api_key_encrypted': encrypted_credentials['api_key'],
-                        'api_secret_encrypted': encrypted_credentials['api_secret'],
-                        'passphrase_encrypted': encrypted_credentials.get('passphrase'),
-                        'updated_at': datetime.utcnow(),
-                        'is_active': True
-                    }
-                }
-            )
+        # Prepara dados da exchange para adicionar/atualizar no array
+        exchange_data = {
+            'exchange_id': ObjectId(exchange_id),
+            'api_key_encrypted': encrypted_credentials['api_key'],
+            'api_secret_encrypted': encrypted_credentials['api_secret'],
+            'passphrase_encrypted': encrypted_credentials.get('passphrase'),
+            'is_active': True,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        
+        if user_doc:
+            # Verifica se exchange já está no array
+            exchange_exists = False
+            if 'exchanges' in user_doc:
+                for idx, ex in enumerate(user_doc['exchanges']):
+                    if ex['exchange_id'] == ObjectId(exchange_id):
+                        exchange_exists = True
+                        # Atualiza exchange existente no array
+                        db.user_exchanges.update_one(
+                            {'user_id': user_id},
+                            {
+                                '$set': {
+                                    f'exchanges.{idx}.api_key_encrypted': encrypted_credentials['api_key'],
+                                    f'exchanges.{idx}.api_secret_encrypted': encrypted_credentials['api_secret'],
+                                    f'exchanges.{idx}.passphrase_encrypted': encrypted_credentials.get('passphrase'),
+                                    f'exchanges.{idx}.is_active': True,
+                                    f'exchanges.{idx}.updated_at': datetime.utcnow(),
+                                    'updated_at': datetime.utcnow()
+                                }
+                            }
+                        )
+                        
+                        return jsonify({
+                            'success': True,
+                            'message': f'{exchange["nome"]} credentials updated successfully',
+                            'user_id': user_id,
+                            'exchange': {
+                                'id': str(exchange['_id']),
+                                'name': exchange['nome'],
+                                'icon': exchange['icon']
+                            }
+                        }), 200
             
-            return jsonify({
-                'success': True,
-                'message': f'{exchange["nome"]} credentials updated successfully',
-                'link_id': str(existing_link['_id']),
-                'exchange': {
-                    'id': str(exchange['_id']),
-                    'name': exchange['nome'],
-                    'icon': exchange['icon']
-                }
-            }), 200
+            # Se exchange não existe no array, adiciona
+            if not exchange_exists:
+                db.user_exchanges.update_one(
+                    {'user_id': user_id},
+                    {
+                        '$push': {'exchanges': exchange_data},
+                        '$set': {'updated_at': datetime.utcnow()}
+                    }
+                )
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'{exchange["nome"]} linked successfully',
+                    'user_id': user_id,
+                    'exchange': {
+                        'id': str(exchange['_id']),
+                        'name': exchange['nome'],
+                        'icon': exchange['icon']
+                    }
+                }), 201
         else:
-            # Criar novo vínculo
-            new_link = {
+            # Cria novo documento do usuário com array contendo a primeira exchange
+            new_user_doc = {
                 'user_id': user_id,
-                'exchange_id': ObjectId(exchange_id),
-                'api_key_encrypted': encrypted_credentials['api_key'],
-                'api_secret_encrypted': encrypted_credentials['api_secret'],
-                'passphrase_encrypted': encrypted_credentials.get('passphrase'),
-                'is_active': True,
+                'exchanges': [exchange_data],
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow()
             }
             
-            result = db.user_exchanges.insert_one(new_link)
+            db.user_exchanges.insert_one(new_user_doc)
             
             return jsonify({
                 'success': True,
                 'message': f'{exchange["nome"]} linked successfully',
-                'link_id': str(result.inserted_id),
+                'user_id': user_id,
                 'exchange': {
                     'id': str(exchange['_id']),
                     'name': exchange['nome'],
@@ -316,7 +352,7 @@ def link_exchange():
 @app.route('/api/v1/exchanges/linked', methods=['GET'])
 def get_linked_exchanges():
     """
-    Lista exchanges vinculadas por um usuário
+    Lista exchanges vinculadas por um usuário (NOVA ESTRUTURA COM ARRAY)
     
     Query Params:
         user_id (required): ID do usuário
@@ -335,29 +371,25 @@ def get_linked_exchanges():
                 'error': 'user_id is required as query parameter'
             }), 400
         
-        # Buscar exchanges vinculadas ativas
-        user_links = list(db.user_exchanges.find(
-            {'user_id': user_id, 'is_active': True},
-            {
-                '_id': 1,
-                'exchange_id': 1,
-                'created_at': 1,
-                'updated_at': 1
-            }
-        ).sort('created_at', -1))
+        # Buscar documento do usuário com array de exchanges
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
         
-        if not user_links:
+        if not user_doc or 'exchanges' not in user_doc or not user_doc['exchanges']:
             return jsonify({
                 'success': True,
                 'total': 0,
                 'exchanges': []
             }), 200
         
-        # Buscar informações das exchanges
+        # Buscar informações das exchanges ativas
         linked_exchanges = []
-        for link in user_links:
+        for ex_data in user_doc['exchanges']:
+            # Filtra apenas exchanges ativas
+            if not ex_data.get('is_active', True):
+                continue
+                
             exchange = db.exchanges.find_one(
-                {'_id': link['exchange_id']},
+                {'_id': ex_data['exchange_id']},
                 {
                     '_id': 1,
                     'nome': 1,
@@ -370,15 +402,14 @@ def get_linked_exchanges():
             
             if exchange:
                 linked_exchanges.append({
-                    'link_id': str(link['_id']),
                     'exchange_id': str(exchange['_id']),
                     'name': exchange['nome'],
                     'icon': exchange['icon'],
                     'url': exchange['url'],
                     'ccxt_id': exchange['ccxt_id'],
                     'country': exchange['pais_de_origem'],
-                    'linked_at': link['created_at'].isoformat(),
-                    'updated_at': link['updated_at'].isoformat()
+                    'linked_at': ex_data['created_at'].isoformat(),
+                    'updated_at': ex_data['updated_at'].isoformat()
                 })
         
         return jsonify({
@@ -395,44 +426,79 @@ def get_linked_exchanges():
             'details': str(e)
         }), 500
 
-@app.route('/api/v1/exchanges/unlink/<link_id>', methods=['DELETE'])
-def unlink_exchange(link_id):
+@app.route('/api/v1/exchanges/unlink', methods=['DELETE'])
+def unlink_exchange():
     """
-    Remove vínculo de uma exchange (soft delete)
+    Remove vínculo de uma exchange (NOVA ESTRUTURA COM ARRAY)
     
-    Path Params:
-        link_id: ID do vínculo
+    Request Body:
+        {
+            "user_id": "string",
+            "exchange_id": "string (MongoDB _id)"
+        }
     
     Returns:
         200: Exchange desvinculada com sucesso
+        400: Dados inválidos
         404: Vínculo não encontrado
         500: Erro ao desvincular
     """
     try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request body is required'
+            }), 400
+        
+        user_id = data.get('user_id')
+        exchange_id = data.get('exchange_id')
+        
+        if not user_id or not exchange_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id and exchange_id are required'
+            }), 400
+        
         # Validar ObjectId
         try:
-            link_object_id = ObjectId(link_id)
+            exchange_object_id = ObjectId(exchange_id)
         except:
             return jsonify({
                 'success': False,
-                'error': 'Invalid link_id format'
+                'error': 'Invalid exchange_id format'
             }), 400
         
-        # Buscar vínculo
-        link = db.user_exchanges.find_one({'_id': link_object_id})
+        # Buscar documento do usuário
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
         
-        if not link:
+        if not user_doc or 'exchanges' not in user_doc:
             return jsonify({
                 'success': False,
-                'error': 'Link not found'
+                'error': 'User has no linked exchanges'
             }), 404
         
-        # Soft delete - marcar como inativo
+        # Encontrar índice da exchange no array
+        exchange_index = None
+        for idx, ex in enumerate(user_doc['exchanges']):
+            if ex['exchange_id'] == exchange_object_id:
+                exchange_index = idx
+                break
+        
+        if exchange_index is None:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found in user\'s linked exchanges'
+            }), 404
+        
+        # Soft delete - marcar exchange como inativa no array
         result = db.user_exchanges.update_one(
-            {'_id': link_object_id},
+            {'user_id': user_id},
             {
                 '$set': {
-                    'is_active': False,
+                    f'exchanges.{exchange_index}.is_active': False,
+                    f'exchanges.{exchange_index}.updated_at': datetime.utcnow(),
                     'updated_at': datetime.utcnow()
                 }
             }
@@ -440,7 +506,7 @@ def unlink_exchange(link_id):
         
         if result.modified_count > 0:
             # Buscar nome da exchange
-            exchange = db.exchanges.find_one({'_id': link['exchange_id']})
+            exchange = db.exchanges.find_one({'_id': exchange_object_id})
             
             return jsonify({
                 'success': True,
@@ -474,6 +540,7 @@ def get_balances():
     Query Params:
         user_id (required): ID do usuário
         force_refresh (optional): true para ignorar cache
+        currency (optional): 'brl' para incluir conversão BRL
     
     Returns:
         200: Balances agregados
@@ -493,18 +560,20 @@ def get_balances():
         force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
         use_cache = not force_refresh
         
+        # Check if BRL conversion requested
+        include_brl = request.args.get('currency', '').lower() == 'brl'
+        
         # Get balance service
         balance_service = get_balance_service(db)
         
         # Fetch balances (parallelized internally)
-        print(f"🔄 Fetching balances for user {user_id} (cache: {use_cache})...")
-        result = balance_service.fetch_all_balances(user_id, use_cache=use_cache)
+        print(f"🔄 Fetching balances for user {user_id} (cache: {use_cache}, include_brl: {include_brl})...")
+        result = balance_service.fetch_all_balances(user_id, use_cache=use_cache, include_brl=include_brl)
         
-        if result['success']:
-            print(f"✅ Balances fetched: {result['total_exchanges']} exchanges, "
-                  f"{result['total_unique_tokens']} tokens, "
-                  f"time: {result['fetch_time']}s, "
-                  f"from_cache: {result.get('from_cache', False)}")
+        num_exchanges = len(result.get('exchanges', []))
+        num_tokens = len(result.get('tokens', {}))
+        from_cache = result.get('meta', {}).get('from_cache', False)
+        print(f"✅ Balances fetched: {num_exchanges} exchanges, {num_tokens} tokens, from_cache: {from_cache}")
         
         return jsonify(result), 200
         
@@ -553,6 +622,206 @@ def clear_balance_cache():
         
     except Exception as e:
         print(f"❌ Error clearing cache: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+# ======================
+# BALANCE HISTORY
+# ======================
+
+@app.route('/api/v1/balances/history', methods=['GET'])
+def get_balance_history():
+    """
+    Get balance history for a user
+    
+    Query Parameters:
+        - user_id (required): User ID
+        - limit (optional): Max records to return (default 100)
+        - skip (optional): Records to skip for pagination (default 0)
+    
+    Returns:
+        200: List of balance snapshots
+        400: Missing user_id
+        500: Server error
+    """
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required'
+            }), 400
+        
+        limit = int(request.args.get('limit', 100))
+        skip = int(request.args.get('skip', 0))
+        
+        # Get history
+        history_service = get_balance_history_service(db)
+        snapshots = history_service.get_history(user_id, limit=limit, skip=skip)
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'count': len(snapshots),
+            'limit': limit,
+            'skip': skip,
+            'snapshots': snapshots
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': 'Invalid limit or skip parameter'
+        }), 400
+    except Exception as e:
+        print(f"❌ Error getting balance history: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/balances/history/latest', methods=['GET'])
+def get_latest_snapshot():
+    """
+    Get the latest balance snapshot for a user
+    
+    Query Parameters:
+        - user_id (required): User ID
+    
+    Returns:
+        200: Latest snapshot
+        400: Missing user_id
+        404: No snapshots found
+        500: Server error
+    """
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required'
+            }), 400
+        
+        history_service = get_balance_history_service(db)
+        snapshot = history_service.get_latest_snapshot(user_id)
+        
+        if not snapshot:
+            return jsonify({
+                'success': False,
+                'error': 'No snapshots found for this user'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'snapshot': snapshot
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error getting latest snapshot: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/balances/history/token/<token>', methods=['GET'])
+def get_token_history(token):
+    """
+    Get historical data for a specific token
+    
+    Path Parameters:
+        - token: Token symbol (e.g., BTC, ETH)
+    
+    Query Parameters:
+        - user_id (required): User ID
+        - limit (optional): Max records (default 100)
+    
+    Returns:
+        200: Token history
+        400: Missing user_id
+        500: Server error
+    """
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required'
+            }), 400
+        
+        limit = int(request.args.get('limit', 100))
+        
+        history_service = get_balance_history_service(db)
+        history = history_service.get_token_history(user_id, token.upper(), limit=limit)
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'token': token.upper(),
+            'count': len(history),
+            'history': history
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': 'Invalid limit parameter'
+        }), 400
+    except Exception as e:
+        print(f"❌ Error getting token history: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/balances/history/evolution', methods=['GET'])
+def get_portfolio_evolution():
+    """
+    Get portfolio value evolution over time
+    
+    Query Parameters:
+        - user_id (required): User ID
+        - days (optional): Days to look back (default 30)
+    
+    Returns:
+        200: Time series data with summary stats
+        400: Missing user_id
+        500: Server error
+    """
+    try:
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required'
+            }), 400
+        
+        days = int(request.args.get('days', 30))
+        
+        history_service = get_balance_history_service(db)
+        evolution = history_service.get_portfolio_evolution(user_id, days=days)
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'evolution': evolution
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': 'Invalid days parameter'
+        }), 400
+    except Exception as e:
+        print(f"❌ Error getting portfolio evolution: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',

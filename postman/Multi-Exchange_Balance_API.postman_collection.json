@@ -1,0 +1,634 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"name": "Multi-Exchange Balance API",
+		"description": "API para gerenciar múltiplas exchanges e agregação de saldos com preços em USD/BRL e histórico",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Verifica status da API e conexão com MongoDB"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Exchange Management",
+			"item": [
+				{
+					"name": "List Available Exchanges",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/exchanges/available?user_id={{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"exchanges",
+								"available"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								}
+							]
+						},
+						"description": "Lista exchanges disponíveis, filtrando aquelas já linkadas pelo usuário"
+					},
+					"response": []
+				},
+				{
+					"name": "List Linked Exchanges",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/exchanges/linked?user_id={{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"exchanges",
+								"linked"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								}
+							]
+						},
+						"description": "Lista exchanges já linkadas pelo usuário (sem expor credenciais)"
+					},
+					"response": []
+				},
+				{
+					"name": "Link Exchange - MEXC",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"exchange_id\": \"mexc\",\n  \"api_key\": \"YOUR_MEXC_API_KEY\",\n  \"api_secret\": \"YOUR_MEXC_API_SECRET\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/exchanges/link",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"exchanges",
+								"link"
+							]
+						},
+						"description": "Linka uma exchange MEXC - valida credenciais com CCXT e encripta antes de salvar"
+					},
+					"response": []
+				},
+				{
+					"name": "Link Exchange - Binance",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"exchange_id\": \"binance\",\n  \"api_key\": \"YOUR_BINANCE_API_KEY\",\n  \"api_secret\": \"YOUR_BINANCE_API_SECRET\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/exchanges/link",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"exchanges",
+								"link"
+							]
+						},
+						"description": "Linka uma exchange Binance - valida credenciais com CCXT e encripta antes de salvar"
+					},
+					"response": []
+				},
+				{
+					"name": "Link Exchange - Coinbase",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"exchange_id\": \"coinbase\",\n  \"api_key\": \"YOUR_COINBASE_API_KEY\",\n  \"api_secret\": \"YOUR_COINBASE_API_SECRET\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/exchanges/link",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"exchanges",
+								"link"
+							]
+						},
+						"description": "Linka uma exchange Coinbase - valida credenciais com CCXT e encripta antes de salvar"
+					},
+					"response": []
+				},
+				{
+					"name": "Unlink Exchange",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/exchanges/unlink/:link_id",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"exchanges",
+								"unlink",
+								":link_id"
+							],
+							"variable": [
+								{
+									"key": "link_id",
+									"value": "LINK_ID_HERE",
+									"description": "ID do link da exchange (obtido do endpoint linked)"
+								}
+							]
+						},
+						"description": "Remove o link de uma exchange (soft delete)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Balance Management",
+			"item": [
+				{
+					"name": "Get Balances",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances?user_id={{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								},
+								{
+									"key": "force_refresh",
+									"value": "false",
+									"description": "Force refresh (ignore cache)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Busca saldos de todas exchanges linkadas com preços em USD/BRL (usa cache de 2 minutos)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Balances - Force Refresh",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances?user_id={{user_id}}&force_refresh=true",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								},
+								{
+									"key": "force_refresh",
+									"value": "true",
+									"description": "Force refresh (ignore cache)"
+								}
+							]
+						},
+						"description": "Busca saldos forçando refresh (ignora cache)"
+					},
+					"response": []
+				},
+				{
+					"name": "Clear Balance Cache",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/clear-cache",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"clear-cache"
+							]
+						},
+						"description": "Limpa o cache de balances de um usuário específico (ou todos se não passar user_id)"
+					},
+					"response": []
+				},
+				{
+					"name": "Clear All Cache",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/clear-cache",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"clear-cache"
+							]
+						},
+						"description": "Limpa todo o cache de balances"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Balance History",
+			"item": [
+				{
+					"name": "Get Balance History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/history?user_id={{user_id}}&limit=10&skip=0",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"history"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Max records to return (default 100)"
+								},
+								{
+									"key": "skip",
+									"value": "0",
+									"description": "Records to skip for pagination (default 0)"
+								}
+							]
+						},
+						"description": "Retorna histórico de snapshots de balance com paginação"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Latest Snapshot",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/history/latest?user_id={{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"history",
+								"latest"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								}
+							]
+						},
+						"description": "Retorna o snapshot mais recente de balance"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Token History - USDT",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/history/token/USDT?user_id={{user_id}}&limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"history",
+								"token",
+								"USDT"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Max records (default 100)"
+								}
+							]
+						},
+						"description": "Retorna histórico de um token específico (USDT)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Token History - BTC",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/history/token/BTC?user_id={{user_id}}&limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"history",
+								"token",
+								"BTC"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Max records (default 100)"
+								}
+							]
+						},
+						"description": "Retorna histórico de um token específico (BTC)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Token History - ETH",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/history/token/ETH?user_id={{user_id}}&limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"history",
+								"token",
+								"ETH"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Max records (default 100)"
+								}
+							]
+						},
+						"description": "Retorna histórico de um token específico (ETH)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Portfolio Evolution - 7 days",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/history/evolution?user_id={{user_id}}&days=7",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"history",
+								"evolution"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								},
+								{
+									"key": "days",
+									"value": "7",
+									"description": "Days to look back (default 30)"
+								}
+							]
+						},
+						"description": "Retorna evolução do portfolio nos últimos 7 dias com estatísticas"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Portfolio Evolution - 30 days",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/history/evolution?user_id={{user_id}}&days=30",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"history",
+								"evolution"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								},
+								{
+									"key": "days",
+									"value": "30",
+									"description": "Days to look back (default 30)"
+								}
+							]
+						},
+						"description": "Retorna evolução do portfolio nos últimos 30 dias com estatísticas"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Portfolio Evolution - 90 days",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/balances/history/evolution?user_id={{user_id}}&days=90",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"balances",
+								"history",
+								"evolution"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "User ID (required)"
+								},
+								{
+									"key": "days",
+									"value": "90",
+									"description": "Days to look back (default 30)"
+								}
+							]
+						},
+						"description": "Retorna evolução do portfolio nos últimos 90 dias com estatísticas"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "charles_test_user",
+			"type": "string"
+		}
+	]
+}
