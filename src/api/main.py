@@ -57,9 +57,10 @@ def index():
         'version': '1.0.0',
         'endpoints': {
             'health': '/health',
-            'exchanges_available': '/api/v1/exchanges/available',
+            'exchanges_available': '/api/v1/exchanges/available?user_id=<user_id>',
             'exchanges_link': '/api/v1/exchanges/link',
-            'exchanges_linked': '/api/v1/exchanges/linked (em desenvolvimento)',
+            'exchanges_linked': '/api/v1/exchanges/linked?user_id=<user_id>',
+            'exchanges_unlink': '/api/v1/exchanges/unlink/<link_id>',
             'balances': '/api/v1/balances (em desenvolvimento)'
         }
     }, 200
@@ -71,13 +72,25 @@ def index():
 @app.route('/api/v1/exchanges/available', methods=['GET'])
 def get_available_exchanges():
     """
-    Lista todas as exchanges disponíveis para vinculação
+    Lista exchanges disponíveis para vinculação (excluindo as já vinculadas)
+    
+    Query Params:
+        user_id (required): ID do usuário para filtrar exchanges já vinculadas
     
     Returns:
-        200: Lista de exchanges disponíveis
+        200: Lista de exchanges disponíveis (não vinculadas)
+        400: user_id não fornecido
         500: Erro ao buscar exchanges
     """
     try:
+        # user_id é obrigatório
+        user_id = request.args.get('user_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required as query parameter'
+            }), 400
+        
         # Busca exchanges ativas no banco
         exchanges = list(db.exchanges.find(
             {'is_active': True},
@@ -91,6 +104,21 @@ def get_available_exchanges():
                 'ccxt_id': 1
             }
         ).sort('nome', 1))
+        
+        # Buscar exchanges já vinculadas pelo usuário
+        linked_exchange_ids = [
+            link['exchange_id'] 
+            for link in db.user_exchanges.find(
+                {'user_id': user_id, 'is_active': True},
+                {'exchange_id': 1}
+            )
+        ]
+        
+        # Filtrar exchanges que NÃO estão vinculadas
+        exchanges = [
+            ex for ex in exchanges 
+            if ObjectId(ex['_id']) not in linked_exchange_ids
+            ]
         
         # Converte ObjectId para string
         for exchange in exchanges:
@@ -277,6 +305,153 @@ def link_exchange():
         
     except Exception as e:
         print(f"❌ Error linking exchange: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+@app.route('/api/v1/exchanges/linked', methods=['GET'])
+def get_linked_exchanges():
+    """
+    Lista exchanges vinculadas por um usuário
+    
+    Query Params:
+        user_id (required): ID do usuário
+    
+    Returns:
+        200: Lista de exchanges vinculadas (sem expor credenciais)
+        400: user_id não fornecido
+        500: Erro ao buscar exchanges
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required as query parameter'
+            }), 400
+        
+        # Buscar exchanges vinculadas ativas
+        user_links = list(db.user_exchanges.find(
+            {'user_id': user_id, 'is_active': True},
+            {
+                '_id': 1,
+                'exchange_id': 1,
+                'created_at': 1,
+                'updated_at': 1
+            }
+        ).sort('created_at', -1))
+        
+        if not user_links:
+            return jsonify({
+                'success': True,
+                'total': 0,
+                'exchanges': []
+            }), 200
+        
+        # Buscar informações das exchanges
+        linked_exchanges = []
+        for link in user_links:
+            exchange = db.exchanges.find_one(
+                {'_id': link['exchange_id']},
+                {
+                    '_id': 1,
+                    'nome': 1,
+                    'icon': 1,
+                    'url': 1,
+                    'ccxt_id': 1,
+                    'pais_de_origem': 1
+                }
+            )
+            
+            if exchange:
+                linked_exchanges.append({
+                    'link_id': str(link['_id']),
+                    'exchange_id': str(exchange['_id']),
+                    'name': exchange['nome'],
+                    'icon': exchange['icon'],
+                    'url': exchange['url'],
+                    'ccxt_id': exchange['ccxt_id'],
+                    'country': exchange['pais_de_origem'],
+                    'linked_at': link['created_at'].isoformat(),
+                    'updated_at': link['updated_at'].isoformat()
+                })
+        
+        return jsonify({
+            'success': True,
+            'total': len(linked_exchanges),
+            'exchanges': linked_exchanges
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error fetching linked exchanges: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+@app.route('/api/v1/exchanges/unlink/<link_id>', methods=['DELETE'])
+def unlink_exchange(link_id):
+    """
+    Remove vínculo de uma exchange (soft delete)
+    
+    Path Params:
+        link_id: ID do vínculo
+    
+    Returns:
+        200: Exchange desvinculada com sucesso
+        404: Vínculo não encontrado
+        500: Erro ao desvincular
+    """
+    try:
+        # Validar ObjectId
+        try:
+            link_object_id = ObjectId(link_id)
+        except:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid link_id format'
+            }), 400
+        
+        # Buscar vínculo
+        link = db.user_exchanges.find_one({'_id': link_object_id})
+        
+        if not link:
+            return jsonify({
+                'success': False,
+                'error': 'Link not found'
+            }), 404
+        
+        # Soft delete - marcar como inativo
+        result = db.user_exchanges.update_one(
+            {'_id': link_object_id},
+            {
+                '$set': {
+                    'is_active': False,
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            # Buscar nome da exchange
+            exchange = db.exchanges.find_one({'_id': link['exchange_id']})
+            
+            return jsonify({
+                'success': True,
+                'message': f'{exchange["nome"]} unlinked successfully'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to unlink exchange'
+            }), 500
+        
+    except Exception as e:
+        print(f"❌ Error unlinking exchange: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
