@@ -12,6 +12,7 @@ from datetime import datetime
 # Import local modules
 from src.security.encryption import get_encryption_service
 from src.validators.exchange_validator import ExchangeValidator
+from src.services.balance_service import get_balance_service
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -61,7 +62,8 @@ def index():
             'exchanges_link': '/api/v1/exchanges/link',
             'exchanges_linked': '/api/v1/exchanges/linked?user_id=<user_id>',
             'exchanges_unlink': '/api/v1/exchanges/unlink/<link_id>',
-            'balances': '/api/v1/balances (em desenvolvimento)'
+            'balances': '/api/v1/balances?user_id=<user_id>&force_refresh=<true|false>',
+            'balances_clear_cache': '/api/v1/balances/clear-cache'
         }
     }, 200
 
@@ -452,6 +454,105 @@ def unlink_exchange(link_id):
         
     except Exception as e:
         print(f"❌ Error unlinking exchange: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+# ============================================
+# ENDPOINTS DE BALANCES
+# ============================================
+
+@app.route('/api/v1/balances', methods=['GET'])
+def get_balances():
+    """
+    Busca saldos de todas as exchanges vinculadas ao usuário
+    Executa chamadas em paralelo para alta performance
+    Retorna: total geral, total por exchange, total por token
+    
+    Query Params:
+        user_id (required): ID do usuário
+        force_refresh (optional): true para ignorar cache
+    
+    Returns:
+        200: Balances agregados
+        400: user_id não fornecido
+        500: Erro ao buscar balances
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required as query parameter'
+            }), 400
+        
+        # Check if force refresh
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        use_cache = not force_refresh
+        
+        # Get balance service
+        balance_service = get_balance_service(db)
+        
+        # Fetch balances (parallelized internally)
+        print(f"🔄 Fetching balances for user {user_id} (cache: {use_cache})...")
+        result = balance_service.fetch_all_balances(user_id, use_cache=use_cache)
+        
+        if result['success']:
+            print(f"✅ Balances fetched: {result['total_exchanges']} exchanges, "
+                  f"{result['total_unique_tokens']} tokens, "
+                  f"time: {result['fetch_time']}s, "
+                  f"from_cache: {result.get('from_cache', False)}")
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"❌ Error fetching balances: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+@app.route('/api/v1/balances/clear-cache', methods=['POST'])
+def clear_balance_cache():
+    """
+    Limpa o cache de balances
+    
+    Request Body (optional):
+        {
+            "user_id": "string"  // If provided, clears only this user's cache
+        }
+    
+    Returns:
+        200: Cache cleared
+        500: Error clearing cache
+    """
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        
+        balance_service = get_balance_service(db)
+        balance_service.clear_cache(user_id)
+        
+        if user_id:
+            message = f"Cache cleared for user {user_id}"
+        else:
+            message = "All balance cache cleared"
+        
+        print(f"🗑️  {message}")
+        
+        return jsonify({
+            'success': True,
+            'message': message
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error clearing cache: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
