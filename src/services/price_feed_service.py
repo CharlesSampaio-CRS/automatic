@@ -8,6 +8,7 @@ import requests
 from typing import Dict, List, Tuple
 from datetime import datetime, timedelta
 import time
+from src.utils.formatting import format_price, format_usd, format_brl
 
 
 class PriceCache:
@@ -55,6 +56,9 @@ class PriceFeedService:
     # CoinGecko API endpoints (free tier)
     COINGECKO_API = "https://api.coingecko.com/api/v3"
     AWESOMEAPI_USDBRL = "https://economia.awesomeapi.com.br/last/USD-BRL"
+    
+    # Trust Wallet Assets (GitHub)
+    TRUSTWALLET_BASE = "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains"
     
     # Common token mappings to CoinGecko IDs
     TOKEN_MAPPINGS = {
@@ -143,6 +147,57 @@ class PriceFeedService:
             CoinGecko ID or None if not found
         """
         return self.TOKEN_MAPPINGS.get(token.upper())
+    
+    def get_token_icon(self, symbol: str, contract_address: str = None, network: str = None) -> str:
+        """
+        Get token icon URL from Trust Wallet Assets using contract address
+        
+        Args:
+            symbol: Token symbol (e.g., 'BTC', 'REKTCOIN')
+            contract_address: Smart contract address (required)
+            network: Blockchain network (e.g., 'ethereum', 'bsc')
+            
+        Returns:
+            Icon URL or None if not found
+        """
+        symbol = symbol.upper()
+        cache_key = f"icon_{symbol}_{contract_address}"
+        
+        # Check cache first
+        is_cached, cached_url = _price_cache.get(cache_key)
+        if is_cached:
+            return cached_url
+        
+        # Try Trust Wallet Assets (if contract address provided)
+        if contract_address and network:
+            # Map network names to Trust Wallet blockchain names
+            network_map = {
+                'ethereum': 'ethereum',
+                'eth': 'ethereum',
+                'bsc': 'smartchain',
+                'binance-smart-chain': 'smartchain',
+                'polygon': 'polygon',
+                'matic': 'polygon'
+            }
+            
+            tw_network = network_map.get(network.lower())
+            if tw_network:
+                # Checksum the address (capitalize first 2 chars after 0x)
+                if contract_address.startswith('0x'):
+                    checksummed = '0x' + contract_address[2:]
+                    icon_url = f"{self.TRUSTWALLET_BASE}/{tw_network}/assets/{checksummed}/logo.png"
+                    
+                    # Verify if URL exists
+                    try:
+                        response = requests.head(icon_url, timeout=3)
+                        if response.status_code == 200:
+                            _price_cache.set(cache_key, icon_url)
+                            return icon_url
+                    except:
+                        pass
+        
+        # No icon found
+        return None
     
     def fetch_prices_batch(self, tokens: List[str]) -> Dict[str, float]:
         """
@@ -263,10 +318,10 @@ class PriceFeedService:
                         value_usd = ex_info['amount'] * price_usd
                         exchange_total_usd += value_usd
             
-            exchange['total_usd'] = round(exchange_total_usd, 2)
+            exchange['total_usd'] = format_usd(exchange_total_usd)
             
             if include_brl:
-                exchange['total_brl'] = round(exchange_total_usd * usd_brl_rate, 2)
+                exchange['total_brl'] = format_brl(exchange_total_usd * usd_brl_rate)
         
         # Update tokens summary
         total_value_usd = 0.0
@@ -275,12 +330,12 @@ class PriceFeedService:
             price_usd = prices.get(token, 0.0)
             value_usd = info['total'] * price_usd
             
-            info['price_usd'] = round(price_usd, 6)
-            info['value_usd'] = round(value_usd, 2)
+            info['price_usd'] = format_price(price_usd)
+            info['value_usd'] = format_usd(value_usd)
             
             if include_brl:
                 value_brl = value_usd * usd_brl_rate
-                info['value_brl'] = round(value_brl, 2)
+                info['value_brl'] = format_brl(value_brl)
             
             total_value_usd += value_usd
         

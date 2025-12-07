@@ -798,6 +798,217 @@ curl "http://localhost:5000/api/v1/balances/history/evolution?user_id=charles_te
 
 ---
 
+## 12. Informações Completas de Token por Exchange
+
+### Endpoint
+```
+GET /api/v1/exchanges/{exchange_id}/token/{symbol}
+```
+
+### Descrição
+Busca **todas as informações de um token diretamente de uma exchange específica**, incluindo:
+- ✅ Preço em tempo real e variações (1h, 4h, 24h)
+- ✅ Endereço do contrato na blockchain (quando disponível)
+- ✅ Saldo do usuário (se `user_id` fornecido)
+- ✅ Limites e precisão do mercado
+- ✅ Volume e dados de mercado
+- ✅ **100% dos dados vêm da exchange** (sem APIs externas)
+
+### Parâmetros Path
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|-----------|------|-------------|-----------|
+| exchange_id | string | Sim | MongoDB ObjectId da exchange vinculada |
+| symbol | string | Sim | Símbolo do token (ex: BTC, REKTCOIN, ETH) |
+
+### Parâmetros Query
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|-----------|------|-------------|-----------|
+| user_id | string | Não | ID do usuário (para incluir saldo pessoal) |
+| quote | string | Não | Moeda de cotação: USD ou USDT (padrão: USDT) |
+
+### Exemplo de Requisição
+```bash
+# Bitcoin na MEXC
+curl "http://localhost:5000/api/v1/exchanges/693481148b0a41e8b6acb07b/token/BTC"
+
+# REKTCOIN com dados do usuário
+curl "http://localhost:5000/api/v1/exchanges/693481148b0a41e8b6acb07b/token/REKTCOIN?user_id=charles_test_user"
+
+# Ethereum na Binance
+curl "http://localhost:5000/api/v1/exchanges/693481148b0a41e8b6acb073/token/ETH?user_id=charles_test_user&quote=USD"
+```
+
+### Resposta de Sucesso - Bitcoin (200)
+```json
+{
+  "symbol": "BTC",
+  "quote": "USDT",
+  "pair": "BTC/USDT",
+  "exchange": {
+    "id": "693481148b0a41e8b6acb07b",
+    "name": "MEXC",
+    "ccxt_id": "mexc"
+  },
+  "price": {
+    "current": "89448.62",
+    "bid": "89474.99",
+    "ask": "89476.33",
+    "high_24h": "89850.00",
+    "low_24h": "88667.71"
+  },
+  "volume": {
+    "base_24h": "4386.15",
+    "quote_24h": "392621597.83"
+  },
+  "change": {
+    "1h": {
+      "price_change": "-88.21",
+      "price_change_percent": "-0.20"
+    },
+    "4h": {
+      "price_change": "-261.18",
+      "price_change_percent": "-0.29"
+    },
+    "24h": {
+      "price_change": "-871.57",
+      "price_change_percent": "-0.97"
+    }
+  },
+  "contract": null,
+  "user_balance": null,
+  "market_info": {
+    "active": false,
+    "precision": {
+      "amount": 1e-08,
+      "price": 0.01
+    },
+    "limits": {
+      "amount": {
+        "min": 1e-06,
+        "max": null
+      },
+      "cost": {
+        "min": 1.0,
+        "max": 4000000.0
+      }
+    }
+  },
+  "timestamp": 1765116802973,
+  "datetime": "2025-12-07T14:13:22.973Z"
+}
+```
+
+### Resposta de Sucesso - REKTCOIN com Contrato (200)
+```json
+{
+  "symbol": "REKTCOIN",
+  "quote": "USDT",
+  "pair": "REKTCOIN/USDT",
+  "exchange": {
+    "id": "693481148b0a41e8b6acb07b",
+    "name": "MEXC",
+    "ccxt_id": "mexc"
+  },
+  "price": {
+    "current": "0.0000003000",
+    "bid": "0.0000003000",
+    "ask": "0.0000003000",
+    "high_24h": "0.0000003200",
+    "low_24h": "0.0000002800"
+  },
+  "volume": {
+    "base_24h": "15577381089.00",
+    "quote_24h": "4701.33"
+  },
+  "change": {
+    "1h": {
+      "price_change": "0.0000000000",
+      "price_change_percent": "0.00"
+    },
+    "4h": {
+      "price_change": "0.0000000000",
+      "price_change_percent": "0.00"
+    },
+    "24h": {
+      "price_change": "0.0000000100",
+      "price_change_percent": "2.07"
+    }
+  },
+  "contract": {
+    "address": "0xdd3B11eF34cd511a2DA159034a05fcb94D806686"
+  },
+  "user_balance": {
+    "amount": "454135458.97",
+    "value_usd": "135.02",
+    "last_updated": "2025-12-07T14:00:00.000000"
+  },
+  "market_info": {
+    "active": true,
+    "precision": {
+      "amount": 1.0,
+      "price": 1e-11
+    },
+    "limits": {
+      "amount": {
+        "min": 0.0,
+        "max": null
+      },
+      "cost": {
+        "min": 1.0,
+        "max": 2000000.0
+      }
+    }
+  },
+  "timestamp": 1765116786684,
+  "datetime": "2025-12-07T14:13:06.684Z"
+}
+```
+
+### Resposta de Erro - Exchange Não Encontrada (404)
+```json
+{
+  "success": false,
+  "error": "Exchange not found: 693481148b0a41e8b6acb999"
+}
+```
+
+### Resposta de Erro - Token Não Encontrado (404)
+```json
+{
+  "success": false,
+  "error": "Token INVALIDTOKEN not found on MEXC",
+  "details": "MEXC does not have market for INVALIDTOKEN"
+}
+      "price_change_percent": -0.19
+    },
+    "4h": {
+      "price_change": -396.70,
+      "price_change_percent": -0.44
+    },
+    "24h": {
+      "price_change": -754.02,
+      "price_change_percent": -0.84
+    }
+  },
+  "icon_url": "https://coin-images.coingecko.com/coins/images/1/small/bitcoin.png",
+  "token_verified": true,
+  "timestamp": 1765115252419,
+  "datetime": "2025-12-07T13:47:32.419Z"
+}
+```
+
+---
+
+## Estrutura de Dados
+
+### Exchange Object
+      "price_change": -166.16,
+      "price_change_percent": -0.19
+    },
+    "4h": {
+      "price_change": -396.70,
+---
+
 ## Estrutura de Dados
 
 ### Exchange Object
@@ -846,6 +1057,73 @@ curl "http://localhost:5000/api/v1/balances/history/evolution?user_id=charles_te
 }
 ```
 
+### Token Info Object
+```typescript
+{
+  symbol: string;           // Símbolo do token
+  quote: string;            // Moeda de cotação (USD ou USDT)
+  pair: string;             // Par de negociação (ex: BTC/USDT)
+  exchange: {
+    id: string;             // MongoDB ObjectId da exchange
+    name: string;           // Nome da exchange
+    ccxt_id: string;        // ID CCXT da exchange
+  };
+  price: {
+    current: string;        // Preço atual (10 decimais se < 1, 2 decimais se >= 1)
+    bid: string;            // Preço de compra
+    ask: string;            // Preço de venda
+    high_24h: string;       // Máxima 24h
+    low_24h: string;        // Mínima 24h
+  };
+  volume: {
+    base_24h: string;       // Volume base 24h (2 decimais como string)
+    quote_24h: string;      // Volume quote 24h (2 decimais como string)
+  };
+  change: {
+    '1h': {
+      price_change: string;         // Variação de preço (10 decimais se < 1, 2 decimais se >= 1)
+      price_change_percent: string; // Variação percentual (2 decimais)
+    } | null;
+    '4h': {
+      price_change: string;
+      price_change_percent: string;
+    } | null;
+    '24h': {
+      price_change: string;
+      price_change_percent: string;
+    } | null;
+  };
+  contract: {
+    address?: string;       // Endereço do contrato na blockchain
+    network?: string;       // Rede/blockchain (quando disponível)
+  } | null;
+  user_balance: {
+    amount: string;         // Quantidade que o usuário possui (10 decimais se < 1, 2 decimais se >= 1)
+    value_usd: string;      // Valor em USD (2 decimais)
+    last_updated: string;   // Data da última atualização
+  } | null;                 // null se user_id não fornecido
+  market_info: {
+    active: boolean;        // Se o mercado está ativo
+    precision: {
+      amount: number;       // Precisão para quantidade
+      price: number;        // Precisão para preço
+    };
+    limits: {
+      amount: {
+        min: number;
+        max: number | null;
+      };
+      cost: {
+        min: number;
+        max: number | null;
+      };
+    };
+  };
+  timestamp: number;        // Unix timestamp
+  datetime: string;         // ISO 8601 datetime
+}
+```
+
 ---
 
 ## Códigos de Status HTTP
@@ -878,6 +1156,22 @@ curl "http://localhost:5000/api/v1/balances/history/evolution?user_id=charles_te
 7. **Criptografia**: As credenciais (API keys e secrets) são armazenadas criptografadas no MongoDB usando Fernet.
 
 8. **Rate Limiting**: Algumas exchanges têm rate limiting. Use cache quando possível.
+
+9. **Endereços de Contratos**: O endpoint `/api/v1/exchanges/{exchange_id}/token/{symbol}` retorna endereços de contratos quando disponíveis nos metadados da exchange. Nem todos os tokens têm essa informação.
+
+10. **Variações de Preço**: As variações (1h, 4h, 24h) são calculadas usando dados OHLCV diretamente das exchanges. Podem retornar `null` se os dados não estiverem disponíveis para o período específico.
+
+11. **Dados 100% da Exchange**: Todos os dados do endpoint de token info vêm diretamente da exchange via CCXT. Não há dependências de APIs externas (CoinGecko, CoinMarketCap, etc).
+
+12. **Saldo do Usuário**: O campo `user_balance` só é incluído quando o parâmetro `user_id` é fornecido e o usuário possui saldo do token na exchange.
+
+13. **Formatação de Preços**: Todos os valores numéricos relacionados a preços, volumes e saldos são retornados como **strings formatadas** para evitar notação científica e garantir precisão. A formatação é **inteligente e adaptativa**:
+    - **Valores < 1**: 10 casas decimais (ex: `"0.0000003000"` para tokens de baixo valor)
+    - **Valores >= 1**: 2 casas decimais (ex: `"89448.62"` para BTC, `"454135458.97"` para quantidades grandes)
+    - **Volumes e USD**: sempre 2 casas decimais (ex: `"135.02"`)
+    - **Percentuais**: sempre 2 casas decimais (ex: `"-0.97"`)
+    
+    No frontend, você pode converter para número com `parseFloat()` se necessário, mas a string garante que valores muito pequenos sejam exibidos corretamente sem notação científica.
 
 ---
 
@@ -921,13 +1215,22 @@ curl "http://localhost:5000/api/v1/exchanges/linked?user_id=charles_test_user"
 # 5. Buscar saldos
 curl "http://localhost:5000/api/v1/balances?user_id=charles_test_user"
 
-# 6. Buscar histórico
+# 6. Buscar informações completas de um token na exchange
+curl "http://localhost:5000/api/v1/exchanges/693481148b0a41e8b6acb07b/token/BTC?user_id=charles_test_user"
+
+# 7. Buscar informações de token com contrato
+curl "http://localhost:5000/api/v1/exchanges/693481148b0a41e8b6acb07b/token/REKTCOIN?user_id=charles_test_user"
+
+# 8. Buscar histórico
 curl "http://localhost:5000/api/v1/balances/history?user_id=charles_test_user&limit=10"
 
-# 7. Buscar evolução (últimos 7 dias)
+# 9. Buscar evolução (últimos 7 dias)
 curl "http://localhost:5000/api/v1/balances/history/evolution?user_id=charles_test_user&period=7d"
 
-# 8. Desvincular exchange
+# 10. Buscar histórico de token específico
+curl "http://localhost:5000/api/v1/balances/history/token/REKTCOIN?user_id=charles_test_user"
+
+# 11. Desvincular exchange
 curl -X DELETE http://localhost:5000/api/v1/exchanges/unlink \
   -H "Content-Type: application/json" \
   -d '{

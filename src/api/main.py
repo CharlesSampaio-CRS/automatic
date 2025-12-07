@@ -3,6 +3,7 @@ API Principal - Sistema de Trading Multi-Exchange
 """
 
 import os
+import ccxt
 from flask import Flask, jsonify, request
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -14,6 +15,7 @@ from src.security.encryption import get_encryption_service
 from src.validators.exchange_validator import ExchangeValidator
 from src.services.balance_service import get_balance_service
 from src.services.balance_history_service import get_balance_history_service
+from src.utils.formatting import format_price, format_usd, format_percent
 
 # Carrega variáveis de ambiente
 load_dotenv()
@@ -822,6 +824,233 @@ def get_portfolio_evolution():
         }), 400
     except Exception as e:
         print(f"❌ Error getting portfolio evolution: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+@app.route('/api/v1/exchanges/<exchange_id>/token/<symbol>', methods=['GET'])
+def get_exchange_token_info(exchange_id, symbol):
+    """
+    Busca informações completas de um token direto da exchange,
+    incluindo contratos, variações de preço e dados do balanço do usuário.
+    
+    Query Parameters:
+    - user_id: ID do usuário (opcional, para incluir dados do balanço)
+    - quote: Moeda de cotação (USD ou USDT, padrão: USDT)
+    """
+    try:
+        symbol = symbol.upper()
+        user_id = request.args.get('user_id')
+        quote = request.args.get('quote', 'USDT').upper()
+        
+        print(f"📊 Fetching {symbol} info from exchange {exchange_id}")
+        
+        # Buscar informações da exchange no banco
+        from bson import ObjectId
+        exchange_doc = db.exchanges.find_one({'_id': ObjectId(exchange_id)})
+        
+        if not exchange_doc:
+            return jsonify({
+                'success': False,
+                'error': f'Exchange not found: {exchange_id}'
+            }), 404
+        
+        ccxt_id = exchange_doc.get('ccxt_id')
+        exchange_name = exchange_doc.get('nome', ccxt_id)
+        
+        print(f"🏦 Exchange: {exchange_name} ({ccxt_id})")
+        
+        # Validar se exchange é suportada pelo CCXT
+        if ccxt_id not in ccxt.exchanges:
+            return jsonify({
+                'success': False,
+                'error': f'Exchange {ccxt_id} not supported by CCXT'
+            }), 400
+        
+        # Inicializar exchange
+        exchange_class = getattr(ccxt, ccxt_id)
+        exchange = exchange_class({'enableRateLimit': True})
+        
+        # Carregar mercados
+        exchange.load_markets()
+        
+        # Tentar diferentes pares
+        pair = None
+        for q in [quote, 'USDT', 'USD', 'BTC']:
+            test_pair = f"{symbol}/{q}"
+            if test_pair in exchange.markets:
+                pair = test_pair
+                quote = q
+                break
+        
+        if not pair:
+            return jsonify({
+                'success': False,
+                'error': f'Token {symbol} not found on {exchange_name}',
+                'details': f'{exchange_name} does not have market for {symbol}'
+            }), 404
+        
+        print(f"💱 Trading pair: {pair}")
+        
+        # 1. Buscar ticker (preço atual, volume, high/low)
+        ticker = exchange.fetch_ticker(pair)
+        
+        # 2. Buscar OHLCV para calcular variações
+        def calculate_price_change(timeframe, limit=2):
+            try:
+                ohlcv = exchange.fetch_ohlcv(pair, timeframe, limit=limit)
+                if len(ohlcv) >= 2:
+                    old_price = ohlcv[0][4]  # Close do período anterior
+                    current_price = ohlcv[-1][4]  # Close atual
+                    change = current_price - old_price
+                    change_percent = (change / old_price * 100) if old_price > 0 else 0
+                    return {
+                        'price_change': format_price(change),
+                        'price_change_percent': format_percent(change_percent)
+                    }
+            except:
+                pass
+            return None
+        
+        ohlcv_1h = calculate_price_change('1h')
+        ohlcv_4h = calculate_price_change('4h')
+        ohlcv_24h = None
+        
+        if ticker.get('percentage') is not None:
+            ohlcv_24h = {
+                'price_change': format_price(ticker.get('change', 0)),
+                'price_change_percent': format_percent(ticker.get('percentage', 0))
+            }
+        
+        # 3. Buscar informações do mercado (inclui contratos quando disponível)
+        market_info = exchange.markets.get(pair, {})
+        
+        # 4. Buscar dados de contrato/endereço
+        contract_info = {}
+        if 'info' in market_info:
+            info = market_info['info']
+            # Diferentes exchanges armazenam contratos de formas diferentes
+            contract_address = (
+                info.get('contractAddress') or 
+                info.get('contract_address') or
+                info.get('address') or
+                info.get('tokenAddress') or
+                info.get('token_address')
+            )
+            if contract_address:
+                contract_info['address'] = contract_address
+            
+            # Buscar blockchain/network
+            network = (
+                info.get('network') or
+                info.get('chain') or
+                info.get('blockchain') or
+                market_info.get('network')
+            )
+            if network:
+                contract_info['network'] = network
+        
+        # 5. Buscar dados do balanço do usuário (se user_id fornecido)
+        user_balance = None
+        if user_id:
+            user_doc = db.users.find_one({'user_id': user_id})
+            if user_doc and 'linked_exchanges' in user_doc:
+                for linked_ex in user_doc['linked_exchanges']:
+                    if str(linked_ex.get('exchange_id')) == exchange_id:
+                        # Buscar último balanço
+                        from src.services.balance_service import BalanceService
+                        balance_service = BalanceService()
+                        
+                        try:
+                            balances = balance_service.get_balances(user_id, force_refresh=False)
+                            for ex_balance in balances.get('exchanges', []):
+                                if str(ex_balance.get('exchange_id')) == exchange_id:
+                                    tokens = ex_balance.get('tokens', {})
+                                    if symbol in tokens:
+                                        token_data = tokens[symbol]
+                                        # Convert strings back to float if needed
+                                        amount_val = token_data.get('amount', 0)
+                                        if isinstance(amount_val, str):
+                                            amount_val = float(amount_val)
+                                        value_val = token_data.get('value_usd', 0)
+                                        if isinstance(value_val, str):
+                                            value_val = float(value_val)
+                                        
+                                        user_balance = {
+                                            'amount': format_price(amount_val),
+                                            'value_usd': format_usd(value_val),
+                                            'last_updated': balances.get('timestamp')
+                                        }
+                                    break
+                        except Exception as e:
+                            print(f"⚠️  Could not fetch user balance: {e}")
+        
+        # 6. Buscar ícone do token
+        icon_url = None
+        try:
+            from src.services.price_feed_service import PriceFeedService
+            price_service = PriceFeedService()
+            icon_url = price_service.get_token_icon(
+                symbol=symbol,
+                contract_address=contract_info.get('address') if contract_info else None,
+                network=contract_info.get('network') if contract_info else None
+            )
+            if icon_url:
+                print(f"🖼️  Icon found: {icon_url}")
+        except Exception as e:
+            print(f"⚠️  Could not fetch token icon: {e}")
+        
+        # Construir resposta completa
+        result = {
+            'symbol': symbol,
+            'quote': quote,
+            'pair': pair,
+            'exchange': {
+                'id': exchange_id,
+                'name': exchange_name,
+                'ccxt_id': ccxt_id
+            },
+            'icon_url': icon_url,
+            'price': {
+                'current': format_price(ticker.get('last', 0)),
+                'bid': format_price(ticker.get('bid', 0)),
+                'ask': format_price(ticker.get('ask', 0)),
+                'high_24h': format_price(ticker.get('high', 0)),
+                'low_24h': format_price(ticker.get('low', 0))
+            },
+            'volume': {
+                'base_24h': format_usd(ticker.get('baseVolume', 0)),
+                'quote_24h': format_usd(ticker.get('quoteVolume', 0))
+            },
+            'change': {
+                '1h': ohlcv_1h,
+                '4h': ohlcv_4h,
+                '24h': ohlcv_24h
+            },
+            'contract': contract_info if contract_info else None,
+            'user_balance': user_balance,
+            'market_info': {
+                'active': market_info.get('active', True),
+                'precision': {
+                    'amount': market_info.get('precision', {}).get('amount'),
+                    'price': market_info.get('precision', {}).get('price')
+                },
+                'limits': market_info.get('limits', {})
+            },
+            'timestamp': ticker.get('timestamp'),
+            'datetime': ticker.get('datetime')
+        }
+        
+        print(f"✅ Complete token info fetched: {symbol} = ${result['price']['current']}")
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"❌ Error getting exchange token info: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': 'Internal server error',
