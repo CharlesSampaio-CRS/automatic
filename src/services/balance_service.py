@@ -12,6 +12,7 @@ import time
 from src.security.encryption import get_encryption_service
 from src.services.price_feed_service import get_price_feed_service
 from src.services.balance_history_service import get_balance_history_service
+from src.utils.formatting import format_price, format_amount, format_usd, format_brl, format_rate
 
 
 class BalanceCache:
@@ -159,8 +160,8 @@ class BalanceService:
                         
                         processed_balances[currency] = {
                             'total': total,
-                            'price_usd': round(price_usd, 6),
-                            'value_usd': round(value_usd, 2)
+                            'price_usd': format_price(price_usd),
+                            'value_usd': format_usd(value_usd)
                         }
             
             fetch_time = time.time() - start_time
@@ -168,7 +169,7 @@ class BalanceService:
             result.update({
                 'success': True,
                 'balances': processed_balances,
-                'total_usd': round(total_usd, 2),
+                'total_usd': format_usd(total_usd),
                 'fetch_time': round(fetch_time, 3)
             })
             
@@ -283,24 +284,31 @@ class BalanceService:
             exchange_tokens = {}
             
             if exchange_result['success']:
-                total_portfolio_usd += exchange_result.get('total_usd', 0.0)
+                # Convert string back to float for calculations
+                exchange_total = float(exchange_result.get('total_usd', '0.0'))
+                total_portfolio_usd += exchange_total
                 
                 # Process tokens for this exchange
                 for currency, amounts in exchange_result['balances'].items():
+                    # Convert strings back to float for comparison
+                    amount_val = amounts['total']
+                    price_val = float(amounts.get('price_usd', '0.0'))
+                    value_val = float(amounts.get('value_usd', '0.0'))
+                    
                     token_info = {
-                        'amount': round(amounts['total'], 8),
-                        'price_usd': round(amounts.get('price_usd', 0.0), 6),
-                        'value_usd': round(amounts.get('value_usd', 0.0), 2)
+                        'amount': format_amount(amount_val),
+                        'price_usd': format_price(price_val),
+                        'value_usd': format_usd(value_val)
                     }
                     
                     # Only include tokens with value > 0 or if price is unknown but has balance
-                    if token_info['value_usd'] > 0 or (token_info['price_usd'] == 0 and token_info['amount'] > 0):
+                    if value_val > 0 or (price_val == 0 and amount_val > 0):
                         exchange_tokens[currency] = token_info
                 
-                # Sort tokens by value_usd (descending)
+                # Sort tokens by value_usd (descending) - convert string to float for sorting
                 exchange_tokens = dict(sorted(
                     exchange_tokens.items(),
-                    key=lambda x: x[1]['value_usd'],
+                    key=lambda x: float(x[1]['value_usd']),
                     reverse=True
                 ))
             
@@ -309,7 +317,7 @@ class BalanceService:
                 'exchange_id': exchange_result.get('exchange_id', ''),
                 'name': exchange_result['exchange_name'],
                 'success': exchange_result['success'],
-                'total_usd': round(exchange_result.get('total_usd', 0.0), 2),
+                'total_usd': format_usd(exchange_total) if exchange_result['success'] else format_usd(0),
                 'tokens': exchange_tokens
             }
             
@@ -324,7 +332,7 @@ class BalanceService:
             'user_id': user_id,
             'timestamp': datetime.utcnow().isoformat(),
             'summary': {
-                'total_usd': round(total_portfolio_usd, 2),
+                'total_usd': format_usd(total_portfolio_usd),
                 'exchanges_count': len([e for e in exchanges_summary if e['success']])
             },
             'exchanges': exchanges_summary,
@@ -338,18 +346,22 @@ class BalanceService:
             price_feed = get_price_feed_service()
             usd_brl_rate = price_feed.get_usd_brl_rate()
             
-            result['summary']['total_brl'] = round(total_portfolio_usd * usd_brl_rate, 2)
-            result['summary']['usd_brl_rate'] = round(usd_brl_rate, 4)
+            result['summary']['total_brl'] = format_brl(total_portfolio_usd * usd_brl_rate)
+            result['summary']['usd_brl_rate'] = format_rate(usd_brl_rate)
             
             # Add BRL to exchanges
             for exchange in result['exchanges']:
-                if exchange.get('total_usd', 0) > 0:
-                    exchange['total_brl'] = round(exchange['total_usd'] * usd_brl_rate, 2)
+                exchange_usd = float(exchange.get('total_usd', '0'))
+                if exchange_usd > 0:
+                    exchange['total_brl'] = format_brl(exchange_usd * usd_brl_rate)
             
-            # Add BRL to tokens
-            for token_info in result['tokens'].values():
-                if token_info.get('value_usd', 0) > 0:
-                    token_info['value_brl'] = round(token_info['value_usd'] * usd_brl_rate, 2)
+            # Add BRL to tokens in each exchange
+            for exchange in result['exchanges']:
+                if 'tokens' in exchange:
+                    for token_info in exchange['tokens'].values():
+                        token_usd = float(token_info.get('value_usd', '0'))
+                        if token_usd > 0:
+                            token_info['value_brl'] = format_brl(token_usd * usd_brl_rate)
         
         # Save to history (only for non-cached fetches)
         history_service = get_balance_history_service(self.db)

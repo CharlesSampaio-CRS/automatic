@@ -6,6 +6,7 @@ Stores snapshots in MongoDB for historical analysis
 from datetime import datetime
 from typing import Dict
 from bson import ObjectId
+from src.utils.formatting import format_usd, format_brl, format_percent
 
 
 class BalanceHistoryService:
@@ -60,22 +61,26 @@ class BalanceHistoryService:
             return None
         
         try:
+            # Convert string values back to float for storage
+            summary_usd = float(balance_data.get('summary', {}).get('total_usd', '0.0'))
+            summary_brl = float(balance_data.get('summary', {}).get('total_brl', '0.0'))
+            
             # Prepare simplified snapshot document
             snapshot = {
                 'user_id': balance_data['user_id'],
                 'timestamp': datetime.utcnow(),
                 
                 # Valores totais do summary
-                'total_usd': round(balance_data.get('summary', {}).get('total_usd', 0.0), 2),
-                'total_brl': round(balance_data.get('summary', {}).get('total_brl', 0.0), 2),
+                'total_usd': format_usd(summary_usd),
+                'total_brl': format_brl(summary_brl),
                 
                 # Resumo por exchange (apenas valores essenciais)
                 'exchanges': [
                     {
                         'exchange_id': ex.get('exchange_id', ''),
                         'exchange_name': ex.get('name', ''),
-                        'total_usd': round(ex.get('total_usd', 0.0), 2),
-                        'total_brl': round(ex.get('total_brl', 0.0), 2),
+                        'total_usd': format_usd(float(ex.get('total_usd', '0.0'))),
+                        'total_brl': format_brl(float(ex.get('total_brl', '0.0'))),
                         'success': ex.get('success', False)
                     }
                     for ex in balance_data.get('exchanges', [])
@@ -244,18 +249,24 @@ class BalanceHistoryService:
                 first = snapshots[0]
                 last = snapshots[-1]
                 
-                change_usd = last.get('total_usd', 0) - first.get('total_usd', 0)
-                change_pct = (change_usd / first.get('total_usd', 1)) * 100 if first.get('total_usd', 0) > 0 else 0
+                # Convert strings to float for calculations
+                first_usd = float(first.get('total_usd', '0'))
+                last_usd = float(last.get('total_usd', '0'))
+                
+                change_usd = last_usd - first_usd
+                change_pct = (change_usd / first_usd) * 100 if first_usd > 0 else 0
+                
+                all_usd_values = [float(s.get('total_usd', '0')) for s in snapshots]
                 
                 time_series['summary'] = {
                     'period_days': days,
                     'data_points': len(snapshots),
-                    'start_value_usd': first.get('total_usd', 0.0),
-                    'end_value_usd': last.get('total_usd', 0.0),
-                    'change_usd': change_usd,
-                    'change_percent': round(change_pct, 2),
-                    'min_value_usd': min(s.get('total_usd', 0) for s in snapshots),
-                    'max_value_usd': max(s.get('total_usd', 0) for s in snapshots)
+                    'start_value_usd': format_usd(first_usd),
+                    'end_value_usd': format_usd(last_usd),
+                    'change_usd': format_usd(change_usd),
+                    'change_percent': format_percent(change_pct),
+                    'min_value_usd': format_usd(min(all_usd_values)),
+                    'max_value_usd': format_usd(max(all_usd_values))
                 }
             
             return time_series
