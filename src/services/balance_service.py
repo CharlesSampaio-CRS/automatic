@@ -11,7 +11,6 @@ import time
 
 from src.security.encryption import get_encryption_service
 from src.services.price_feed_service import get_price_feed_service
-from src.services.balance_history_service import get_balance_history_service
 from src.utils.formatting import format_price, format_amount, format_usd, format_brl, format_rate
 
 
@@ -363,11 +362,11 @@ class BalanceService:
                         if token_usd > 0:
                             token_info['value_brl'] = format_brl(token_usd * usd_brl_rate)
         
-        # Save to history (only for non-cached fetches)
-        history_service = get_balance_history_service(self.db)
-        history_service.save_snapshot(result)
+        # ⚠️ HISTÓRICO NÃO É MAIS SALVO AUTOMATICAMENTE
+        # Agora é salvo apenas pelo script hourly_balance_snapshot.py (a cada hora)
+        # Isso evita poluir o histórico com múltiplas requisições do mesmo horário
         
-        # Cache the result (after price enrichment and history save)
+        # Cache the result (after price enrichment)
         if use_cache:
             cache_key = f"balances_{user_id}"
             _balance_cache.set(cache_key, result)

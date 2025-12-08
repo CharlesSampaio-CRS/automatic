@@ -85,7 +85,144 @@ curl "http://localhost:5000/api/v1/exchanges/available?user_id=charles_test_user
 
 ---
 
-## 3. Vincular Exchange (Link)
+## 3. Informações Detalhadas de uma Exchange
+
+### Endpoint
+```
+GET /api/v1/exchanges/{exchange_id}
+```
+
+### Descrição
+Busca informações completas de uma exchange específica, incluindo dados básicos, taxas (opcional) e mercados disponíveis (opcional).
+
+### Parâmetros Path
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|-----------|------|-------------|-----------|
+| exchange_id | string | Sim | MongoDB ObjectId da exchange |
+
+### Parâmetros Query
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|-----------|------|-------------|-----------|
+| include_fees | boolean | Não | true para incluir taxas (padrão: false) |
+| include_markets | boolean | Não | true para incluir mercados (padrão: false) |
+
+### Exemplo de Requisição
+```bash
+# Informações básicas
+curl "http://localhost:5000/api/v1/exchanges/693481148b0a41e8b6acb07b"
+
+# Com taxas
+curl "http://localhost:5000/api/v1/exchanges/693481148b0a41e8b6acb07b?include_fees=true"
+
+# Com taxas e mercados
+curl "http://localhost:5000/api/v1/exchanges/693481148b0a41e8b6acb07b?include_fees=true&include_markets=true"
+```
+
+### Resposta de Sucesso - Básica (200)
+```json
+{
+  "success": true,
+  "exchange": {
+    "_id": "693481148b0a41e8b6acb07b",
+    "nome": "MEXC",
+    "ccxt_id": "mexc",
+    "url": "https://www.mexc.com",
+    "icon": "https://example.com/mexc.png",
+    "pais_de_origem": "Singapore",
+    "description": "Exchange global com diversos tokens",
+    "is_active": true,
+    "requires_passphrase": false
+  }
+}
+```
+
+### Resposta de Sucesso - Com Taxas e Mercados (200)
+```json
+{
+  "success": true,
+  "exchange": {
+    "_id": "693481148b0a41e8b6acb07b",
+    "nome": "MEXC",
+    "ccxt_id": "mexc",
+    "url": "https://www.mexc.com",
+    "icon": "https://example.com/mexc.png",
+    "pais_de_origem": "Singapore",
+    "description": "Exchange global com diversos tokens",
+    "is_active": true,
+    "requires_passphrase": false,
+    "fees": {
+      "trading": {
+        "maker": 0.002,
+        "taker": 0.002
+      },
+      "funding": {
+        "withdraw": {
+          "BTC": 0.0005,
+          "ETH": 0.005,
+          "USDT": 1.0
+        },
+        "deposit": {}
+      }
+    },
+    "markets": {
+      "total": 2453,
+      "symbols": ["BTC/USDT", "ETH/USDT", "BNB/USDT", "..."]
+    },
+    "ccxt_info": {
+      "has": {
+        "fetchBalance": true,
+        "fetchTicker": true,
+        "fetchTickers": true,
+        "fetchOHLCV": true,
+        "fetchTrades": true,
+        "fetchOrder": true,
+        "fetchOrders": true,
+        "fetchOpenOrders": true,
+        "fetchClosedOrders": true,
+        "fetchMyTrades": true,
+        "createOrder": true,
+        "cancelOrder": true
+      },
+      "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"],
+      "rate_limit": 50
+    }
+  }
+}
+```
+
+### Resposta de Erro - ID Inválido (400)
+```json
+{
+  "success": false,
+  "error": "Invalid exchange_id format"
+}
+```
+
+### Resposta de Erro - Exchange Não Encontrada (404)
+```json
+{
+  "success": false,
+  "error": "Exchange not found: 693481148b0a41e8b6acb999"
+}
+```
+
+---
+
+## 4. Vincular Exchange (Link)
+
+### Endpoint
+```
+POST /api/v1/exchanges/link
+```
+
+### Headers
+```
+Content-Type: application/json
+```
+
+---
+
+## 4. Vincular Exchange (Link)
 
 ### Endpoint
 ```
@@ -175,7 +312,7 @@ curl -X POST http://localhost:5000/api/v1/exchanges/link \
 
 ---
 
-## 4. Listar Exchanges Vinculadas
+## 5. Listar Exchanges Vinculadas
 
 ### Endpoint
 ```
@@ -245,7 +382,7 @@ curl "http://localhost:5000/api/v1/exchanges/linked?user_id=charles_test_user"
 
 ---
 
-## 5. Desvincular Exchange (Unlink)
+## 6. Desvincular Exchange (Unlink)
 
 ### Endpoint
 ```
@@ -301,7 +438,7 @@ curl -X DELETE http://localhost:5000/api/v1/exchanges/unlink \
 
 ---
 
-## 6. Buscar Saldos de Todas as Exchanges
+## 7. Buscar Saldos de Todas as Exchanges
 
 ### Endpoint
 ```
@@ -459,7 +596,7 @@ curl "http://localhost:5000/api/v1/balances?user_id=charles_test_user&currency=b
 
 ---
 
-## 7. Limpar Cache de Saldos
+## 8. Limpar Cache de Saldos
 
 ### Endpoint
 ```
@@ -503,7 +640,7 @@ curl -X POST http://localhost:5000/api/v1/balances/clear-cache \
 
 ---
 
-## 8. Histórico de Saldos
+## 9. Histórico de Saldos
 
 ### Endpoint
 ```
@@ -598,7 +735,7 @@ curl "http://localhost:5000/api/v1/balances/history?user_id=charles_test_user&li
 
 ---
 
-## 9. Último Snapshot de Saldo
+## 10. Último Snapshot de Saldo
 
 ### Endpoint
 ```
@@ -655,7 +792,7 @@ curl "http://localhost:5000/api/v1/balances/history/latest?user_id=charles_test_
 
 ---
 
-## 10. Histórico de Token Específico
+## 11. Histórico de Token Específico
 
 ### Endpoint
 ```
@@ -715,7 +852,7 @@ curl "http://localhost:5000/api/v1/balances/history/token/REKTCOIN?user_id=charl
 
 ---
 
-## 11. Evolução do Portfolio
+## 12. Evolução do Portfolio
 
 ### Endpoint
 ```
@@ -798,7 +935,7 @@ curl "http://localhost:5000/api/v1/balances/history/evolution?user_id=charles_te
 
 ---
 
-## 12. Informações Completas de Token por Exchange
+## 13. Informações Completas de Token por Exchange
 
 ### Endpoint
 ```

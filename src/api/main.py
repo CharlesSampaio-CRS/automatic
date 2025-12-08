@@ -634,20 +634,19 @@ def clear_balance_cache():
 # BALANCE HISTORY
 # ======================
 
-@app.route('/api/v1/balances/history', methods=['GET'])
+@app.route('/api/v1/history', methods=['GET'])
 def get_balance_history():
     """
-    Get balance history for a user
+    Busca histórico de saldos salvos a cada hora pelo snapshot automático.
     
     Query Parameters:
-        - user_id (required): User ID
-        - limit (optional): Max records to return (default 100)
-        - skip (optional): Records to skip for pagination (default 0)
+        - user_id (required): ID do usuário
+        - limit (optional): Máximo de registros (padrão: 168 = 7 dias)
     
     Returns:
-        200: List of balance snapshots
-        400: Missing user_id
-        500: Server error
+        200: Lista de snapshots históricos
+        400: user_id não fornecido
+        500: Erro interno
     """
     try:
         user_id = request.args.get('user_id')
@@ -657,126 +656,25 @@ def get_balance_history():
                 'error': 'user_id is required'
             }), 400
         
-        limit = int(request.args.get('limit', 100))
-        skip = int(request.args.get('skip', 0))
+        limit = int(request.args.get('limit', 168))  # 7 dias * 24 horas
         
-        # Get history
         history_service = get_balance_history_service(db)
-        snapshots = history_service.get_history(user_id, limit=limit, skip=skip)
+        snapshots = history_service.get_history(user_id, limit=limit, skip=0)
         
         return jsonify({
             'success': True,
             'user_id': user_id,
             'count': len(snapshots),
-            'limit': limit,
-            'skip': skip,
             'snapshots': snapshots
         }), 200
         
-    except ValueError as e:
-        return jsonify({
-            'success': False,
-            'error': 'Invalid limit or skip parameter'
-        }), 400
-    except Exception as e:
-        print(f"❌ Error getting balance history: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error',
-            'details': str(e)
-        }), 500
-
-
-@app.route('/api/v1/balances/history/latest', methods=['GET'])
-def get_latest_snapshot():
-    """
-    Get the latest balance snapshot for a user
-    
-    Query Parameters:
-        - user_id (required): User ID
-    
-    Returns:
-        200: Latest snapshot
-        400: Missing user_id
-        404: No snapshots found
-        500: Server error
-    """
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id:
-            return jsonify({
-                'success': False,
-                'error': 'user_id is required'
-            }), 400
-        
-        history_service = get_balance_history_service(db)
-        snapshot = history_service.get_latest_snapshot(user_id)
-        
-        if not snapshot:
-            return jsonify({
-                'success': False,
-                'error': 'No snapshots found for this user'
-            }), 404
-        
-        return jsonify({
-            'success': True,
-            'snapshot': snapshot
-        }), 200
-        
-    except Exception as e:
-        print(f"❌ Error getting latest snapshot: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error',
-            'details': str(e)
-        }), 500
-
-
-@app.route('/api/v1/balances/history/token/<token>', methods=['GET'])
-def get_token_history(token):
-    """
-    Get historical data for a specific token
-    
-    Path Parameters:
-        - token: Token symbol (e.g., BTC, ETH)
-    
-    Query Parameters:
-        - user_id (required): User ID
-        - limit (optional): Max records (default 100)
-    
-    Returns:
-        200: Token history
-        400: Missing user_id
-        500: Server error
-    """
-    try:
-        user_id = request.args.get('user_id')
-        if not user_id:
-            return jsonify({
-                'success': False,
-                'error': 'user_id is required'
-            }), 400
-        
-        limit = int(request.args.get('limit', 100))
-        
-        history_service = get_balance_history_service(db)
-        history = history_service.get_token_history(user_id, token.upper(), limit=limit)
-        
-        return jsonify({
-            'success': True,
-            'user_id': user_id,
-            'token': token.upper(),
-            'count': len(history),
-            'history': history
-        }), 200
-        
-    except ValueError as e:
+    except ValueError:
         return jsonify({
             'success': False,
             'error': 'Invalid limit parameter'
         }), 400
     except Exception as e:
-        print(f"❌ Error getting token history: {str(e)}")
+        print(f"❌ Error getting history: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
@@ -784,19 +682,20 @@ def get_token_history(token):
         }), 500
 
 
-@app.route('/api/v1/balances/history/evolution', methods=['GET'])
+@app.route('/api/v1/history/evolution', methods=['GET'])
 def get_portfolio_evolution():
     """
-    Get portfolio value evolution over time
+    Busca evolução do portfolio para gráficos (agregado por dia).
+    Ideal para exibir tendências e variações ao longo do tempo.
     
     Query Parameters:
-        - user_id (required): User ID
-        - days (optional): Days to look back (default 30)
+        - user_id (required): ID do usuário
+        - days (optional): Dias para retornar (padrão: 30)
     
     Returns:
-        200: Time series data with summary stats
-        400: Missing user_id
-        500: Server error
+        200: Dados de evolução com sumário estatístico
+        400: user_id não fornecido ou days inválido
+        500: Erro interno
     """
     try:
         user_id = request.args.get('user_id')
@@ -814,16 +713,17 @@ def get_portfolio_evolution():
         return jsonify({
             'success': True,
             'user_id': user_id,
+            'days': days,
             'evolution': evolution
         }), 200
         
-    except ValueError as e:
+    except ValueError:
         return jsonify({
             'success': False,
             'error': 'Invalid days parameter'
         }), 400
     except Exception as e:
-        print(f"❌ Error getting portfolio evolution: {str(e)}")
+        print(f"❌ Error getting evolution: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
@@ -1049,6 +949,127 @@ def get_exchange_token_info(exchange_id, symbol):
         
     except Exception as e:
         print(f"❌ Error getting exchange token info: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+@app.route('/api/v1/exchanges/<exchange_id>', methods=['GET'])
+def get_exchange_info(exchange_id):
+    """
+    Busca informações detalhadas de uma exchange específica.
+    
+    Path Params:
+        exchange_id (required): MongoDB ObjectId da exchange
+    
+    Query Params:
+        include_fees (optional): true para incluir taxas da exchange (padrão: false)
+        include_markets (optional): true para incluir lista de mercados (padrão: false)
+    
+    Returns:
+        200: Informações da exchange
+        400: exchange_id inválido
+        404: Exchange não encontrada
+        500: Erro interno
+    
+    Exemplo:
+        GET /api/v1/exchanges/693481148b0a41e8b6acb07b
+        GET /api/v1/exchanges/693481148b0a41e8b6acb07b?include_fees=true
+    """
+    try:
+        # Valida ObjectId
+        if not ObjectId.is_valid(exchange_id):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid exchange_id format'
+            }), 400
+        
+        # Busca exchange no MongoDB
+        exchange = db.exchanges.find_one({'_id': ObjectId(exchange_id)})
+        
+        if not exchange:
+            return jsonify({
+                'success': False,
+                'error': f'Exchange not found: {exchange_id}'
+            }), 404
+        
+        # Dados básicos da exchange
+        exchange_info = {
+            '_id': str(exchange['_id']),
+            'nome': exchange.get('nome'),
+            'ccxt_id': exchange.get('ccxt_id'),
+            'url': exchange.get('url'),
+            'icon': exchange.get('icon'),
+            'pais_de_origem': exchange.get('pais_de_origem'),
+            'description': exchange.get('description'),
+            'is_active': exchange.get('is_active', True),
+            'requires_passphrase': exchange.get('requires_passphrase', False)
+        }
+        
+        # Parâmetros opcionais
+        include_fees = request.args.get('include_fees', 'false').lower() == 'true'
+        include_markets = request.args.get('include_markets', 'false').lower() == 'true'
+        
+        # Se solicitado, busca informações adicionais via CCXT
+        if include_fees or include_markets:
+            try:
+                ccxt_id = exchange.get('ccxt_id')
+                exchange_class = getattr(ccxt, ccxt_id)
+                ccxt_exchange = exchange_class()
+                
+                # Carrega mercados
+                ccxt_exchange.load_markets()
+                
+                # Inclui taxas
+                if include_fees:
+                    fees = ccxt_exchange.fees
+                    exchange_info['fees'] = {
+                        'trading': fees.get('trading', {}),
+                        'funding': fees.get('funding', {})
+                    }
+                
+                # Inclui lista de mercados
+                if include_markets:
+                    markets = ccxt_exchange.markets
+                    exchange_info['markets'] = {
+                        'total': len(markets),
+                        'symbols': sorted(list(markets.keys()))[:100]  # Primeiros 100
+                    }
+                    
+                # Informações adicionais do CCXT
+                exchange_info['ccxt_info'] = {
+                    'has': {
+                        'fetchBalance': ccxt_exchange.has.get('fetchBalance', False),
+                        'fetchTicker': ccxt_exchange.has.get('fetchTicker', False),
+                        'fetchTickers': ccxt_exchange.has.get('fetchTickers', False),
+                        'fetchOHLCV': ccxt_exchange.has.get('fetchOHLCV', False),
+                        'fetchTrades': ccxt_exchange.has.get('fetchTrades', False),
+                        'fetchOrder': ccxt_exchange.has.get('fetchOrder', False),
+                        'fetchOrders': ccxt_exchange.has.get('fetchOrders', False),
+                        'fetchOpenOrders': ccxt_exchange.has.get('fetchOpenOrders', False),
+                        'fetchClosedOrders': ccxt_exchange.has.get('fetchClosedOrders', False),
+                        'fetchMyTrades': ccxt_exchange.has.get('fetchMyTrades', False),
+                        'createOrder': ccxt_exchange.has.get('createOrder', False),
+                        'cancelOrder': ccxt_exchange.has.get('cancelOrder', False)
+                    },
+                    'timeframes': list(ccxt_exchange.timeframes.keys()) if hasattr(ccxt_exchange, 'timeframes') else [],
+                    'rate_limit': ccxt_exchange.rateLimit
+                }
+                
+            except Exception as e:
+                print(f"⚠️  Warning: Could not fetch CCXT data: {e}")
+                exchange_info['ccxt_error'] = str(e)
+        
+        return jsonify({
+            'success': True,
+            'exchange': exchange_info
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Error getting exchange info: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({
