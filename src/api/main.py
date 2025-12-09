@@ -19,6 +19,11 @@ from src.utils.formatting import format_price, format_usd, format_percent
 from src.utils.logger import get_logger
 from src.config import MONGODB_URI, MONGODB_DATABASE, API_PORT
 
+# Scheduler imports
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import atexit
+
 # Carrega variáveis de ambiente
 load_dotenv()
 
@@ -44,14 +49,74 @@ except Exception as e:
     logger.error(f"Erro ao conectar MongoDB: {e}")
     db = None
 
-# Rota de health check
+
+# ============================================================================
+# SCHEDULER INTEGRATION - Automated Balance Snapshots
+# ============================================================================
+
+def run_scheduled_snapshot():
+    """
+    Executa snapshot de saldos automaticamente (chamado pelo scheduler)
+    """
+    try:
+        logger.info("=" * 80)
+        logger.info(f"SCHEDULED SNAPSHOT TRIGGERED - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        logger.info("=" * 80)
+        
+        # Import aqui para evitar circular imports
+        from scripts.hourly_balance_snapshot import run_hourly_snapshot
+        run_hourly_snapshot()
+        
+        logger.info("Scheduled snapshot completed successfully")
+    except Exception as e:
+        logger.error(f"Error in scheduled snapshot: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+# Initialize BackgroundScheduler
+scheduler = BackgroundScheduler(timezone='UTC')
+
+# Add job: execute every 4 hours at minute 0
+scheduler.add_job(
+    func=run_scheduled_snapshot,
+    trigger=CronTrigger(minute=0, hour='*/4'),
+    id='balance_snapshot_job',
+    name='Balance Snapshot Every 4 Hours',
+    replace_existing=True,
+    max_instances=1
+)
+
+# Start scheduler
+scheduler.start()
+logger.info("✅ Scheduler started - Balance snapshots every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)")
+
+# Shutdown scheduler when app exits
+atexit.register(lambda: scheduler.shutdown())
+
+# ============================================================================
+
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check da API"""
+    # Get scheduler info
+    scheduler_running = scheduler.running if scheduler else False
+    next_run = None
+    
+    if scheduler_running:
+        jobs = scheduler.get_jobs()
+        if jobs:
+            next_run = jobs[0].next_run_time.isoformat() if jobs[0].next_run_time else None
+    
     return {
         'status': 'ok',
         'message': 'API rodando',
-        'database': 'connected' if db is not None else 'disconnected'
+        'database': 'connected' if db is not None else 'disconnected',
+        'scheduler': {
+            'running': scheduler_running,
+            'next_snapshot': next_run
+        }
     }, 200
 
 # Rota raiz
@@ -63,6 +128,7 @@ def index():
         'version': '1.0.0',
         'endpoints': {
             'health': '/health',
+            'scheduler_status': '/api/v1/scheduler/status',
             'exchanges_available': '/api/v1/exchanges/available?user_id=<user_id>',
             'exchanges_link': '/api/v1/exchanges/link',
             'exchanges_linked': '/api/v1/exchanges/linked?user_id=<user_id>',
@@ -71,6 +137,50 @@ def index():
             'balances_clear_cache': '/api/v1/balances/clear-cache'
         }
     }, 200
+
+
+# ============================================
+# SCHEDULER STATUS ENDPOINT
+# ============================================
+
+@app.route('/api/v1/scheduler/status', methods=['GET'])
+def get_scheduler_status():
+    """Get detailed scheduler status"""
+    try:
+        if not scheduler:
+            return jsonify({
+                'success': False,
+                'error': 'Scheduler not initialized'
+            }), 500
+        
+        jobs = scheduler.get_jobs()
+        jobs_info = []
+        
+        for job in jobs:
+            jobs_info.append({
+                'id': job.id,
+                'name': job.name,
+                'next_run': job.next_run_time.isoformat() if job.next_run_time else None,
+                'trigger': str(job.trigger)
+            })
+        
+        return jsonify({
+            'success': True,
+            'scheduler': {
+                'running': scheduler.running,
+                'state': 'running' if scheduler.running else 'stopped',
+                'timezone': str(scheduler.timezone),
+                'jobs_count': len(jobs),
+                'jobs': jobs_info
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting scheduler status: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 # ============================================
 # ENDPOINTS DE EXCHANGES
