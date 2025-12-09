@@ -126,17 +126,50 @@ class BalanceService:
             # Fetch balance and tickers for prices
             balance_data = exchange.fetch_balance()
             
-            # Fetch tickers to get current prices (USDT pairs)
+            # Fetch tickers to get current prices (try multiple quote currencies)
             tickers = {}
+            usd_brl_rate = None
+            
             try:
                 all_tickers = exchange.fetch_tickers()
-                # Map ticker prices (prefer USDT pairs)
+                
+                # Map ticker prices - try USDT, BRL, USD, USDC in order of preference
                 for symbol, ticker in all_tickers.items():
-                    if '/USDT' in symbol:
-                        base = symbol.split('/')[0]
-                        tickers[base] = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                    if '/' not in symbol:
+                        continue
+                    
+                    base, quote = symbol.split('/')
+                    price = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                    
+                    if not price:
+                        continue
+                    
+                    # Priority: USDT > USD > USDC (direct USD quotes)
+                    if quote in ['USDT', 'USD', 'USDC']:
+                        if base not in tickers:  # Only set if not already set
+                            tickers[base] = float(price)
+                    
+                    # BRL pairs - need conversion to USD
+                    elif quote == 'BRL':
+                        if base not in tickers:  # Use BRL as fallback
+                            # Get USD/BRL rate if not already fetched
+                            if usd_brl_rate is None:
+                                try:
+                                    price_feed = get_price_feed_service()
+                                    usd_brl_rate = price_feed.get_usd_brl_rate()
+                                except:
+                                    usd_brl_rate = 5.0  # Fallback rate
+                            
+                            # Convert BRL price to USD
+                            tickers[base] = float(price) / usd_brl_rate
+                
+                logger.debug(f"Fetched {len(tickers)} ticker prices from {exchange_info['nome']}")
+                
             except Exception as e:
-                logger.debug(f"Could not fetch tickers from {exchange_info['nome']}: {e}")
+                logger.warning(f"Could not fetch tickers from {exchange_info['nome']}: {e}")
+            
+            # Collect all tokens that need prices (for CoinGecko fallback)
+            tokens_needing_prices = []
             
             # Process balances (only non-zero free + used)
             processed_balances = {}
@@ -152,12 +185,25 @@ class BalanceService:
                     total = float(amounts.get('total', 0))
                     
                     if total > 0:
-                        # Get price from ticker (already in USDT)
+                        # Get price from ticker
                         price_usd = 0.0
-                        if currency == 'USDT':
+                        
+                        if currency == 'USDT' or currency == 'USDC':
                             price_usd = 1.0
+                        elif currency == 'BRL':
+                            # BRL needs conversion
+                            if usd_brl_rate is None:
+                                try:
+                                    price_feed = get_price_feed_service()
+                                    usd_brl_rate = price_feed.get_usd_brl_rate()
+                                except:
+                                    usd_brl_rate = 5.0
+                            price_usd = 1.0 / usd_brl_rate
                         elif currency in tickers:
                             price_usd = float(tickers[currency])
+                        else:
+                            # No ticker found - will use CoinGecko fallback
+                            tokens_needing_prices.append(currency)
                         
                         value_usd = total * price_usd
                         total_usd += value_usd
@@ -167,6 +213,33 @@ class BalanceService:
                             'price_usd': format_price(price_usd),
                             'value_usd': format_usd(value_usd)
                         }
+            
+            # FALLBACK: Use CoinGecko for tokens without prices
+            if tokens_needing_prices:
+                try:
+                    logger.info(f"Fetching prices from CoinGecko for {len(tokens_needing_prices)} tokens: {tokens_needing_prices}")
+                    price_feed = get_price_feed_service()
+                    coingecko_prices = price_feed.fetch_prices_batch(tokens_needing_prices)
+                    
+                    # Update balances with CoinGecko prices
+                    for currency in tokens_needing_prices:
+                        if currency in processed_balances and currency in coingecko_prices:
+                            cg_price = coingecko_prices[currency]
+                            total_amount = processed_balances[currency]['total']
+                            new_value_usd = total_amount * cg_price
+                            
+                            # Update with CoinGecko price
+                            processed_balances[currency]['price_usd'] = format_price(cg_price)
+                            processed_balances[currency]['value_usd'] = format_usd(new_value_usd)
+                            
+                            # Update total
+                            old_value = float(processed_balances[currency]['value_usd'])
+                            total_usd = total_usd - old_value + new_value_usd
+                            
+                            logger.debug(f"Updated {currency} price from CoinGecko: ${cg_price}")
+                
+                except Exception as e:
+                    logger.warning(f"Could not fetch fallback prices from CoinGecko: {e}")
             
             fetch_time = time.time() - start_time
             
