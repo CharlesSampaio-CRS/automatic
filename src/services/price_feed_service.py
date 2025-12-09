@@ -9,6 +9,11 @@ from typing import Dict, List, Tuple
 from datetime import datetime, timedelta
 import time
 from src.utils.formatting import format_price, format_usd, format_brl
+from src.utils.logger import get_logger
+
+
+# Initialize logger
+logger = get_logger(__name__)
 
 
 class PriceCache:
@@ -132,7 +137,7 @@ class PriceFeedService:
             return rate
             
         except Exception as e:
-            print(f"⚠️  Error fetching USD/BRL rate: {e}")
+            logger.warning(f"Error fetching USD/BRL rate: {e}")
             # Fallback to approximate rate if API fails
             return 5.0  # Approximate fallback
     
@@ -256,7 +261,7 @@ class PriceFeedService:
             return prices
             
         except Exception as e:
-            print(f"⚠️  Error fetching prices from CoinGecko: {e}")
+            logger.warning(f"Error fetching prices from CoinGecko: {e}")
             return {}
     
     def get_token_price(self, token: str) -> float:

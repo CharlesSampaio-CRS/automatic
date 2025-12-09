@@ -16,6 +16,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from pymongo import MongoClient
 from dotenv import load_dotenv
+from src.utils.logger import get_logger
 
 # Import snapshot function
 from hourly_balance_snapshot import run_hourly_snapshot
@@ -23,29 +24,32 @@ from hourly_balance_snapshot import run_hourly_snapshot
 # Load environment
 load_dotenv()
 
+# Initialize logger
+logger = get_logger(__name__)
+
 
 def scheduled_snapshot():
     """Wrapper para execução agendada"""
-    print("\n" + "🔔 " + "=" * 76)
-    print(f"   SCHEDULED SNAPSHOT TRIGGERED - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 80 + "\n")
+    logger.info("=" * 80)
+    logger.info(f"SCHEDULED SNAPSHOT TRIGGERED - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 80)
     
     try:
         run_hourly_snapshot()
     except Exception as e:
-        print(f"❌ Error in scheduled snapshot: {e}")
+        logger.error(f"Error in scheduled snapshot: {e}")
 
 
 def main():
     """
     Inicia o scheduler para executar snapshot a cada hora fechada
     """
-    print("=" * 80)
+    logger.info("=" * 80)
     print("🕐 BALANCE SNAPSHOT SCHEDULER - STARTING")
-    print("=" * 80)
-    print(f"⏰ Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"📅 Schedule: Every hour at minute 0 (00:00, 01:00, 02:00, ...)")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"Schedule: Every hour at minute 0 (00:00, 01:00, 02:00, ...)")
+    logger.info("=" * 80)
     
     # Create scheduler
     scheduler = BlockingScheduler(timezone='UTC')
@@ -61,21 +65,21 @@ def main():
     )
     
     # Show next run times
-    print("\n📋 Next scheduled runs:")
+    logger.info("Next scheduled runs:")
     for i, job in enumerate(scheduler.get_jobs()):
         next_run = job.next_run_time
-        print(f"   {i+1}. {job.name}: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        logger.info(f"   {i+1}. {job.name}: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     
-    print("\n✅ Scheduler started. Press Ctrl+C to stop.\n")
-    print("=" * 80 + "\n")
+    logger.info("Scheduler started. Press Ctrl+C to stop.\n")
+    logger.info("=" * 80)
     
     try:
         # Start scheduler (blocks here)
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
-        print("\n\n" + "=" * 80)
-        print("🛑 SCHEDULER STOPPED BY USER")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info("SCHEDULER STOPPED BY USER")
+        logger.info("=" * 80)
         scheduler.shutdown()
 
 

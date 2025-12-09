@@ -12,6 +12,11 @@ import time
 from src.security.encryption import get_encryption_service
 from src.services.price_feed_service import get_price_feed_service
 from src.utils.formatting import format_price, format_amount, format_usd, format_brl, format_rate
+from src.utils.logger import get_logger
+
+
+# Initialize logger
+logger = get_logger(__name__)
 
 
 class BalanceCache:
@@ -131,7 +136,7 @@ class BalanceService:
                         base = symbol.split('/')[0]
                         tickers[base] = ticker.get('last', 0) or ticker.get('close', 0) or 0
             except Exception as e:
-                print(f"⚠️  Could not fetch tickers from {exchange_info['nome']}: {e}")
+                logger.debug(f"Could not fetch tickers from {exchange_info['nome']}: {e}")
             
             # Process balances (only non-zero free + used)
             processed_balances = {}

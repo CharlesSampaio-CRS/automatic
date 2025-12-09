@@ -7,6 +7,11 @@ from datetime import datetime
 from typing import Dict
 from bson import ObjectId
 from src.utils.formatting import format_usd, format_brl, format_percent
+from src.utils.logger import get_logger
+
+
+# Initialize logger
+logger = get_logger(__name__)
 
 
 class BalanceHistoryService:
@@ -43,7 +48,7 @@ class BalanceHistoryService:
             # )
             
         except Exception as e:
-            print(f"⚠️  Warning creating indexes: {e}")
+            logger.warning(f"Could not create indexes: {e}")
     
     def save_snapshot(self, balance_data: Dict) -> str:
         """
@@ -90,11 +95,11 @@ class BalanceHistoryService:
             
             result = self.collection.insert_one(snapshot)
             
-            print(f"💾 Balance snapshot saved: {result.inserted_id}")
+            logger.info(f"Balance snapshot saved: {result.inserted_id}")
             return str(result.inserted_id)
             
         except Exception as e:
-            print(f"❌ Error saving balance snapshot: {e}")
+            logger.error(f"Error saving balance snapshot: {e}")
             return None
     
     def get_latest_snapshot(self, user_id: str) -> Dict:
@@ -120,7 +125,7 @@ class BalanceHistoryService:
             return snapshot
             
         except Exception as e:
-            print(f"❌ Error getting latest snapshot: {e}")
+            logger.error(f"Error getting latest snapshot: {e}")
             return None
     
     def get_history(self, user_id: str, limit: int = 100, skip: int = 0) -> list:
@@ -151,7 +156,7 @@ class BalanceHistoryService:
             return snapshots
             
         except Exception as e:
-            print(f"❌ Error getting history: {e}")
+            logger.error(f"Error getting history: {e}")
             return []
     
     def get_token_history(self, user_id: str, token: str, limit: int = 100) -> list:
@@ -198,7 +203,7 @@ class BalanceHistoryService:
             return history
             
         except Exception as e:
-            print(f"❌ Error getting token history: {e}")
+            logger.error(f"Error getting token history: {e}")
             return []
     
     def get_portfolio_evolution(self, user_id: str, days: int = 30) -> Dict:
@@ -272,7 +277,7 @@ class BalanceHistoryService:
             return time_series
             
         except Exception as e:
-            print(f"❌ Error getting portfolio evolution: {e}")
+            logger.error(f"Error getting portfolio evolution: {e}")
             return {}
 
 

@@ -16,30 +16,32 @@ from src.validators.exchange_validator import ExchangeValidator
 from src.services.balance_service import get_balance_service
 from src.services.balance_history_service import get_balance_history_service
 from src.utils.formatting import format_price, format_usd, format_percent
+from src.utils.logger import get_logger
+from src.config import MONGODB_URI, MONGODB_DATABASE, API_PORT
 
 # Carrega variáveis de ambiente
 load_dotenv()
 
+# Initialize logger
+logger = get_logger(__name__)
+
 # Inicializa Flask
 app = Flask(__name__)
 
-# Configuração MongoDB
-MONGO_URI = os.getenv('MONGODB_URI')
-MONGO_DATABASE = os.getenv('MONGODB_DATABASE', 'MultExchange')
-
+# Configuração MongoDB usando config centralizado
 def get_database():
     """Retorna conexão com MongoDB"""
-    client = MongoClient(MONGO_URI)
-    return client[MONGO_DATABASE]
+    client = MongoClient(MONGODB_URI)
+    return client[MONGODB_DATABASE]
 
 # Teste de conexão
 try:
     db = get_database()
     # Testa conexão
     db.command('ping')
-    print("✅ MongoDB conectado com sucesso!")
+    logger.info("MongoDB conectado com sucesso!")
 except Exception as e:
-    print(f"❌ Erro ao conectar MongoDB: {e}")
+    logger.error(f"Erro ao conectar MongoDB: {e}")
     db = None
 
 # Rota de health check
@@ -216,7 +218,7 @@ def link_exchange():
         # CAMADA DE SEGURANÇA E VALIDAÇÃO
         # ============================================
         
-        print(f"🔍 Validating credentials for {exchange['nome']}...")
+        logger.debug(f"Validating credentials for {exchange['nome']}...")
         
         # Validar credenciais com a exchange usando CCXT
         validation_result = ExchangeValidator.validate_and_test(
@@ -233,13 +235,13 @@ def link_exchange():
                 'details': validation_result['errors']
             }), 401
         
-        print(f"✅ Credentials validated successfully")
+        logger.info(f"Credentials validated successfully")
         
         # ============================================
         # CRIPTOGRAFIA DAS CREDENCIAIS
         # ============================================
         
-        print(f"🔐 Encrypting credentials...")
+        logger.debug(f"Encrypting credentials...")
         
         encryption_service = get_encryption_service()
         encrypted_credentials = encryption_service.encrypt_credentials(
@@ -248,7 +250,7 @@ def link_exchange():
             passphrase=passphrase
         )
         
-        print(f"✅ Credentials encrypted")
+        logger.info(f"Credentials encrypted")
         
         # ============================================
         # SALVAR NO BANCO DE DADOS (NOVA ESTRUTURA COM ARRAY)
@@ -344,7 +346,7 @@ def link_exchange():
             }), 201
         
     except Exception as e:
-        print(f"❌ Error linking exchange: {str(e)}")
+        logger.error(f"Error linking exchange: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
@@ -421,7 +423,7 @@ def get_linked_exchanges():
         }), 200
         
     except Exception as e:
-        print(f"❌ Error fetching linked exchanges: {str(e)}")
+        logger.error(f"Error fetching linked exchanges: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
@@ -521,7 +523,7 @@ def unlink_exchange():
             }), 500
         
     except Exception as e:
-        print(f"❌ Error unlinking exchange: {str(e)}")
+        logger.error(f"Error unlinking exchange: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
@@ -569,18 +571,18 @@ def get_balances():
         balance_service = get_balance_service(db)
         
         # Fetch balances (parallelized internally)
-        print(f"🔄 Fetching balances for user {user_id} (cache: {use_cache}, include_brl: {include_brl})...")
+        logger.debug(f"Fetching balances for user {user_id} (cache: {use_cache}, include_brl: {include_brl})...")
         result = balance_service.fetch_all_balances(user_id, use_cache=use_cache, include_brl=include_brl)
         
         num_exchanges = len(result.get('exchanges', []))
         num_tokens = len(result.get('tokens', {}))
         from_cache = result.get('meta', {}).get('from_cache', False)
-        print(f"✅ Balances fetched: {num_exchanges} exchanges, {num_tokens} tokens, from_cache: {from_cache}")
+        logger.info(f"Balances fetched: {num_exchanges} exchanges, {num_tokens} tokens, from_cache: {from_cache}")
         
         return jsonify(result), 200
         
     except Exception as e:
-        print(f"❌ Error fetching balances: {str(e)}")
+        logger.error(f"Error fetching balances: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({
@@ -615,7 +617,7 @@ def clear_balance_cache():
         else:
             message = "All balance cache cleared"
         
-        print(f"🗑️  {message}")
+        logger.info(f" {message}")
         
         return jsonify({
             'success': True,
@@ -623,7 +625,7 @@ def clear_balance_cache():
         }), 200
         
     except Exception as e:
-        print(f"❌ Error clearing cache: {str(e)}")
+        logger.error(f"Error clearing cache: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
@@ -674,7 +676,7 @@ def get_balance_history():
             'error': 'Invalid limit parameter'
         }), 400
     except Exception as e:
-        print(f"❌ Error getting history: {str(e)}")
+        logger.error(f"Error getting history: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
@@ -723,7 +725,7 @@ def get_portfolio_evolution():
             'error': 'Invalid days parameter'
         }), 400
     except Exception as e:
-        print(f"❌ Error getting evolution: {str(e)}")
+        logger.error(f"Error getting evolution: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
@@ -745,7 +747,7 @@ def get_exchange_token_info(exchange_id, symbol):
         user_id = request.args.get('user_id')
         quote = request.args.get('quote', 'USDT').upper()
         
-        print(f"📊 Fetching {symbol} info from exchange {exchange_id}")
+        logger.debug(f"Fetching {symbol} info from exchange {exchange_id}")
         
         # Buscar informações da exchange no banco
         from bson import ObjectId
@@ -760,7 +762,7 @@ def get_exchange_token_info(exchange_id, symbol):
         ccxt_id = exchange_doc.get('ccxt_id')
         exchange_name = exchange_doc.get('nome', ccxt_id)
         
-        print(f"🏦 Exchange: {exchange_name} ({ccxt_id})")
+        logger.debug(f"Exchange: {exchange_name} ({ccxt_id})")
         
         # Validar se exchange é suportada pelo CCXT
         if ccxt_id not in ccxt.exchanges:
@@ -792,7 +794,7 @@ def get_exchange_token_info(exchange_id, symbol):
                 'details': f'{exchange_name} does not have market for {symbol}'
             }), 404
         
-        print(f"💱 Trading pair: {pair}")
+        logger.debug(f"Trading pair: {pair}")
         
         # 1. Buscar ticker (preço atual, volume, high/low)
         ticker = exchange.fetch_ticker(pair)
@@ -885,7 +887,7 @@ def get_exchange_token_info(exchange_id, symbol):
                                         }
                                     break
                         except Exception as e:
-                            print(f"⚠️  Could not fetch user balance: {e}")
+                            logger.warning(f"Could not fetch user balance: {e}")
         
         # 6. Buscar ícone do token
         icon_url = None
@@ -898,9 +900,9 @@ def get_exchange_token_info(exchange_id, symbol):
                 network=contract_info.get('network') if contract_info else None
             )
             if icon_url:
-                print(f"🖼️  Icon found: {icon_url}")
+                logger.debug(f"Icon found: {icon_url}")
         except Exception as e:
-            print(f"⚠️  Could not fetch token icon: {e}")
+            logger.warning(f"Could not fetch token icon: {e}")
         
         # Construir resposta completa
         result = {
@@ -943,12 +945,12 @@ def get_exchange_token_info(exchange_id, symbol):
             'datetime': ticker.get('datetime')
         }
         
-        print(f"✅ Complete token info fetched: {symbol} = ${result['price']['current']}")
+        logger.info(f"Complete token info fetched: {symbol} = ${result['price']['current']}")
         
         return jsonify(result), 200
         
     except Exception as e:
-        print(f"❌ Error getting exchange token info: {str(e)}")
+        logger.error(f"Error getting exchange token info: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({
@@ -1060,7 +1062,7 @@ def get_exchange_info(exchange_id):
                 }
                 
             except Exception as e:
-                print(f"⚠️  Warning: Could not fetch CCXT data: {e}")
+                logger.warning(f"Could not fetch CCXT data: {e}")
                 exchange_info['ccxt_error'] = str(e)
         
         return jsonify({
@@ -1069,7 +1071,7 @@ def get_exchange_info(exchange_id):
         }), 200
         
     except Exception as e:
-        print(f"❌ Error getting exchange info: {str(e)}")
+        logger.error(f"Error getting exchange info: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({
@@ -1082,5 +1084,5 @@ if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     
-    print(f"🚀 Iniciando servidor na porta {port}...")
+    logger.info(f"Iniciando servidor na porta {port}...")
     app.run(host='0.0.0.0', port=port, debug=debug)

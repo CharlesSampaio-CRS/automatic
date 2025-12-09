@@ -15,12 +15,14 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 from src.services.balance_service import BalanceService
 from src.services.balance_history_service import BalanceHistoryService
+from src.utils.logger import get_logger
+from src.config import MONGODB_URI, MONGODB_DATABASE
 
 # Load environment variables
 load_dotenv()
 
-MONGODB_URI = os.getenv('MONGODB_URI')
-MONGODB_DATABASE = os.getenv('MONGODB_DATABASE', 'MultExchange')
+# Initialize logger
+logger = get_logger(__name__)
 
 
 def get_all_active_users(db):
@@ -51,7 +53,7 @@ def get_all_active_users(db):
         return user_ids
         
     except Exception as e:
-        print(f"❌ Error getting active users: {e}")
+        logger.error(f"Error getting active users: {e}")
         return []
 
 
@@ -68,7 +70,7 @@ def save_hourly_snapshot_for_user(balance_service, history_service, user_id: str
         bool: True se salvou com sucesso
     """
     try:
-        print(f"\n👤 Processing user: {user_id}")
+        logger.info(f"Processing user: {user_id}")
         
         # Busca saldos (sem usar cache para garantir dados atualizados)
         balance_data = balance_service.get_balances(
@@ -79,7 +81,7 @@ def save_hourly_snapshot_for_user(balance_service, history_service, user_id: str
         )
         
         if not balance_data:
-            print(f"⚠️  No balance data for user {user_id}")
+            logger.warning(f"No balance data for user {user_id}")
             return False
         
         # Salva snapshot no histórico
@@ -88,14 +90,14 @@ def save_hourly_snapshot_for_user(balance_service, history_service, user_id: str
         if snapshot_id:
             total_usd = balance_data.get('summary', {}).get('total_usd', '0.00')
             exchanges_count = len([ex for ex in balance_data.get('exchanges', []) if ex.get('success')])
-            print(f"✅ Snapshot saved: {snapshot_id} | Total: ${total_usd} | Exchanges: {exchanges_count}")
+            logger.info(f"Snapshot saved: {snapshot_id} | Total: ${total_usd} | Exchanges: {exchanges_count}")
             return True
         else:
-            print(f"⚠️  Failed to save snapshot for user {user_id}")
+            logger.warning(f"Failed to save snapshot for user {user_id}")
             return False
             
     except Exception as e:
-        print(f"❌ Error saving snapshot for user {user_id}: {e}")
+        logger.error(f"Error saving snapshot for user {user_id}: {e}")
         return False
 
 
@@ -103,9 +105,9 @@ def run_hourly_snapshot():
     """
     Executa snapshot horário para todos os usuários ativos
     """
-    print("=" * 80)
-    print(f"🕐 HOURLY BALANCE SNAPSHOT - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info(f"HOURLY BALANCE SNAPSHOT - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    logger.info("=" * 80)
     
     try:
         # Connect to MongoDB
@@ -114,7 +116,7 @@ def run_hourly_snapshot():
         
         # Test connection
         client.server_info()
-        print("✅ Connected to MongoDB")
+        logger.info("Connected to MongoDB")
         
         # Initialize services
         balance_service = BalanceService(db)
@@ -124,7 +126,7 @@ def run_hourly_snapshot():
         user_ids = get_all_active_users(db)
         
         if not user_ids:
-            print("⚠️  No active users found. Exiting.")
+            logger.warning("No active users found. Exiting.")
             return
         
         # Process each user
@@ -138,19 +140,19 @@ def run_hourly_snapshot():
                 fail_count += 1
         
         # Summary
-        print("\n" + "=" * 80)
-        print(f"📊 SUMMARY:")
-        print(f"   ✅ Success: {success_count}")
-        print(f"   ❌ Failed: {fail_count}")
-        print(f"   📋 Total: {len(user_ids)}")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info(f"SUMMARY:")
+        logger.info(f"   Success: {success_count}")
+        logger.info(f"   Failed: {fail_count}")
+        logger.info(f"   Total: {len(user_ids)}")
+        logger.info("=" * 80)
         
     except Exception as e:
-        print(f"❌ Fatal error in hourly snapshot: {e}")
+        logger.error(f"Fatal error in hourly snapshot: {e}")
     finally:
         if 'client' in locals():
             client.close()
-            print("🔌 MongoDB connection closed")
+            logger.info("MongoDB connection closed")
 
 
 if __name__ == '__main__':
