@@ -34,12 +34,6 @@ class BalanceHistoryService:
                 ('timestamp', -1)
             ])
             
-            # Index for querying specific tokens
-            self.collection.create_index([
-                ('user_id', 1),
-                ('tokens_summary', 1)
-            ])
-            
             # TTL index to auto-delete old records (optional: keep 90 days)
             # Uncomment to enable auto-deletion:
             # self.collection.create_index(
@@ -66,7 +60,7 @@ class BalanceHistoryService:
             return None
         
         try:
-            # Convert string values back to float for storage
+            # Convert string values to float for storage (OTIMIZADO)
             summary_usd = float(balance_data.get('summary', {}).get('total_usd', '0.0'))
             summary_brl = float(balance_data.get('summary', {}).get('total_brl', '0.0'))
             
@@ -75,17 +69,17 @@ class BalanceHistoryService:
                 'user_id': balance_data['user_id'],
                 'timestamp': datetime.utcnow(),
                 
-                # Valores totais do summary
-                'total_usd': format_usd(summary_usd),
-                'total_brl': format_brl(summary_brl),
+                # Valores totais do summary (como float para queries eficientes)
+                'total_usd': round(summary_usd, 2),
+                'total_brl': round(summary_brl, 2),
                 
                 # Resumo por exchange (apenas valores essenciais)
                 'exchanges': [
                     {
                         'exchange_id': ex.get('exchange_id', ''),
                         'exchange_name': ex.get('name', ''),
-                        'total_usd': format_usd(float(ex.get('total_usd', '0.0'))),
-                        'total_brl': format_brl(float(ex.get('total_brl', '0.0'))),
+                        'total_usd': round(float(ex.get('total_usd', '0.0')), 2),
+                        'total_brl': round(float(ex.get('total_brl', '0.0')), 2),
                         'success': ex.get('success', False)
                     }
                     for ex in balance_data.get('exchanges', [])
@@ -230,8 +224,7 @@ class BalanceHistoryService:
                 {
                     'timestamp': 1,
                     'total_usd': 1,
-                    'total_brl': 1,
-                    'total_unique_tokens': 1
+                    'total_brl': 1
                 },
                 sort=[('timestamp', 1)]
             ))
@@ -239,29 +232,27 @@ class BalanceHistoryService:
             time_series = {
                 'timestamps': [],
                 'values_usd': [],
-                'values_brl': [],
-                'token_counts': []
+                'values_brl': []
             }
             
             for snapshot in snapshots:
                 time_series['timestamps'].append(snapshot['timestamp'].isoformat())
                 time_series['values_usd'].append(snapshot.get('total_usd', 0.0))
                 time_series['values_brl'].append(snapshot.get('total_brl', 0.0))
-                time_series['token_counts'].append(snapshot.get('total_unique_tokens', 0))
             
             # Calculate summary stats
             if snapshots:
                 first = snapshots[0]
                 last = snapshots[-1]
                 
-                # Convert strings to float for calculations
-                first_usd = float(first.get('total_usd', '0'))
-                last_usd = float(last.get('total_usd', '0'))
+                # Values already stored as float (OTIMIZADO)
+                first_usd = first.get('total_usd', 0.0)
+                last_usd = last.get('total_usd', 0.0)
                 
                 change_usd = last_usd - first_usd
                 change_pct = (change_usd / first_usd) * 100 if first_usd > 0 else 0
                 
-                all_usd_values = [float(s.get('total_usd', '0')) for s in snapshots]
+                all_usd_values = [s.get('total_usd', 0.0) for s in snapshots]
                 
                 time_series['summary'] = {
                     'period_days': days,
