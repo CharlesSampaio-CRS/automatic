@@ -126,42 +126,110 @@ class BalanceService:
             # Fetch balance and tickers for prices
             balance_data = exchange.fetch_balance()
             
+            # Get list of currencies with balance > 0 first (optimization)
+            currencies_with_balance = set()
+            for currency, amounts in balance_data.items():
+                if currency not in ['info', 'free', 'used', 'total', 'timestamp', 'datetime']:
+                    if isinstance(amounts, dict):
+                        total = float(amounts.get('total', 0))
+                        if total > 0:
+                            currencies_with_balance.add(currency)
+            
+            logger.debug(f"{exchange_info['nome']}: Found {len(currencies_with_balance)} currencies with balance")
+            
             # Fetch tickers to get current prices (try multiple quote currencies)
             tickers = {}
             usd_brl_rate = None
             
             try:
-                all_tickers = exchange.fetch_tickers()
+                # OPTIMIZATION: For large exchanges (Binance, etc), only fetch tickers we need
+                # This reduces API load and response time
+                exchange_id_lower = exchange_info['ccxt_id'].lower()
                 
-                # Map ticker prices - try USDT, BRL, USD, USDC in order of preference
-                for symbol, ticker in all_tickers.items():
-                    if '/' not in symbol:
-                        continue
+                if exchange_id_lower in ['binance', 'binanceus'] and len(currencies_with_balance) > 0:
+                    # Binance: fetch specific tickers for currencies we have
+                    logger.debug(f"Binance optimization: fetching only needed tickers")
                     
-                    base, quote = symbol.split('/')
-                    price = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                    for currency in currencies_with_balance:
+                        if currency in ['USDT', 'USDC', 'USD']:
+                            tickers[currency] = 1.0
+                            continue
+                        
+                        # Try USDT pair first (most common on Binance)
+                        for quote in ['USDT', 'BUSD', 'USDC', 'BTC', 'ETH']:
+                            symbol = f"{currency}/{quote}"
+                            try:
+                                ticker = exchange.fetch_ticker(symbol)
+                                price = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                                
+                                if price and quote == 'USDT':
+                                    tickers[currency] = float(price)
+                                    break
+                                elif price and quote == 'BUSD':
+                                    tickers[currency] = float(price)
+                                    break
+                                elif price and quote == 'USDC':
+                                    tickers[currency] = float(price)
+                                    break
+                                elif price and quote == 'BTC':
+                                    # BTC pair - need BTC price in USD
+                                    if 'BTC' not in tickers:
+                                        try:
+                                            btc_ticker = exchange.fetch_ticker('BTC/USDT')
+                                            btc_price = btc_ticker.get('last', 0) or btc_ticker.get('close', 0) or 0
+                                            tickers['BTC'] = float(btc_price)
+                                        except:
+                                            pass
+                                    if 'BTC' in tickers and tickers['BTC'] > 0:
+                                        tickers[currency] = float(price) * tickers['BTC']
+                                        break
+                                elif price and quote == 'ETH':
+                                    # ETH pair - need ETH price in USD
+                                    if 'ETH' not in tickers:
+                                        try:
+                                            eth_ticker = exchange.fetch_ticker('ETH/USDT')
+                                            eth_price = eth_ticker.get('last', 0) or eth_ticker.get('close', 0) or 0
+                                            tickers['ETH'] = float(eth_price)
+                                        except:
+                                            pass
+                                    if 'ETH' in tickers and tickers['ETH'] > 0:
+                                        tickers[currency] = float(price) * tickers['ETH']
+                                        break
+                            except:
+                                continue
+                else:
+                    # Other exchanges: fetch all tickers (original method)
+                    all_tickers = exchange.fetch_tickers()
                     
-                    if not price:
-                        continue
-                    
-                    # Priority: USDT > USD > USDC (direct USD quotes)
-                    if quote in ['USDT', 'USD', 'USDC']:
-                        if base not in tickers:  # Only set if not already set
-                            tickers[base] = float(price)
-                    
-                    # BRL pairs - need conversion to USD
-                    elif quote == 'BRL':
-                        if base not in tickers:  # Use BRL as fallback
-                            # Get USD/BRL rate if not already fetched
-                            if usd_brl_rate is None:
-                                try:
-                                    price_feed = get_price_feed_service()
-                                    usd_brl_rate = price_feed.get_usd_brl_rate()
-                                except:
-                                    usd_brl_rate = 5.0  # Fallback rate
-                            
-                            # Convert BRL price to USD
-                            tickers[base] = float(price) / usd_brl_rate
+                    # Map ticker prices - try USDT, BRL, USD, USDC in order of preference
+                    for symbol, ticker in all_tickers.items():
+                        if '/' not in symbol:
+                            continue
+                        
+                        base, quote = symbol.split('/')
+                        price = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                        
+                        if not price:
+                            continue
+                        
+                        # Priority: USDT > USD > USDC (direct USD quotes)
+                        if quote in ['USDT', 'USD', 'USDC']:
+                            if base not in tickers:  # Only set if not already set
+                                tickers[base] = float(price)
+                        
+                        # BRL pairs - need conversion to USD
+                        elif quote == 'BRL':
+                            if base not in tickers:  # Use BRL as fallback
+                                # Get USD/BRL rate if not already fetched
+                                if usd_brl_rate is None:
+                                    try:
+                                        price_feed = get_price_feed_service()
+                                        usd_brl_rate = price_feed.get_usd_brl_rate()
+                                    except:
+                                        usd_brl_rate = 5.0  # Fallback rate
+                                
+                                # Convert BRL price to USD
+                                tickers[base] = float(price) / usd_brl_rate
                 
                 logger.debug(f"Fetched {len(tickers)} ticker prices from {exchange_info['nome']}")
                 
