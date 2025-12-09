@@ -14,15 +14,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
-from pymongo import MongoClient
 from dotenv import load_dotenv
 from src.utils.logger import get_logger
 
-# Import snapshot function
-from hourly_balance_snapshot import run_hourly_snapshot
-
 # Load environment
 load_dotenv()
+
+# Import snapshot function (must be after dotenv load)
+from scripts.hourly_balance_snapshot import run_hourly_snapshot
 
 # Initialize logger
 logger = get_logger(__name__)
