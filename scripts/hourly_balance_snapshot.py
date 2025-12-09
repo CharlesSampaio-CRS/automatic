@@ -1,6 +1,7 @@
 """
-Hourly Balance Snapshot Script
-Salva automaticamente os saldos de todos os usuários a cada hora fechada (00:00, 01:00, 02:00, etc.)
+Balance Snapshot Script
+Salva automaticamente os saldos de todos os usuários
+Executado a cada 4 horas pelo scheduler (00:00, 04:00, 08:00, 12:00, 16:00, 20:00)
 """
 
 import os
@@ -103,10 +104,11 @@ def save_hourly_snapshot_for_user(balance_service, history_service, user_id: str
 
 def run_hourly_snapshot():
     """
-    Executa snapshot horário para todos os usuários ativos
+    Executa snapshot de saldos para todos os usuários ativos
+    (Frequência configurada no scheduler)
     """
     logger.info("=" * 80)
-    logger.info(f"HOURLY BALANCE SNAPSHOT - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    logger.info(f"BALANCE SNAPSHOT - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
     logger.info("=" * 80)
     
     try:

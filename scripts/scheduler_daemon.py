@@ -1,6 +1,6 @@
 """
 Balance Snapshot Scheduler (APScheduler)
-Roda em background e salva snapshots a cada hora fechada
+Roda em background e salva snapshots a cada 4 horas (00:00, 04:00, 08:00, 12:00, 16:00, 20:00)
 Alternativa ao cron - funciona em qualquer sistema operacional
 """
 
@@ -42,22 +42,22 @@ def scheduled_snapshot():
 
 def main():
     """
-    Inicia o scheduler para executar snapshot a cada hora fechada
+    Inicia o scheduler para executar snapshot a cada 4 horas
     """
     logger.info("=" * 80)
     print("🕐 BALANCE SNAPSHOT SCHEDULER - STARTING")
     logger.info("=" * 80)
     logger.info(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"Schedule: Every hour at minute 0 (00:00, 01:00, 02:00, ...)")
+    logger.info(f"Schedule: Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00)")
     logger.info("=" * 80)
     
     # Create scheduler
     scheduler = BlockingScheduler(timezone='UTC')
     
-    # Add job: execute every hour at minute 0
+    # Add job: execute every 4 hours at minute 0
     scheduler.add_job(
         scheduled_snapshot,
-        trigger=CronTrigger(minute=0, hour='*'),  # Every hour at :00
+        trigger=CronTrigger(minute=0, hour='*/4'),  # Every 4 hours at :00
         id='hourly_balance_snapshot',
         name='Hourly Balance Snapshot',
         replace_existing=True,
