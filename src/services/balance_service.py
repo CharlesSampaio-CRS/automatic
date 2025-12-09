@@ -77,13 +77,76 @@ class BalanceService:
         self.db = db
         self.encryption_service = get_encryption_service()
     
-    def fetch_single_exchange_balance(self, link: Dict, exchange_info: Dict) -> Dict:
+    def _calculate_price_changes(self, exchange, currency: str, current_price: float, quote_currency: str = 'USDT') -> Dict:
+        """
+        Calculate price changes for 1h, 4h, and 24h
+        
+        Args:
+            exchange: CCXT exchange instance
+            currency: Currency symbol (e.g., 'BTC')
+            current_price: Current price in USD
+            quote_currency: Quote currency to use for fetching data
+            
+        Returns:
+            Dict with price changes: {'change_1h': float, 'change_4h': float, 'change_24h': float}
+        """
+        changes = {
+            'change_1h': None,
+            'change_4h': None,
+            'change_24h': None
+        }
+        
+        try:
+            symbol = f"{currency}/{quote_currency}"
+            
+            # Try to get 24h change from ticker first (most reliable)
+            try:
+                ticker = exchange.fetch_ticker(symbol)
+                if ticker.get('percentage') is not None:
+                    changes['change_24h'] = round(float(ticker['percentage']), 2)
+            except:
+                pass
+            
+            # Try to get 1h and 4h changes from OHLCV
+            try:
+                # Fetch 1h data (last 2 candles)
+                ohlcv_1h = exchange.fetch_ohlcv(symbol, timeframe='1h', limit=2)
+                if len(ohlcv_1h) >= 2:
+                    prev_close = ohlcv_1h[-2][4]  # Previous candle close
+                    curr_close = ohlcv_1h[-1][4]  # Current candle close
+                    
+                    if prev_close > 0:
+                        change_1h = ((curr_close - prev_close) / prev_close) * 100
+                        changes['change_1h'] = round(change_1h, 2)
+            except:
+                pass
+            
+            try:
+                # Fetch 4h data (last 2 candles)
+                ohlcv_4h = exchange.fetch_ohlcv(symbol, timeframe='4h', limit=2)
+                if len(ohlcv_4h) >= 2:
+                    prev_close = ohlcv_4h[-2][4]
+                    curr_close = ohlcv_4h[-1][4]
+                    
+                    if prev_close > 0:
+                        change_4h = ((curr_close - prev_close) / prev_close) * 100
+                        changes['change_4h'] = round(change_4h, 2)
+            except:
+                pass
+                
+        except Exception as e:
+            logger.debug(f"Could not calculate price changes for {currency}: {e}")
+        
+        return changes
+    
+    def fetch_single_exchange_balance(self, link: Dict, exchange_info: Dict, include_changes: bool = False) -> Dict:
         """
         Fetch balance from a single exchange
         
         Args:
             link: User exchange link document
             exchange_info: Exchange information document
+            include_changes: Whether to include price change percentages (1h, 4h, 24h)
             
         Returns:
             Dict with balance data or error
@@ -276,11 +339,31 @@ class BalanceService:
                         value_usd = total * price_usd
                         total_usd += value_usd
                         
-                        processed_balances[currency] = {
+                        # Build balance data
+                        balance_data_entry = {
                             'total': total,
                             'price_usd': format_price(price_usd),
                             'value_usd': format_usd(value_usd)
                         }
+                        
+                        # Add price changes if requested and price was found
+                        if include_changes and price_usd > 0 and currency not in ['USDT', 'USDC', 'BRL']:
+                            # Determine quote currency used for this token
+                            quote_currency = 'USDT'
+                            if exchange_info.get('nome', '').lower() == 'novadax':
+                                quote_currency = 'BRL'
+                            
+                            changes = self._calculate_price_changes(exchange, currency, price_usd, quote_currency)
+                            
+                            # Only add non-null changes
+                            if changes['change_1h'] is not None:
+                                balance_data_entry['change_1h'] = changes['change_1h']
+                            if changes['change_4h'] is not None:
+                                balance_data_entry['change_4h'] = changes['change_4h']
+                            if changes['change_24h'] is not None:
+                                balance_data_entry['change_24h'] = changes['change_24h']
+                        
+                        processed_balances[currency] = balance_data_entry
             
             # FALLBACK: Use CoinGecko for tokens without prices
             if tokens_needing_prices:
@@ -327,7 +410,7 @@ class BalanceService:
         
         return result
     
-    def fetch_all_balances(self, user_id: str, use_cache: bool = True, include_brl: bool = False) -> Dict:
+    def fetch_all_balances(self, user_id: str, use_cache: bool = True, include_brl: bool = False, include_changes: bool = False) -> Dict:
         """
         Fetch balances from all linked exchanges in parallel
         
@@ -335,6 +418,7 @@ class BalanceService:
             user_id: User ID
             use_cache: Whether to use cached data
             include_brl: Whether to include BRL conversion
+            include_changes: Whether to include price changes (1h, 4h, 24h)
             
         Returns:
             Dict with aggregated balance data
@@ -398,7 +482,8 @@ class BalanceService:
                 executor.submit(
                     self.fetch_single_exchange_balance,
                     ex_data,  # Pass exchange data from array
-                    exchanges_info[ex_data['exchange_id']]
+                    exchanges_info[ex_data['exchange_id']],
+                    include_changes  # Pass include_changes parameter
                 ): ex_data
                 for ex_data in active_exchanges
             }

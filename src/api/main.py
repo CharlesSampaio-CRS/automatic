@@ -655,6 +655,7 @@ def get_balances():
         user_id (required): ID do usuário
         force_refresh (optional): true para ignorar cache
         currency (optional): 'brl' para incluir conversão BRL
+        include_changes (optional): true para incluir variações de preço (1h, 4h, 24h)
     
     Returns:
         200: Balances agregados
@@ -677,12 +678,15 @@ def get_balances():
         # Check if BRL conversion requested
         include_brl = request.args.get('currency', '').lower() == 'brl'
         
+        # Check if price changes requested
+        include_changes = request.args.get('include_changes', 'false').lower() == 'true'
+        
         # Get balance service
         balance_service = get_balance_service(db)
         
         # Fetch balances (parallelized internally)
-        logger.debug(f"Fetching balances for user {user_id} (cache: {use_cache}, include_brl: {include_brl})...")
-        result = balance_service.fetch_all_balances(user_id, use_cache=use_cache, include_brl=include_brl)
+        logger.debug(f"Fetching balances for user {user_id} (cache: {use_cache}, include_brl: {include_brl}, include_changes: {include_changes})...")
+        result = balance_service.fetch_all_balances(user_id, use_cache=use_cache, include_brl=include_brl, include_changes=include_changes)
         
         num_exchanges = len(result.get('exchanges', []))
         num_tokens = len(result.get('tokens', {}))
@@ -700,7 +704,6 @@ def get_balances():
             'error': 'Internal server error',
             'details': str(e)
         }), 500
-
 @app.route('/api/v1/balances/clear-cache', methods=['POST'])
 def clear_balance_cache():
     """
