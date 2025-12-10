@@ -15,6 +15,7 @@ from src.security.encryption import get_encryption_service
 from src.validators.exchange_validator import ExchangeValidator
 from src.services.balance_service import get_balance_service
 from src.services.balance_history_service import get_balance_history_service
+from src.services.strategy_service import get_strategy_service
 from src.utils.formatting import format_price, format_usd, format_percent
 from src.utils.logger import get_logger
 from src.config import MONGODB_URI, MONGODB_DATABASE, API_PORT
@@ -1192,6 +1193,335 @@ def get_exchange_info(exchange_id):
             'error': 'Internal server error',
             'details': str(e)
         }), 500
+
+# ============================================
+# ENDPOINTS DE ESTRATÉGIAS DE TRADING
+# ============================================
+
+@app.route('/api/v1/strategies', methods=['POST'])
+def create_strategy():
+    """
+    Cria uma nova estratégia de trading para um token em uma exchange
+    
+    Request Body:
+        {
+            "user_id": "string",
+            "exchange_id": "string (MongoDB _id)",
+            "token": "string (e.g., 'BTC', 'ETH')",
+            "take_profit_percent": float (e.g., 5 for +5%),
+            "stop_loss_percent": float (e.g., 3 for -3%),
+            "buy_dip_percent": float (optional, e.g., 5 for -5%),
+            "is_active": bool (optional, default: true)
+        }
+    
+    Returns:
+        201: Estratégia criada
+        400: Dados inválidos
+        500: Erro interno
+    
+    Exemplo:
+        {
+            "user_id": "charles_test_user",
+            "exchange_id": "693481148b0a41e8b6acb07b",
+            "token": "BTC",
+            "take_profit_percent": 5,
+            "stop_loss_percent": 3,
+            "buy_dip_percent": 5
+        }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request body is required'
+            }), 400
+        
+        # Campos obrigatórios
+        required_fields = ['user_id', 'exchange_id', 'token', 'take_profit_percent', 'stop_loss_percent']
+        missing_fields = [field for field in required_fields if field not in data]
+        
+        if missing_fields:
+            return jsonify({
+                'success': False,
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }), 400
+        
+        strategy_service = get_strategy_service(db)
+        
+        result = strategy_service.create_strategy(
+            user_id=data['user_id'],
+            exchange_id=data['exchange_id'],
+            token=data['token'],
+            take_profit_percent=data['take_profit_percent'],
+            stop_loss_percent=data['stop_loss_percent'],
+            buy_dip_percent=data.get('buy_dip_percent'),
+            is_active=data.get('is_active', True)
+        )
+        
+        if result['success']:
+            return jsonify(result), 201
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error creating strategy: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/strategies/<strategy_id>', methods=['PUT'])
+def update_strategy(strategy_id):
+    """
+    Atualiza uma estratégia existente
+    
+    Path Params:
+        strategy_id: MongoDB ObjectId da estratégia
+    
+    Request Body (todos opcionais):
+        {
+            "take_profit_percent": float,
+            "stop_loss_percent": float,
+            "buy_dip_percent": float,
+            "is_active": bool
+        }
+    
+    Returns:
+        200: Estratégia atualizada
+        400: Dados inválidos
+        404: Estratégia não encontrada
+        500: Erro interno
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request body is required'
+            }), 400
+        
+        strategy_service = get_strategy_service(db)
+        
+        result = strategy_service.update_strategy(
+            strategy_id=strategy_id,
+            take_profit_percent=data.get('take_profit_percent'),
+            stop_loss_percent=data.get('stop_loss_percent'),
+            buy_dip_percent=data.get('buy_dip_percent'),
+            is_active=data.get('is_active')
+        )
+        
+        if result['success']:
+            return jsonify(result), 200
+        else:
+            status_code = 404 if 'not found' in result.get('error', '').lower() else 400
+            return jsonify(result), status_code
+            
+    except Exception as e:
+        logger.error(f"Error updating strategy: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/strategies/<strategy_id>', methods=['DELETE'])
+def delete_strategy(strategy_id):
+    """
+    Deleta uma estratégia
+    
+    Path Params:
+        strategy_id: MongoDB ObjectId da estratégia
+    
+    Returns:
+        200: Estratégia deletada
+        404: Estratégia não encontrada
+        500: Erro interno
+    """
+    try:
+        strategy_service = get_strategy_service(db)
+        result = strategy_service.delete_strategy(strategy_id)
+        
+        if result['success']:
+            return jsonify(result), 200
+        else:
+            status_code = 404 if 'not found' in result.get('error', '').lower() else 400
+            return jsonify(result), status_code
+            
+    except Exception as e:
+        logger.error(f"Error deleting strategy: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/strategies/<strategy_id>', methods=['GET'])
+def get_strategy(strategy_id):
+    """
+    Busca uma estratégia por ID
+    
+    Path Params:
+        strategy_id: MongoDB ObjectId da estratégia
+    
+    Returns:
+        200: Estratégia encontrada
+        404: Estratégia não encontrada
+        500: Erro interno
+    """
+    try:
+        strategy_service = get_strategy_service(db)
+        strategy = strategy_service.get_strategy(strategy_id)
+        
+        if strategy:
+            return jsonify({
+                'success': True,
+                'strategy': strategy
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Strategy not found: {strategy_id}'
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Error getting strategy: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/strategies', methods=['GET'])
+def get_user_strategies():
+    """
+    Lista todas as estratégias de um usuário com filtros opcionais
+    
+    Query Params:
+        user_id (required): ID do usuário
+        exchange_id (optional): Filtrar por exchange
+        token (optional): Filtrar por token
+        is_active (optional): Filtrar por status (true/false)
+    
+    Returns:
+        200: Lista de estratégias
+        400: user_id não fornecido
+        500: Erro interno
+    
+    Exemplo:
+        GET /api/v1/strategies?user_id=charles_test_user
+        GET /api/v1/strategies?user_id=charles_test_user&exchange_id=693481148b0a41e8b6acb07b
+        GET /api/v1/strategies?user_id=charles_test_user&token=BTC&is_active=true
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required as query parameter'
+            }), 400
+        
+        exchange_id = request.args.get('exchange_id')
+        token = request.args.get('token')
+        is_active_str = request.args.get('is_active')
+        is_active = None if is_active_str is None else is_active_str.lower() == 'true'
+        
+        strategy_service = get_strategy_service(db)
+        strategies = strategy_service.get_user_strategies(
+            user_id=user_id,
+            exchange_id=exchange_id,
+            token=token,
+            is_active=is_active
+        )
+        
+        return jsonify({
+            'success': True,
+            'count': len(strategies),
+            'strategies': strategies
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting strategies: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/strategies/<strategy_id>/check', methods=['POST'])
+def check_strategy_trigger(strategy_id):
+    """
+    Verifica se uma estratégia deve ser acionada com base no preço atual
+    
+    Path Params:
+        strategy_id: MongoDB ObjectId da estratégia
+    
+    Request Body:
+        {
+            "current_price": float,
+            "entry_price": float
+        }
+    
+    Returns:
+        200: Resultado da verificação
+        400: Dados inválidos
+        404: Estratégia não encontrada
+        500: Erro interno
+    
+    Response Example:
+        {
+            "should_trigger": true,
+            "action": "SELL",
+            "reason": "TAKE_PROFIT",
+            "trigger_percent": 5.0,
+            "current_change_percent": 6.5,
+            "strategy": {...}
+        }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request body is required'
+            }), 400
+        
+        if 'current_price' not in data or 'entry_price' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'current_price and entry_price are required'
+            }), 400
+        
+        strategy_service = get_strategy_service(db)
+        
+        result = strategy_service.check_strategy_triggers(
+            strategy_id=strategy_id,
+            current_price=float(data['current_price']),
+            entry_price=float(data['entry_price'])
+        )
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Error checking strategy trigger: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+# ============================================
+
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
