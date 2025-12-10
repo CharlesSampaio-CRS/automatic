@@ -34,21 +34,19 @@ def get_all_active_users(db):
         List of unique user_ids
     """
     try:
-        pipeline = [
+        # Find all users with at least one active exchange
+        users = db.user_exchanges.find(
             {
-                '$match': {
-                    'is_active': True
+                'exchanges': {
+                    '$elemMatch': {
+                        'is_active': True
+                    }
                 }
             },
-            {
-                '$group': {
-                    '_id': '$user_id'
-                }
-            }
-        ]
+            {'user_id': 1}
+        )
         
-        users = db.user_exchanges.aggregate(pipeline)
-        user_ids = [user['_id'] for user in users]
+        user_ids = [user['user_id'] for user in users]
         
         print(f"📋 Found {len(user_ids)} active users")
         return user_ids
@@ -74,14 +72,13 @@ def save_hourly_snapshot_for_user(balance_service, history_service, user_id: str
         logger.info(f"Processing user: {user_id}")
         
         # Busca saldos (sem usar cache para garantir dados atualizados)
-        balance_data = balance_service.get_balances(
+        balance_data = balance_service.fetch_all_balances(
             user_id=user_id,
-            force_refresh=True,  # Sempre busca dados novos
             use_cache=False,     # Não usa cache
-            include_currency='brl'
+            include_brl=True     # Inclui conversão BRL
         )
         
-        if not balance_data:
+        if not balance_data or not balance_data.get('exchanges'):
             logger.warning(f"No balance data for user {user_id}")
             return False
         
@@ -90,8 +87,8 @@ def save_hourly_snapshot_for_user(balance_service, history_service, user_id: str
         
         if snapshot_id:
             total_usd = balance_data.get('summary', {}).get('total_usd', '0.00')
-            exchanges_count = len([ex for ex in balance_data.get('exchanges', []) if ex.get('success')])
-            logger.info(f"Snapshot saved: {snapshot_id} | Total: ${total_usd} | Exchanges: {exchanges_count}")
+            exchanges_count = balance_data.get('summary', {}).get('exchanges_count', 0)
+            logger.info(f"✅ Snapshot saved: {snapshot_id} | Total: ${total_usd} | Exchanges: {exchanges_count}")
             return True
         else:
             logger.warning(f"Failed to save snapshot for user {user_id}")
