@@ -13,10 +13,9 @@ Advanced rule-based strategies with:
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 from bson import ObjectId
 from src.utils.logger import get_logger
-from src.validators.strategy_rules_validator import StrategyRulesValidator
 
 
 # Initialize logger
@@ -58,55 +57,42 @@ class StrategyService:
         user_id: str,
         exchange_id: str,
         token: str,
-        rules: Union[Dict, float, int] = None,
-        is_active: bool = True,
-        # Backward compatibility parameters
-        take_profit_percent: Optional[float] = None,
-        stop_loss_percent: Optional[float] = None,
-        buy_dip_percent: Optional[float] = None
+        rules: Dict,
+        is_active: bool = True
     ) -> Dict:
         """
         Create a new trading strategy for a specific token on an exchange
-        
-        Supports both old format (individual parameters) and new format (rules dict)
         
         Args:
             user_id: User ID
             exchange_id: Exchange MongoDB ObjectId
             token: Token symbol (e.g., 'BTC', 'ETH')
-            rules: Dict with advanced rules OR old-style percentage (for backward compatibility)
+            take_profit_percent: Percentage to sell when price increases (positive, e.g., 5 = sell at +5%)
+            stop_loss_percent: Percentage to sell when price decreases (positive, e.g., 3 = sell at -3%)
+            buy_dip_percent: Optional percentage to buy when price decreases (positive, e.g., 5 = buy at -5%)
             is_active: Whether strategy is active
-            take_profit_percent: DEPRECATED - Use rules instead
-            stop_loss_percent: DEPRECATED - Use rules instead
-            buy_dip_percent: DEPRECATED - Use rules instead
             
         Returns:
             Dict with created strategy or error
         """
         try:
-            # === BACKWARD COMPATIBILITY ===
-            # If old parameters provided, convert to new format
-            if take_profit_percent is not None or stop_loss_percent is not None:
-                logger.warning("Using deprecated parameters. Please use 'rules' dict instead.")
-                rules = {
-                    'take_profit_percent': take_profit_percent or 5.0,
-                    'stop_loss_percent': stop_loss_percent or 2.0,
-                    'buy_dip_percent': buy_dip_percent
-                }
-            
-            # If rules is None, use defaults
-            if rules is None:
-                rules = StrategyRulesValidator.get_default_rules()
-            
-            # Normalize rules (convert old format to new if needed)
-            rules = StrategyRulesValidator.normalize_rules(rules)
-            
-            # Validate rules
-            is_valid, error_msg = StrategyRulesValidator.validate_rules(rules)
-            if not is_valid:
+            # Validate percentages
+            if take_profit_percent <= 0:
                 return {
                     'success': False,
-                    'error': f'Invalid rules: {error_msg}'
+                    'error': 'take_profit_percent must be positive (e.g., 5 for +5%)'
+                }
+            
+            if stop_loss_percent <= 0:
+                return {
+                    'success': False,
+                    'error': 'stop_loss_percent must be positive (e.g., 3 for -3%)'
+                }
+            
+            if buy_dip_percent is not None and buy_dip_percent <= 0:
+                return {
+                    'success': False,
+                    'error': 'buy_dip_percent must be positive (e.g., 5 for -5%)'
                 }
             
             # Validate exchange exists
@@ -130,68 +116,28 @@ class StrategyService:
                     'error': f'Strategy already exists for {token} on {exchange["nome"]}. Use update instead.'
                 }
             
-            # Create strategy document with full tracking
+            # Create strategy document
             strategy = {
                 'user_id': user_id,
                 'exchange_id': exchange_id,
                 'exchange_name': exchange['nome'],
                 'token': token.upper(),
-                'rules': rules,
+                'rules': {
+                    'take_profit_percent': float(take_profit_percent),
+                    'stop_loss_percent': float(stop_loss_percent),
+                    'buy_dip_percent': float(buy_dip_percent) if buy_dip_percent else None
+                },
                 'is_active': is_active,
-                
-                # Execution tracking
-                'execution_stats': {
-                    'total_executions': 0,
-                    'total_sells': 0,
-                    'total_buys': 0,
-                    'last_execution_at': None,
-                    'last_execution_type': None,
-                    'last_execution_reason': None
-                },
-                
-                # Performance tracking
-                'performance': {
-                    'total_profit_usd': 0.0,
-                    'total_loss_usd': 0.0,
-                    'win_rate': 0.0,
-                    'daily_pnl': 0.0,
-                    'weekly_pnl': 0.0,
-                    'monthly_pnl': 0.0
-                },
-                
-                # Trailing stop state
-                'trailing_stop_state': {
-                    'is_active': False,
-                    'highest_price': None,
-                    'current_stop_price': None,
-                    'activated_at': None
-                },
-                
-                # Cooldown state
-                'cooldown_state': {
-                    'is_cooling': False,
-                    'cooldown_until': None,
-                    'last_action': None
-                },
-                
-                # Timestamps
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow(),
-                'last_checked_at': None
+                'last_executed_at': None,
+                'execution_count': 0
             }
             
             result = self.collection.insert_one(strategy)
             strategy['_id'] = str(result.inserted_id)
             
-            # Log creation with summary
-            tp_count = len(rules.get('take_profit_levels', []))
-            sl_percent = rules.get('stop_loss', {}).get('percent', 0)
-            trailing = rules.get('stop_loss', {}).get('trailing_enabled', False)
-            
-            logger.info(
-                f"Strategy created: {token} on {exchange['nome']} "
-                f"(TP levels: {tp_count}, SL: -{sl_percent}%, Trailing: {trailing})"
-            )
+            logger.info(f"Strategy created: {token} on {exchange['nome']} (TP: +{take_profit_percent}%, SL: -{stop_loss_percent}%)")
             
             return {
                 'success': True,
