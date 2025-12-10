@@ -16,6 +16,10 @@ from src.validators.exchange_validator import ExchangeValidator
 from src.services.balance_service import get_balance_service
 from src.services.balance_history_service import get_balance_history_service
 from src.services.strategy_service import get_strategy_service
+from src.services.position_service import get_position_service
+from src.services.order_execution_service import get_order_execution_service
+from src.services.notification_service import get_notification_service
+from src.services.strategy_worker import get_strategy_worker
 from src.utils.formatting import format_price, format_usd, format_percent
 from src.utils.logger import get_logger
 from src.config import MONGODB_URI, MONGODB_DATABASE, API_PORT
@@ -95,7 +99,60 @@ logger.info("✅ Scheduler started - Balance snapshots every 4 hours (00:00, 04:
 # Shutdown scheduler when app exits
 atexit.register(lambda: scheduler.shutdown())
 
+
 # ============================================================================
+# STRATEGY WORKER - Automated Trading Bot
+# ============================================================================
+
+# Initialize trading services
+strategy_worker = None
+
+def initialize_strategy_worker():
+    """
+    Initialize strategy worker bot for automated trading
+    Runs in dry-run mode by default (can be changed via env var)
+    """
+    try:
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        check_interval = int(os.getenv('STRATEGY_CHECK_INTERVAL', '5'))  # minutes
+        
+        # Initialize services
+        strategy_service = get_strategy_service(db)
+        position_service = get_position_service(db)
+        order_execution_service = get_order_execution_service(db, dry_run=dry_run)
+        notification_service = get_notification_service(db)
+        
+        # Create strategy worker
+        global strategy_worker
+        strategy_worker = get_strategy_worker(
+            db=db,
+            strategy_service=strategy_service,
+            position_service=position_service,
+            order_execution_service=order_execution_service,
+            notification_service=notification_service,
+            dry_run=dry_run,
+            check_interval_minutes=check_interval
+        )
+        
+        # Start worker
+        strategy_worker.start()
+        
+        mode = "DRY-RUN" if dry_run else "LIVE"
+        logger.info(f"✅ Strategy Worker started in {mode} mode (checking every {check_interval} minutes)")
+        
+    except Exception as e:
+        logger.error(f"Error initializing strategy worker: {e}")
+        import traceback
+        traceback.print_exc()
+
+# Initialize strategy worker
+initialize_strategy_worker()
+
+# Shutdown strategy worker when app exits
+atexit.register(lambda: strategy_worker.stop() if strategy_worker else None)
+
+# ============================================================================
+
 
 
 @app.route('/health', methods=['GET'])
@@ -126,7 +183,7 @@ def index():
     """Rota raiz"""
     return {
         'message': 'Sistema de Trading Multi-Exchange',
-        'version': '1.0.0',
+        'version': '2.0.0',
         'endpoints': {
             'health': '/health',
             'scheduler_status': '/api/v1/scheduler/status',
@@ -135,7 +192,17 @@ def index():
             'exchanges_linked': '/api/v1/exchanges/linked?user_id=<user_id>',
             'exchanges_unlink': '/api/v1/exchanges/unlink',
             'balances': '/api/v1/balances?user_id=<user_id>&force_refresh=<true|false>',
-            'balances_clear_cache': '/api/v1/balances/clear-cache'
+            'balances_clear_cache': '/api/v1/balances/clear-cache',
+            'strategies': '/api/v1/strategies?user_id=<user_id>',
+            'positions': '/api/v1/positions?user_id=<user_id>',
+            'notifications': '/api/v1/notifications?user_id=<user_id>',
+            'manual_buy': '/api/v1/orders/buy',
+            'manual_sell': '/api/v1/orders/sell'
+        },
+        'features': {
+            'automated_snapshots': 'Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)',
+            'automated_trading': 'Strategy Worker checking every 5 minutes',
+            'dry_run_mode': os.getenv('STRATEGY_DRY_RUN', 'true')
         }
     }, 200
 
@@ -1523,9 +1590,598 @@ def check_strategy_trigger(strategy_id):
 # ============================================
 
 
+# ============================================
+# POSITION ENDPOINTS
+# ============================================
+
+@app.route('/api/v1/positions', methods=['GET'])
+def get_positions():
+    """
+    Lista todas as posições do usuário
+    
+    Query Params:
+        user_id (required): ID do usuário
+        exchange_id (optional): Filtrar por exchange
+        token (optional): Filtrar por token
+        is_active (optional): Filtrar por status (true/false)
+    
+    Returns:
+        200: Lista de posições
+        400: Parâmetros inválidos
+        500: Erro interno
+    
+    Response Example:
+        {
+            "success": true,
+            "positions": [
+                {
+                    "_id": "...",
+                    "user_id": "user123",
+                    "exchange_id": "...",
+                    "exchange_name": "Binance",
+                    "token": "BTC",
+                    "amount": 0.5,
+                    "entry_price": 45000.0,
+                    "total_invested": 22500.0,
+                    "is_active": true,
+                    "purchases": [...],
+                    "sales": [...],
+                    "created_at": "...",
+                    "updated_at": "..."
+                }
+            ]
+        }
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required'
+            }), 400
+        
+        # Optional filters
+        filters = {}
+        if 'exchange_id' in request.args:
+            filters['exchange_id'] = request.args.get('exchange_id')
+        if 'token' in request.args:
+            filters['token'] = request.args.get('token')
+        if 'is_active' in request.args:
+            filters['is_active'] = request.args.get('is_active').lower() == 'true'
+        
+        position_service = get_position_service(db)
+        positions = position_service.get_user_positions(user_id, filters=filters)
+        
+        return jsonify({
+            'success': True,
+            'positions': positions
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting positions: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/positions/<position_id>', methods=['GET'])
+def get_position_detail(position_id):
+    """
+    Busca detalhes de uma posição específica
+    
+    Path Params:
+        position_id: MongoDB ObjectId da posição
+    
+    Returns:
+        200: Detalhes da posição
+        404: Posição não encontrada
+        500: Erro interno
+    """
+    try:
+        from bson import ObjectId
+        
+        position_service = get_position_service(db)
+        position = db.user_positions.find_one({'_id': ObjectId(position_id)})
+        
+        if not position:
+            return jsonify({
+                'success': False,
+                'error': 'Position not found'
+            }), 404
+        
+        # Convert ObjectId to string
+        position['_id'] = str(position['_id'])
+        position['exchange_id'] = str(position['exchange_id'])
+        
+        return jsonify({
+            'success': True,
+            'position': position
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting position detail: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/positions/sync', methods=['POST'])
+def sync_positions():
+    """
+    Sincroniza posições a partir dos saldos atuais
+    Cria posições para tokens que ainda não têm histórico de compra
+    
+    Request Body:
+        {
+            "user_id": "user123",
+            "exchange_id": "...",  (optional)
+            "token": "BTC"  (optional)
+        }
+    
+    Returns:
+        200: Posições sincronizadas
+        400: Dados inválidos
+        500: Erro interno
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'user_id' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required'
+            }), 400
+        
+        user_id = data['user_id']
+        exchange_id = data.get('exchange_id')
+        token = data.get('token')
+        
+        position_service = get_position_service(db)
+        
+        if exchange_id and token:
+            # Sync specific position
+            result = position_service.sync_from_balance(user_id, exchange_id, token)
+            return jsonify({
+                'success': True,
+                'message': 'Position synced',
+                'position': result
+            }), 200
+        else:
+            # Sync all positions from balances
+            balance_service = get_balance_service(db)
+            balances = balance_service.fetch_all_balances(
+                user_id=user_id,
+                exchange_ids=[exchange_id] if exchange_id else None,
+                include_changes=False
+            )
+            
+            synced_count = 0
+            for balance in balances:
+                ex_id = balance['exchange_id']
+                for asset in balance['balances']:
+                    if asset['free'] > 0:
+                        position_service.sync_from_balance(user_id, ex_id, asset['asset'])
+                        synced_count += 1
+            
+            return jsonify({
+                'success': True,
+                'message': f'Synced {synced_count} positions'
+            }), 200
+        
+    except Exception as e:
+        logger.error(f"Error syncing positions: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/positions/<position_id>/history', methods=['GET'])
+def get_position_history(position_id):
+    """
+    Busca histórico de compras e vendas de uma posição
+    
+    Path Params:
+        position_id: MongoDB ObjectId da posição
+    
+    Returns:
+        200: Histórico de transações
+        404: Posição não encontrada
+        500: Erro interno
+    """
+    try:
+        from bson import ObjectId
+        
+        position = db.user_positions.find_one({'_id': ObjectId(position_id)})
+        
+        if not position:
+            return jsonify({
+                'success': False,
+                'error': 'Position not found'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'history': {
+                'purchases': position.get('purchases', []),
+                'sales': position.get('sales', [])
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting position history: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+# ============================================
+# NOTIFICATION ENDPOINTS
+# ============================================
+
+@app.route('/api/v1/notifications', methods=['GET'])
+def get_notifications():
+    """
+    Lista notificações do usuário
+    
+    Query Params:
+        user_id (required): ID do usuário
+        unread_only (optional): Apenas não lidas (true/false)
+        type (optional): Filtrar por tipo
+        limit (optional): Limite de resultados (default: 50)
+    
+    Returns:
+        200: Lista de notificações
+        400: Parâmetros inválidos
+        500: Erro interno
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required'
+            }), 400
+        
+        unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+        notification_type = request.args.get('type')
+        limit = int(request.args.get('limit', 50))
+        
+        notification_service = get_notification_service(db)
+        notifications = notification_service.get_user_notifications(
+            user_id=user_id,
+            unread_only=unread_only,
+            notification_type=notification_type,
+            limit=limit
+        )
+        
+        return jsonify({
+            'success': True,
+            'notifications': notifications
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting notifications: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/notifications/<notification_id>/read', methods=['PUT'])
+def mark_notification_read(notification_id):
+    """
+    Marca notificação como lida
+    
+    Path Params:
+        notification_id: MongoDB ObjectId da notificação
+    
+    Returns:
+        200: Notificação marcada como lida
+        404: Notificação não encontrada
+        500: Erro interno
+    """
+    try:
+        notification_service = get_notification_service(db)
+        success = notification_service.mark_as_read(notification_id)
+        
+        if not success:
+            return jsonify({
+                'success': False,
+                'error': 'Notification not found'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'message': 'Notification marked as read'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error marking notification as read: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/notifications/read-all', methods=['PUT'])
+def mark_all_notifications_read():
+    """
+    Marca todas as notificações do usuário como lidas
+    
+    Request Body:
+        {
+            "user_id": "user123"
+        }
+    
+    Returns:
+        200: Notificações marcadas
+        400: Dados inválidos
+        500: Erro interno
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'user_id' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required'
+            }), 400
+        
+        notification_service = get_notification_service(db)
+        count = notification_service.mark_all_as_read(data['user_id'])
+        
+        return jsonify({
+            'success': True,
+            'message': f'{count} notifications marked as read'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error marking all notifications as read: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/notifications/<notification_id>', methods=['DELETE'])
+def delete_notification(notification_id):
+    """
+    Deleta notificação
+    
+    Path Params:
+        notification_id: MongoDB ObjectId da notificação
+    
+    Returns:
+        200: Notificação deletada
+        404: Notificação não encontrada
+        500: Erro interno
+    """
+    try:
+        notification_service = get_notification_service(db)
+        success = notification_service.delete_notification(notification_id)
+        
+        if not success:
+            return jsonify({
+                'success': False,
+                'error': 'Notification not found'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'message': 'Notification deleted'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error deleting notification: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+# ============================================
+# MANUAL ORDER EXECUTION ENDPOINTS (for testing/manual trades)
+# ============================================
+
+@app.route('/api/v1/orders/sell', methods=['POST'])
+def execute_sell_order():
+    """
+    Executa ordem de venda manualmente
+    
+    Request Body:
+        {
+            "user_id": "user123",
+            "exchange_id": "...",
+            "token": "BTC",
+            "amount": 0.5,
+            "order_type": "market" | "limit",
+            "price": 45000.0  (required for limit orders)
+        }
+    
+    Returns:
+        200: Ordem executada
+        400: Dados inválidos
+        500: Erro interno
+    """
+    try:
+        data = request.get_json()
+        
+        required_fields = ['user_id', 'exchange_id', 'token', 'amount', 'order_type']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'{field} is required'
+                }), 400
+        
+        # Get order execution service (use env var for dry_run)
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        order_service = get_order_execution_service(db, dry_run=dry_run)
+        
+        if data['order_type'] == 'market':
+            result = order_service.execute_market_sell(
+                user_id=data['user_id'],
+                exchange_id=data['exchange_id'],
+                token=data['token'],
+                amount=float(data['amount'])
+            )
+        elif data['order_type'] == 'limit':
+            if 'price' not in data:
+                return jsonify({
+                    'success': False,
+                    'error': 'price is required for limit orders'
+                }), 400
+            
+            result = order_service.execute_limit_sell(
+                user_id=data['user_id'],
+                exchange_id=data['exchange_id'],
+                token=data['token'],
+                amount=float(data['amount']),
+                price=float(data['price'])
+            )
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'order_type must be "market" or "limit"'
+            }), 400
+        
+        # Update position if successful
+        if result['success'] and not result.get('dry_run'):
+            position_service = get_position_service(db)
+            order = result['order']
+            
+            if order.get('filled'):
+                position_service.record_sell(
+                    user_id=data['user_id'],
+                    exchange_id=data['exchange_id'],
+                    token=data['token'],
+                    amount=order['filled'],
+                    price=order.get('average', order.get('price')),
+                    total_received=order.get('cost'),
+                    order_id=order['id']
+                )
+        
+        return jsonify(result), 200 if result['success'] else 400
+        
+    except Exception as e:
+        logger.error(f"Error executing sell order: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/orders/buy', methods=['POST'])
+def execute_buy_order():
+    """
+    Executa ordem de compra manualmente
+    
+    Request Body:
+        {
+            "user_id": "user123",
+            "exchange_id": "...",
+            "token": "BTC",
+            "amount": 0.5,
+            "order_type": "market" | "limit",
+            "price": 45000.0  (required for limit orders)
+        }
+    
+    Returns:
+        200: Ordem executada
+        400: Dados inválidos
+        500: Erro interno
+    """
+    try:
+        data = request.get_json()
+        
+        required_fields = ['user_id', 'exchange_id', 'token', 'amount', 'order_type']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'{field} is required'
+                }), 400
+        
+        # Get order execution service (use env var for dry_run)
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        order_service = get_order_execution_service(db, dry_run=dry_run)
+        
+        if data['order_type'] == 'market':
+            result = order_service.execute_market_buy(
+                user_id=data['user_id'],
+                exchange_id=data['exchange_id'],
+                token=data['token'],
+                amount=float(data['amount'])
+            )
+        elif data['order_type'] == 'limit':
+            if 'price' not in data:
+                return jsonify({
+                    'success': False,
+                    'error': 'price is required for limit orders'
+                }), 400
+            
+            result = order_service.execute_limit_buy(
+                user_id=data['user_id'],
+                exchange_id=data['exchange_id'],
+                token=data['token'],
+                amount=float(data['amount']),
+                price=float(data['price'])
+            )
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'order_type must be "market" or "limit"'
+            }), 400
+        
+        # Update position if successful
+        if result['success'] and not result.get('dry_run'):
+            position_service = get_position_service(db)
+            order = result['order']
+            
+            if order.get('filled'):
+                position_service.record_buy(
+                    user_id=data['user_id'],
+                    exchange_id=data['exchange_id'],
+                    token=data['token'],
+                    amount=order['filled'],
+                    price=order.get('average', order.get('price')),
+                    total_cost=order.get('cost'),
+                    order_id=order['id']
+                )
+        
+        return jsonify(result), 200 if result['success'] else 400
+        
+    except Exception as e:
+        logger.error(f"Error executing buy order: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+# ============================================
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
     
     logger.info(f"Iniciando servidor na porta {port}...")
     app.run(host='0.0.0.0', port=port, debug=debug)
+
