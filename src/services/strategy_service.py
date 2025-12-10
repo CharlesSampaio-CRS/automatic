@@ -59,6 +59,7 @@ class StrategyService:
         exchange_id: str,
         token: str,
         rules: Union[Dict, float, int] = None,
+        template: Optional[str] = None,
         is_active: bool = True,
         # Backward compatibility parameters
         take_profit_percent: Optional[float] = None,
@@ -68,34 +69,48 @@ class StrategyService:
         """
         Create a new trading strategy for a specific token on an exchange
         
-        Supports both old format (individual parameters) and new format (rules dict)
+        Supports multiple creation modes:
+        1. Template mode: Pass template='simple', 'conservative', or 'aggressive'
+        2. Rules mode: Pass complete rules dict
+        3. Legacy mode: Pass individual percentage parameters
         
         Args:
             user_id: User ID
             exchange_id: Exchange MongoDB ObjectId
             token: Token symbol (e.g., 'BTC', 'ETH')
-            rules: Dict with advanced rules OR old-style percentage (for backward compatibility)
+            rules: Dict with advanced rules (optional if template is provided)
+            template: Template name ('simple', 'conservative', 'aggressive')
             is_active: Whether strategy is active
-            take_profit_percent: DEPRECATED - Use rules instead
-            stop_loss_percent: DEPRECATED - Use rules instead
-            buy_dip_percent: DEPRECATED - Use rules instead
+            take_profit_percent: DEPRECATED - Use rules or template instead
+            stop_loss_percent: DEPRECATED - Use rules or template instead
+            buy_dip_percent: DEPRECATED - Use rules or template instead
             
         Returns:
             Dict with created strategy or error
         """
         try:
-            # === BACKWARD COMPATIBILITY ===
-            # If old parameters provided, convert to new format
-            if take_profit_percent is not None or stop_loss_percent is not None:
-                logger.warning("Using deprecated parameters. Please use 'rules' dict instead.")
+            # === PRIORITY 1: Template Mode ===
+            if template:
+                try:
+                    rules = StrategyRulesValidator.get_template_rules(template)
+                    logger.info(f"Using template: {template}")
+                except ValueError as e:
+                    return {
+                        'success': False,
+                        'error': str(e)
+                    }
+            
+            # === PRIORITY 2: Backward Compatibility ===
+            elif take_profit_percent is not None or stop_loss_percent is not None:
+                logger.warning("Using deprecated parameters. Please use 'template' or 'rules' instead.")
                 rules = {
                     'take_profit_percent': take_profit_percent or 5.0,
                     'stop_loss_percent': stop_loss_percent or 2.0,
                     'buy_dip_percent': buy_dip_percent
                 }
             
-            # If rules is None, use defaults
-            if rules is None:
+            # === PRIORITY 3: Default Rules ===
+            elif rules is None:
                 rules = StrategyRulesValidator.get_default_rules()
             
             # Normalize rules (convert old format to new if needed)

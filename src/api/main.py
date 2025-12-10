@@ -1280,30 +1280,70 @@ def create_strategy():
     """
     Cria uma nova estratégia de trading para um token em uma exchange
     
-    Request Body:
+    Suporta 3 modos de criação:
+    1. Template Mode (RECOMENDADO): Use "template" para estratégias prontas
+    2. Custom Mode: Forneça "rules" completas
+    3. Legacy Mode: Use take_profit_percent, stop_loss_percent (deprecated)
+    
+    Request Body (Template Mode):
         {
             "user_id": "string",
             "exchange_id": "string (MongoDB _id)",
             "token": "string (e.g., 'BTC', 'ETH')",
-            "take_profit_percent": float (e.g., 5 for +5%),
-            "stop_loss_percent": float (e.g., 3 for -3%),
-            "buy_dip_percent": float (optional, e.g., 5 for -5%),
+            "template": "simple" | "conservative" | "aggressive",
             "is_active": bool (optional, default: true)
         }
+    
+    Request Body (Custom Mode):
+        {
+            "user_id": "string",
+            "exchange_id": "string (MongoDB _id)",
+            "token": "string",
+            "rules": {
+                "take_profit_levels": [...],
+                "stop_loss": {...},
+                "buy_dip": {...},
+                ...
+            },
+            "is_active": bool (optional, default: true)
+        }
+    
+    Request Body (Legacy Mode - DEPRECATED):
+        {
+            "user_id": "string",
+            "exchange_id": "string (MongoDB _id)",
+            "token": "string",
+            "take_profit_percent": float,
+            "stop_loss_percent": float,
+            "buy_dip_percent": float (optional)
+        }
+    
+    Templates disponíveis:
+        - simple: Estratégia básica (1 TP 5%, SL 2%, sem trailing)
+        - conservative: Proteção máxima (2 TPs, trailing stop, max loss $200/dia)
+        - aggressive: Máximo lucro (3 TPs, DCA ativo, max loss $1000/dia)
     
     Returns:
         201: Estratégia criada
         400: Dados inválidos
         500: Erro interno
     
-    Exemplo:
+    Exemplos:
+        Template Mode:
         {
-            "user_id": "charles_test_user",
+            "user_id": "user123",
+            "exchange_id": "693481148b0a41e8b6acb07b",
+            "token": "REKTCOIN",
+            "template": "aggressive"
+        }
+        
+        Legacy Mode:
+        {
+            "user_id": "user123",
             "exchange_id": "693481148b0a41e8b6acb07b",
             "token": "BTC",
             "take_profit_percent": 5,
-            "stop_loss_percent": 3,
-            "buy_dip_percent": 5
+            "stop_loss_percent": 3
         }
     """
     try:
@@ -1315,8 +1355,8 @@ def create_strategy():
                 'error': 'Request body is required'
             }), 400
         
-        # Campos obrigatórios
-        required_fields = ['user_id', 'exchange_id', 'token', 'take_profit_percent', 'stop_loss_percent']
+        # Campos obrigatórios básicos
+        required_fields = ['user_id', 'exchange_id', 'token']
         missing_fields = [field for field in required_fields if field not in data]
         
         if missing_fields:
@@ -1327,15 +1367,41 @@ def create_strategy():
         
         strategy_service = get_strategy_service(db)
         
-        result = strategy_service.create_strategy(
-            user_id=data['user_id'],
-            exchange_id=data['exchange_id'],
-            token=data['token'],
-            take_profit_percent=data['take_profit_percent'],
-            stop_loss_percent=data['stop_loss_percent'],
-            buy_dip_percent=data.get('buy_dip_percent'),
-            is_active=data.get('is_active', True)
-        )
+        # Determinar modo de criação
+        if 'template' in data:
+            # Template Mode (RECOMENDADO)
+            result = strategy_service.create_strategy(
+                user_id=data['user_id'],
+                exchange_id=data['exchange_id'],
+                token=data['token'],
+                template=data['template'],
+                is_active=data.get('is_active', True)
+            )
+        elif 'rules' in data:
+            # Custom Mode
+            result = strategy_service.create_strategy(
+                user_id=data['user_id'],
+                exchange_id=data['exchange_id'],
+                token=data['token'],
+                rules=data['rules'],
+                is_active=data.get('is_active', True)
+            )
+        elif 'take_profit_percent' in data:
+            # Legacy Mode (DEPRECATED)
+            result = strategy_service.create_strategy(
+                user_id=data['user_id'],
+                exchange_id=data['exchange_id'],
+                token=data['token'],
+                take_profit_percent=data['take_profit_percent'],
+                stop_loss_percent=data['stop_loss_percent'],
+                buy_dip_percent=data.get('buy_dip_percent'),
+                is_active=data.get('is_active', True)
+            )
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Provide either "template", "rules", or "take_profit_percent" + "stop_loss_percent"'
+            }), 400
         
         if result['success']:
             return jsonify(result), 201

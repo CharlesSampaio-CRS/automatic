@@ -433,3 +433,141 @@ class StrategyRulesValidator:
                 "allow_partial_fills": True
             }
         }
+    
+    @staticmethod
+    def get_template_rules(template: str) -> Dict:
+        """
+        Retorna rules pré-configuradas baseadas em template
+        
+        Templates disponíveis:
+        - simple: Estratégia básica (1 TP, sem trailing, sem DCA)
+        - conservative: Proteção máxima (2 TPs, trailing, max loss baixo)
+        - aggressive: Máximo lucro (3 TPs, DCA, max loss alto)
+        
+        Args:
+            template: Nome do template ('simple', 'conservative', 'aggressive')
+            
+        Returns:
+            Dict com rules configuradas
+        """
+        templates = {
+            "simple": {
+                "take_profit_levels": [
+                    {"percent": 5.0, "quantity_percent": 100, "enabled": True}
+                ],
+                "stop_loss": {
+                    "percent": 2.0,
+                    "enabled": True,
+                    "trailing_enabled": False
+                },
+                "buy_dip": {
+                    "percent": 3.0,
+                    "enabled": True,
+                    "dca_enabled": False
+                },
+                "risk_management": {},
+                "cooldown": {"enabled": False},
+                "trading_hours": {"enabled": False},
+                "blackout_periods": [],
+                "volume_check": {"enabled": False},
+                "indicators": {"rsi": {"enabled": False}},
+                "execution": {
+                    "min_order_size_usd": 10,
+                    "max_order_size_percent": 100,
+                    "allow_partial_fills": True
+                }
+            },
+            
+            "conservative": {
+                "take_profit_levels": [
+                    {"percent": 2.0, "quantity_percent": 50, "enabled": True},
+                    {"percent": 4.0, "quantity_percent": 50, "enabled": True}
+                ],
+                "stop_loss": {
+                    "percent": 1.0,
+                    "enabled": True,
+                    "trailing_enabled": True,
+                    "trailing_percent": 0.5,
+                    "trailing_activation_percent": 1.0
+                },
+                "buy_dip": {
+                    "percent": 2.0,
+                    "enabled": True,
+                    "dca_enabled": False
+                },
+                "risk_management": {
+                    "max_daily_loss_usd": 200,
+                    "max_weekly_loss_usd": 500,
+                    "pause_on_limit": True
+                },
+                "cooldown": {
+                    "enabled": True,
+                    "minutes_after_sell": 60,
+                    "minutes_after_buy": 30
+                },
+                "trading_hours": {"enabled": False},
+                "blackout_periods": [],
+                "volume_check": {
+                    "enabled": True,
+                    "min_24h_volume_usd": 50000000
+                },
+                "indicators": {"rsi": {"enabled": False}},
+                "execution": {
+                    "min_order_size_usd": 10,
+                    "max_order_size_percent": 100,
+                    "allow_partial_fills": True
+                }
+            },
+            
+            "aggressive": {
+                "take_profit_levels": [
+                    {"percent": 5.0, "quantity_percent": 30, "enabled": True},
+                    {"percent": 10.0, "quantity_percent": 40, "enabled": True},
+                    {"percent": 20.0, "quantity_percent": 30, "enabled": True}
+                ],
+                "stop_loss": {
+                    "percent": 3.0,
+                    "enabled": True,
+                    "trailing_enabled": True,
+                    "trailing_percent": 2.0,
+                    "trailing_activation_percent": 3.0
+                },
+                "buy_dip": {
+                    "percent": 5.0,
+                    "enabled": True,
+                    "dca_enabled": True,
+                    "dca_levels": [
+                        {"percent": 5.0, "quantity_percent": 50},
+                        {"percent": 8.0, "quantity_percent": 50}
+                    ]
+                },
+                "risk_management": {
+                    "max_daily_loss_usd": 1000,
+                    "max_weekly_loss_usd": 3000,
+                    "pause_on_limit": True
+                },
+                "cooldown": {
+                    "enabled": True,
+                    "minutes_after_sell": 15,
+                    "minutes_after_buy": 10
+                },
+                "trading_hours": {"enabled": False},
+                "blackout_periods": [],
+                "volume_check": {
+                    "enabled": True,
+                    "min_24h_volume_usd": 100000000
+                },
+                "indicators": {"rsi": {"enabled": False}},
+                "execution": {
+                    "min_order_size_usd": 10,
+                    "max_order_size_percent": 100,
+                    "allow_partial_fills": True
+                }
+            }
+        }
+        
+        template_lower = template.lower()
+        if template_lower not in templates:
+            raise ValueError(f"Template inválido: {template}. Use: simple, conservative ou aggressive")
+        
+        return templates[template_lower]
