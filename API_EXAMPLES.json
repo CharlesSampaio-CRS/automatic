@@ -1,0 +1,836 @@
+{
+  "api_base_url": "http://localhost:5000",
+  "version": "2.0.0",
+  
+  "endpoints": {
+    "strategies": {
+      "create": {
+        "method": "POST",
+        "url": "/api/v1/strategies",
+        "request": {
+          "user_id": "user123",
+          "exchange_id": "65abc123def456789",
+          "token": "BTC",
+          "rules": {
+            "take_profit_percent": 5.0,
+            "stop_loss_percent": 2.0,
+            "buy_dip_percent": 3.0
+          },
+          "is_active": true
+        },
+        "response": {
+          "success": true,
+          "strategy": {
+            "_id": "65xyz789abc123456",
+            "user_id": "user123",
+            "exchange_id": "65abc123def456789",
+            "exchange_name": "Binance",
+            "token": "BTC",
+            "rules": {
+              "take_profit_percent": 5.0,
+              "stop_loss_percent": 2.0,
+              "buy_dip_percent": 3.0
+            },
+            "is_active": true,
+            "execution_count": 0,
+            "last_execution": null,
+            "created_at": "2024-12-10T10:30:00.000Z",
+            "updated_at": "2024-12-10T10:30:00.000Z"
+          }
+        }
+      },
+      
+      "list": {
+        "method": "GET",
+        "url": "/api/v1/strategies?user_id=user123&exchange_id=65abc123def456789&token=BTC&is_active=true",
+        "response": {
+          "success": true,
+          "strategies": [
+            {
+              "_id": "65xyz789abc123456",
+              "user_id": "user123",
+              "exchange_id": "65abc123def456789",
+              "exchange_name": "Binance",
+              "token": "BTC",
+              "rules": {
+                "take_profit_percent": 5.0,
+                "stop_loss_percent": 2.0,
+                "buy_dip_percent": 3.0
+              },
+              "is_active": true,
+              "execution_count": 3,
+              "last_execution": "2024-12-10T14:25:00.000Z",
+              "created_at": "2024-12-10T10:30:00.000Z",
+              "updated_at": "2024-12-10T14:25:00.000Z"
+            },
+            {
+              "_id": "65xyz789abc123457",
+              "user_id": "user123",
+              "exchange_id": "65abc123def456789",
+              "exchange_name": "Binance",
+              "token": "ETH",
+              "rules": {
+                "take_profit_percent": 4.0,
+                "stop_loss_percent": 1.5,
+                "buy_dip_percent": 2.5
+              },
+              "is_active": true,
+              "execution_count": 1,
+              "last_execution": "2024-12-09T18:45:00.000Z",
+              "created_at": "2024-12-09T15:20:00.000Z",
+              "updated_at": "2024-12-09T18:45:00.000Z"
+            }
+          ]
+        }
+      },
+      
+      "get": {
+        "method": "GET",
+        "url": "/api/v1/strategies/65xyz789abc123456",
+        "response": {
+          "success": true,
+          "strategy": {
+            "_id": "65xyz789abc123456",
+            "user_id": "user123",
+            "exchange_id": "65abc123def456789",
+            "exchange_name": "Binance",
+            "token": "BTC",
+            "rules": {
+              "take_profit_percent": 5.0,
+              "stop_loss_percent": 2.0,
+              "buy_dip_percent": 3.0
+            },
+            "is_active": true,
+            "execution_count": 3,
+            "last_execution": "2024-12-10T14:25:00.000Z",
+            "created_at": "2024-12-10T10:30:00.000Z",
+            "updated_at": "2024-12-10T14:25:00.000Z"
+          }
+        }
+      },
+      
+      "update": {
+        "method": "PUT",
+        "url": "/api/v1/strategies/65xyz789abc123456",
+        "request": {
+          "rules": {
+            "take_profit_percent": 6.0,
+            "stop_loss_percent": 2.5,
+            "buy_dip_percent": 3.5
+          },
+          "is_active": true
+        },
+        "response": {
+          "success": true,
+          "message": "Strategy updated successfully"
+        }
+      },
+      
+      "delete": {
+        "method": "DELETE",
+        "url": "/api/v1/strategies/65xyz789abc123456",
+        "response": {
+          "success": true,
+          "message": "Strategy deleted successfully"
+        }
+      },
+      
+      "check_trigger": {
+        "method": "POST",
+        "url": "/api/v1/strategies/65xyz789abc123456/check",
+        "request": {
+          "current_price": 47500,
+          "entry_price": 45000
+        },
+        "response": {
+          "should_trigger": true,
+          "action": "SELL",
+          "reason": "TAKE_PROFIT",
+          "trigger_percent": 5.0,
+          "current_change_percent": 5.56,
+          "strategy": {
+            "_id": "65xyz789abc123456",
+            "token": "BTC",
+            "rules": {
+              "take_profit_percent": 5.0,
+              "stop_loss_percent": 2.0,
+              "buy_dip_percent": 3.0
+            }
+          }
+        }
+      }
+    },
+    
+    "positions": {
+      "list": {
+        "method": "GET",
+        "url": "/api/v1/positions?user_id=user123&exchange_id=65abc123def456789&token=BTC&is_active=true",
+        "response": {
+          "success": true,
+          "positions": [
+            {
+              "_id": "65pos123abc456789",
+              "user_id": "user123",
+              "exchange_id": "65abc123def456789",
+              "exchange_name": "Binance",
+              "token": "BTC",
+              "amount": 0.5,
+              "entry_price": 45400.0,
+              "total_invested": 22700.0,
+              "is_active": true,
+              "purchases": [
+                {
+                  "date": "2024-12-08T10:30:00.000Z",
+                  "amount": 0.3,
+                  "price": 45000.0,
+                  "total_cost": 13500.0,
+                  "order_id": "ORDER_001"
+                },
+                {
+                  "date": "2024-12-09T15:20:00.000Z",
+                  "amount": 0.2,
+                  "price": 46000.0,
+                  "total_cost": 9200.0,
+                  "order_id": "ORDER_002"
+                }
+              ],
+              "sales": [
+                {
+                  "date": "2024-12-10T14:25:00.000Z",
+                  "amount": 0.1,
+                  "price": 47500.0,
+                  "total_received": 4750.0,
+                  "entry_price": 45400.0,
+                  "profit_loss": 210.0,
+                  "profit_loss_percent": 4.62,
+                  "order_id": "ORDER_003"
+                }
+              ],
+              "created_at": "2024-12-08T10:30:00.000Z",
+              "updated_at": "2024-12-10T14:25:00.000Z"
+            },
+            {
+              "_id": "65pos123abc456790",
+              "user_id": "user123",
+              "exchange_id": "65abc123def456789",
+              "exchange_name": "Binance",
+              "token": "ETH",
+              "amount": 5.0,
+              "entry_price": 2250.0,
+              "total_invested": 11250.0,
+              "is_active": true,
+              "purchases": [
+                {
+                  "date": "2024-12-09T12:00:00.000Z",
+                  "amount": 5.0,
+                  "price": 2250.0,
+                  "total_cost": 11250.0,
+                  "order_id": "ORDER_004"
+                }
+              ],
+              "sales": [],
+              "created_at": "2024-12-09T12:00:00.000Z",
+              "updated_at": "2024-12-09T12:00:00.000Z"
+            }
+          ]
+        }
+      },
+      
+      "get": {
+        "method": "GET",
+        "url": "/api/v1/positions/65pos123abc456789",
+        "response": {
+          "success": true,
+          "position": {
+            "_id": "65pos123abc456789",
+            "user_id": "user123",
+            "exchange_id": "65abc123def456789",
+            "exchange_name": "Binance",
+            "token": "BTC",
+            "amount": 0.5,
+            "entry_price": 45400.0,
+            "total_invested": 22700.0,
+            "is_active": true,
+            "purchases": [
+              {
+                "date": "2024-12-08T10:30:00.000Z",
+                "amount": 0.3,
+                "price": 45000.0,
+                "total_cost": 13500.0,
+                "order_id": "ORDER_001"
+              },
+              {
+                "date": "2024-12-09T15:20:00.000Z",
+                "amount": 0.2,
+                "price": 46000.0,
+                "total_cost": 9200.0,
+                "order_id": "ORDER_002"
+              }
+            ],
+            "sales": [
+              {
+                "date": "2024-12-10T14:25:00.000Z",
+                "amount": 0.1,
+                "price": 47500.0,
+                "total_received": 4750.0,
+                "entry_price": 45400.0,
+                "profit_loss": 210.0,
+                "profit_loss_percent": 4.62,
+                "order_id": "ORDER_003"
+              }
+            ],
+            "created_at": "2024-12-08T10:30:00.000Z",
+            "updated_at": "2024-12-10T14:25:00.000Z"
+          }
+        }
+      },
+      
+      "sync": {
+        "method": "POST",
+        "url": "/api/v1/positions/sync",
+        "request": {
+          "user_id": "user123",
+          "exchange_id": "65abc123def456789",
+          "token": "BTC"
+        },
+        "response": {
+          "success": true,
+          "message": "Position synced",
+          "position": {
+            "_id": "65pos123abc456789",
+            "user_id": "user123",
+            "exchange_id": "65abc123def456789",
+            "exchange_name": "Binance",
+            "token": "BTC",
+            "amount": 0.5,
+            "entry_price": 45000.0,
+            "total_invested": 22500.0,
+            "is_active": true,
+            "purchases": [],
+            "sales": [],
+            "created_at": "2024-12-10T10:30:00.000Z",
+            "updated_at": "2024-12-10T10:30:00.000Z"
+          }
+        }
+      },
+      
+      "history": {
+        "method": "GET",
+        "url": "/api/v1/positions/65pos123abc456789/history",
+        "response": {
+          "success": true,
+          "history": {
+            "purchases": [
+              {
+                "date": "2024-12-08T10:30:00.000Z",
+                "amount": 0.3,
+                "price": 45000.0,
+                "total_cost": 13500.0,
+                "order_id": "ORDER_001"
+              },
+              {
+                "date": "2024-12-09T15:20:00.000Z",
+                "amount": 0.2,
+                "price": 46000.0,
+                "total_cost": 9200.0,
+                "order_id": "ORDER_002"
+              }
+            ],
+            "sales": [
+              {
+                "date": "2024-12-10T14:25:00.000Z",
+                "amount": 0.1,
+                "price": 47500.0,
+                "total_received": 4750.0,
+                "entry_price": 45400.0,
+                "profit_loss": 210.0,
+                "profit_loss_percent": 4.62,
+                "order_id": "ORDER_003"
+              }
+            ]
+          }
+        }
+      }
+    },
+    
+    "notifications": {
+      "list": {
+        "method": "GET",
+        "url": "/api/v1/notifications?user_id=user123&unread_only=true&type=strategy_executed&limit=50",
+        "response": {
+          "success": true,
+          "notifications": [
+            {
+              "_id": "65notif123abc456",
+              "user_id": "user123",
+              "type": "strategy_executed",
+              "title": "🔴 Estratégia Executada - BTC",
+              "message": "Take Profit atingido! 🎯\n\nToken: BTC\nExchange: Binance\nAção: SELL\nQuantidade: 0.1\nPreço: $47500.0\nOrdem ID: ORDER_003\nStatus: closed",
+              "data": {
+                "strategy_id": "65xyz789abc123456",
+                "order_id": "ORDER_003",
+                "token": "BTC",
+                "exchange_id": "65abc123def456789",
+                "action": "SELL",
+                "reason": "TAKE_PROFIT",
+                "amount": 0.1,
+                "price": 47500.0,
+                "status": "closed"
+              },
+              "is_read": false,
+              "created_at": "2024-12-10T14:25:00.000Z"
+            },
+            {
+              "_id": "65notif123abc457",
+              "user_id": "user123",
+              "type": "strategy_created",
+              "title": "✅ Nova Estratégia Criada - BTC",
+              "message": "Estratégia configurada com sucesso!\n\nToken: BTC\nExchange: Binance\nTake Profit: 5.0%\nStop Loss: 2.0%\nBuy Dip: 3.0%",
+              "data": {
+                "strategy_id": "65xyz789abc123456",
+                "token": "BTC",
+                "exchange_id": "65abc123def456789",
+                "rules": {
+                  "take_profit_percent": 5.0,
+                  "stop_loss_percent": 2.0,
+                  "buy_dip_percent": 3.0
+                }
+              },
+              "is_read": false,
+              "created_at": "2024-12-10T10:30:00.000Z"
+            },
+            {
+              "_id": "65notif123abc458",
+              "user_id": "user123",
+              "type": "order_failed",
+              "title": "❌ Erro na Execução - ETH",
+              "message": "A estratégia não pôde ser executada.\n\nToken: ETH\nExchange: Binance\nErro: Insufficient funds\n\nPor favor, verifique sua exchange e tente novamente.",
+              "data": {
+                "strategy_id": "65xyz789abc123457",
+                "token": "ETH",
+                "exchange_id": "65abc123def456789",
+                "error": "Insufficient funds"
+              },
+              "is_read": false,
+              "created_at": "2024-12-10T12:15:00.000Z"
+            }
+          ]
+        }
+      },
+      
+      "mark_read": {
+        "method": "PUT",
+        "url": "/api/v1/notifications/65notif123abc456/read",
+        "response": {
+          "success": true,
+          "message": "Notification marked as read"
+        }
+      },
+      
+      "mark_all_read": {
+        "method": "PUT",
+        "url": "/api/v1/notifications/read-all",
+        "request": {
+          "user_id": "user123"
+        },
+        "response": {
+          "success": true,
+          "message": "5 notifications marked as read"
+        }
+      },
+      
+      "delete": {
+        "method": "DELETE",
+        "url": "/api/v1/notifications/65notif123abc456",
+        "response": {
+          "success": true,
+          "message": "Notification deleted"
+        }
+      }
+    },
+    
+    "orders": {
+      "buy_market": {
+        "method": "POST",
+        "url": "/api/v1/orders/buy",
+        "request": {
+          "user_id": "user123",
+          "exchange_id": "65abc123def456789",
+          "token": "BTC",
+          "amount": 0.1,
+          "order_type": "market"
+        },
+        "response": {
+          "success": true,
+          "dry_run": true,
+          "order": {
+            "id": "DRY-1702212345.123",
+            "symbol": "BTC/USDT",
+            "type": "market",
+            "side": "buy",
+            "amount": 0.1,
+            "price": null,
+            "status": "simulated",
+            "timestamp": "2024-12-10T14:30:00.000Z"
+          }
+        }
+      },
+      
+      "buy_limit": {
+        "method": "POST",
+        "url": "/api/v1/orders/buy",
+        "request": {
+          "user_id": "user123",
+          "exchange_id": "65abc123def456789",
+          "token": "BTC",
+          "amount": 0.1,
+          "order_type": "limit",
+          "price": 45000.0
+        },
+        "response": {
+          "success": true,
+          "dry_run": true,
+          "order": {
+            "id": "DRY-1702212345.456",
+            "symbol": "BTC/USDT",
+            "type": "limit",
+            "side": "buy",
+            "amount": 0.1,
+            "price": 45000.0,
+            "status": "simulated",
+            "timestamp": "2024-12-10T14:30:00.000Z"
+          }
+        }
+      },
+      
+      "sell_market": {
+        "method": "POST",
+        "url": "/api/v1/orders/sell",
+        "request": {
+          "user_id": "user123",
+          "exchange_id": "65abc123def456789",
+          "token": "BTC",
+          "amount": 0.1,
+          "order_type": "market"
+        },
+        "response": {
+          "success": true,
+          "dry_run": true,
+          "order": {
+            "id": "DRY-1702212345.789",
+            "symbol": "BTC/USDT",
+            "type": "market",
+            "side": "sell",
+            "amount": 0.1,
+            "price": null,
+            "status": "simulated",
+            "timestamp": "2024-12-10T14:30:00.000Z"
+          }
+        }
+      },
+      
+      "sell_limit": {
+        "method": "POST",
+        "url": "/api/v1/orders/sell",
+        "request": {
+          "user_id": "user123",
+          "exchange_id": "65abc123def456789",
+          "token": "BTC",
+          "amount": 0.1,
+          "order_type": "limit",
+          "price": 48000.0
+        },
+        "response": {
+          "success": true,
+          "dry_run": true,
+          "order": {
+            "id": "DRY-1702212345.012",
+            "symbol": "BTC/USDT",
+            "type": "limit",
+            "side": "sell",
+            "amount": 0.1,
+            "price": 48000.0,
+            "status": "simulated",
+            "timestamp": "2024-12-10T14:30:00.000Z"
+          }
+        }
+      },
+      
+      "order_error": {
+        "method": "POST",
+        "url": "/api/v1/orders/sell",
+        "request": {
+          "user_id": "user123",
+          "exchange_id": "65abc123def456789",
+          "token": "BTC",
+          "amount": 10.0,
+          "order_type": "market"
+        },
+        "response": {
+          "success": false,
+          "error": "Insufficient funds",
+          "details": "binance InsufficientFunds: You have insufficient funds to complete this order"
+        }
+      }
+    },
+    
+    "balances": {
+      "list": {
+        "method": "GET",
+        "url": "/api/v1/balances?user_id=user123&force_refresh=false&include_changes=true",
+        "response": {
+          "success": true,
+          "balances": [
+            {
+              "exchange_id": "65abc123def456789",
+              "exchange_name": "Binance",
+              "balances": [
+                {
+                  "asset": "BTC",
+                  "free": 0.5,
+                  "used": 0.0,
+                  "total": 0.5,
+                  "price_usd": 47500.0,
+                  "value_usd": 23750.0,
+                  "change_1h": 0.5,
+                  "change_4h": 2.3,
+                  "change_24h": 5.6
+                },
+                {
+                  "asset": "ETH",
+                  "free": 5.0,
+                  "used": 0.0,
+                  "total": 5.0,
+                  "price_usd": 2350.0,
+                  "value_usd": 11750.0,
+                  "change_1h": -0.2,
+                  "change_4h": 1.1,
+                  "change_24h": 3.2
+                },
+                {
+                  "asset": "USDT",
+                  "free": 10000.0,
+                  "used": 0.0,
+                  "total": 10000.0,
+                  "price_usd": 1.0,
+                  "value_usd": 10000.0,
+                  "change_1h": 0.0,
+                  "change_4h": 0.0,
+                  "change_24h": 0.0
+                }
+              ],
+              "total_usd": 45500.0
+            }
+          ],
+          "total_usd": 45500.0
+        }
+      }
+    },
+    
+    "system": {
+      "health": {
+        "method": "GET",
+        "url": "/health",
+        "response": {
+          "status": "ok",
+          "message": "API rodando",
+          "database": "connected",
+          "scheduler": {
+            "running": true,
+            "next_snapshot": "2024-12-10T16:00:00.000Z"
+          }
+        }
+      },
+      
+      "index": {
+        "method": "GET",
+        "url": "/",
+        "response": {
+          "message": "Sistema de Trading Multi-Exchange",
+          "version": "2.0.0",
+          "endpoints": {
+            "health": "/health",
+            "scheduler_status": "/api/v1/scheduler/status",
+            "exchanges_available": "/api/v1/exchanges/available?user_id=<user_id>",
+            "exchanges_link": "/api/v1/exchanges/link",
+            "exchanges_linked": "/api/v1/exchanges/linked?user_id=<user_id>",
+            "exchanges_unlink": "/api/v1/exchanges/unlink",
+            "balances": "/api/v1/balances?user_id=<user_id>&force_refresh=<true|false>",
+            "balances_clear_cache": "/api/v1/balances/clear-cache",
+            "strategies": "/api/v1/strategies?user_id=<user_id>",
+            "positions": "/api/v1/positions?user_id=<user_id>",
+            "notifications": "/api/v1/notifications?user_id=<user_id>",
+            "manual_buy": "/api/v1/orders/buy",
+            "manual_sell": "/api/v1/orders/sell"
+          },
+          "features": {
+            "automated_snapshots": "Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)",
+            "automated_trading": "Strategy Worker checking every 5 minutes",
+            "dry_run_mode": "true"
+          }
+        }
+      }
+    }
+  },
+  
+  "notification_types": {
+    "strategy_executed": {
+      "description": "Notifica quando uma estratégia foi executada com sucesso",
+      "icon": "🔴 ou 🟢",
+      "priority": "high"
+    },
+    "strategy_created": {
+      "description": "Notifica quando uma nova estratégia é criada",
+      "icon": "✅",
+      "priority": "medium"
+    },
+    "order_failed": {
+      "description": "Notifica quando uma ordem falha na execução",
+      "icon": "❌",
+      "priority": "high"
+    }
+  },
+  
+  "trigger_reasons": {
+    "TAKE_PROFIT": {
+      "description": "Preço atingiu a meta de lucro configurada",
+      "action": "SELL",
+      "emoji": "🎯"
+    },
+    "STOP_LOSS": {
+      "description": "Preço caiu abaixo do limite de perda configurado",
+      "action": "SELL",
+      "emoji": "⚠️"
+    },
+    "BUY_DIP": {
+      "description": "Preço caiu o suficiente para uma oportunidade de compra",
+      "action": "BUY",
+      "emoji": "📉"
+    }
+  },
+  
+  "jobs_control": {
+    "get_status": {
+      "method": "GET",
+      "url": "/api/v1/jobs/status",
+      "response": {
+        "success": true,
+        "jobs": {
+          "balance_snapshot": {
+            "name": "Balance Snapshot",
+            "description": "Captures balance snapshots for portfolio history",
+            "running": true,
+            "schedule": "Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)",
+            "next_run": "2024-12-10T16:00:00Z",
+            "last_run": null
+          },
+          "strategy_worker": {
+            "name": "Strategy Worker",
+            "description": "Monitors strategies and executes automated trades",
+            "running": true,
+            "check_interval_minutes": 5,
+            "dry_run_mode": true,
+            "schedule": "Every 5 minutes"
+          }
+        },
+        "summary": {
+          "total_jobs": 2,
+          "running_jobs": 2,
+          "stopped_jobs": 0
+        }
+      }
+    },
+    
+    "control": {
+      "method": "POST",
+      "url": "/api/v1/jobs/control",
+      "request_examples": {
+        "stop_strategy_worker": {
+          "job": "strategy_worker",
+          "action": "stop"
+        },
+        "start_strategy_worker": {
+          "job": "strategy_worker",
+          "action": "start"
+        },
+        "restart_strategy_worker": {
+          "job": "strategy_worker",
+          "action": "restart"
+        },
+        "stop_balance_snapshot": {
+          "job": "balance_snapshot",
+          "action": "stop"
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Strategy Worker stopped successfully",
+        "job": "strategy_worker",
+        "action": "stop",
+        "new_status": "stopped"
+      },
+      "valid_jobs": ["strategy_worker", "balance_snapshot"],
+      "valid_actions": ["start", "stop", "restart"]
+    },
+    
+    "trigger_manual": {
+      "method": "POST",
+      "url": "/api/v1/jobs/trigger/{job_name}",
+      "examples": {
+        "trigger_strategy_worker": {
+          "url": "/api/v1/jobs/trigger/strategy_worker",
+          "response": {
+            "success": true,
+            "message": "Strategy Worker check triggered successfully",
+            "job": "strategy_worker",
+            "triggered_at": "2024-12-10T14:35:00Z"
+          }
+        },
+        "trigger_balance_snapshot": {
+          "url": "/api/v1/jobs/trigger/balance_snapshot",
+          "response": {
+            "success": true,
+            "message": "Balance Snapshot triggered successfully",
+            "job": "balance_snapshot",
+            "triggered_at": "2024-12-10T14:35:00Z"
+          }
+        }
+      }
+    }
+  },
+  
+  "error_examples": {
+    "insufficient_funds": {
+      "success": false,
+      "error": "Insufficient funds",
+      "details": "binance InsufficientFunds: You have insufficient funds to complete this order"
+    },
+    "invalid_order": {
+      "success": false,
+      "error": "Invalid order",
+      "details": "binance InvalidOrder: Order amount is below minimum"
+    },
+    "not_found": {
+      "success": false,
+      "error": "Strategy not found"
+    },
+    "missing_parameter": {
+      "success": false,
+      "error": "user_id is required"
+    },
+    "validation_error": {
+      "success": false,
+      "error": "take_profit_percent must be greater than 0"
+    },
+    "job_not_running": {
+      "success": false,
+      "error": "Strategy Worker is not running"
+    },
+    "invalid_job": {
+      "success": false,
+      "error": "Invalid job name",
+      "valid_jobs": ["strategy_worker", "balance_snapshot"]
+    }
+  }
+}
+

@@ -167,6 +167,9 @@ def health_check():
         if jobs:
             next_run = jobs[0].next_run_time.isoformat() if jobs[0].next_run_time else None
     
+    # Get strategy worker info
+    strategy_worker_running = strategy_worker.is_running if strategy_worker else False
+    
     return {
         'status': 'ok',
         'message': 'API rodando',
@@ -174,6 +177,11 @@ def health_check():
         'scheduler': {
             'running': scheduler_running,
             'next_snapshot': next_run
+        },
+        'strategy_worker': {
+            'running': strategy_worker_running,
+            'check_interval_minutes': int(os.getenv('STRATEGY_CHECK_INTERVAL', '5')),
+            'dry_run_mode': os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
         }
     }, 200
 
@@ -197,11 +205,13 @@ def index():
             'positions': '/api/v1/positions?user_id=<user_id>',
             'notifications': '/api/v1/notifications?user_id=<user_id>',
             'manual_buy': '/api/v1/orders/buy',
-            'manual_sell': '/api/v1/orders/sell'
+            'manual_sell': '/api/v1/orders/sell',
+            'jobs_status': '/api/v1/jobs/status',
+            'jobs_control': '/api/v1/jobs/control'
         },
         'features': {
             'automated_snapshots': 'Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)',
-            'automated_trading': 'Strategy Worker checking every 5 minutes',
+            'automated_trading': f"Strategy Worker checking every {os.getenv('STRATEGY_CHECK_INTERVAL', '5')} minutes",
             'dry_run_mode': os.getenv('STRATEGY_DRY_RUN', 'true')
         }
     }, 200
@@ -2176,6 +2186,285 @@ def execute_buy_order():
 
 
 # ============================================
+# JOBS CONTROL ENDPOINTS
+# ============================================
+
+@app.route('/api/v1/jobs/status', methods=['GET'])
+def get_jobs_status():
+    """
+    Retorna status detalhado de todos os jobs em execução
+    
+    Returns:
+        200: Status dos jobs
+        500: Erro interno
+    
+    Response Example:
+        {
+            "success": true,
+            "jobs": {
+                "balance_snapshot": {
+                    "name": "Balance Snapshot",
+                    "running": true,
+                    "schedule": "Every 4 hours",
+                    "next_run": "2024-12-10T16:00:00Z",
+                    "last_run": "2024-12-10T12:00:00Z"
+                },
+                "strategy_worker": {
+                    "name": "Strategy Worker",
+                    "running": true,
+                    "check_interval_minutes": 5,
+                    "dry_run_mode": true,
+                    "last_check": "2024-12-10T14:35:00Z"
+                }
+            }
+        }
+    """
+    try:
+        jobs_status = {
+            'balance_snapshot': {
+                'name': 'Balance Snapshot',
+                'description': 'Captures balance snapshots for portfolio history',
+                'running': scheduler.running if scheduler else False,
+                'schedule': 'Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)',
+                'next_run': None,
+                'last_run': None
+            },
+            'strategy_worker': {
+                'name': 'Strategy Worker',
+                'description': 'Monitors strategies and executes automated trades',
+                'running': strategy_worker.is_running if strategy_worker else False,
+                'check_interval_minutes': int(os.getenv('STRATEGY_CHECK_INTERVAL', '5')),
+                'dry_run_mode': os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true',
+                'schedule': f"Every {os.getenv('STRATEGY_CHECK_INTERVAL', '5')} minutes"
+            }
+        }
+        
+        # Get scheduler job info
+        if scheduler and scheduler.running:
+            jobs = scheduler.get_jobs()
+            if jobs:
+                job = jobs[0]
+                if job.next_run_time:
+                    jobs_status['balance_snapshot']['next_run'] = job.next_run_time.isoformat()
+        
+        return jsonify({
+            'success': True,
+            'jobs': jobs_status,
+            'summary': {
+                'total_jobs': 2,
+                'running_jobs': sum(1 for j in jobs_status.values() if j['running']),
+                'stopped_jobs': sum(1 for j in jobs_status.values() if not j['running'])
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting jobs status: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/jobs/control', methods=['POST'])
+def control_jobs():
+    """
+    Controla (start/stop/restart) jobs individuais
+    
+    Request Body:
+        {
+            "job": "strategy_worker" | "balance_snapshot",
+            "action": "start" | "stop" | "restart"
+        }
+    
+    Returns:
+        200: Ação executada com sucesso
+        400: Parâmetros inválidos
+        500: Erro interno
+    
+    Response Example:
+        {
+            "success": true,
+            "message": "Strategy Worker stopped successfully",
+            "job": "strategy_worker",
+            "action": "stop",
+            "new_status": "stopped"
+        }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'job' not in data or 'action' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'job and action are required',
+                'valid_jobs': ['strategy_worker', 'balance_snapshot'],
+                'valid_actions': ['start', 'stop', 'restart']
+            }), 400
+        
+        job_name = data['job']
+        action = data['action']
+        
+        if job_name not in ['strategy_worker', 'balance_snapshot']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid job name',
+                'valid_jobs': ['strategy_worker', 'balance_snapshot']
+            }), 400
+        
+        if action not in ['start', 'stop', 'restart']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid action',
+                'valid_actions': ['start', 'stop', 'restart']
+            }), 400
+        
+        # Execute action
+        if job_name == 'strategy_worker':
+            if action == 'start':
+                if strategy_worker and not strategy_worker.is_running:
+                    strategy_worker.start()
+                    message = "Strategy Worker started successfully"
+                    new_status = "running"
+                else:
+                    message = "Strategy Worker is already running"
+                    new_status = "running"
+            
+            elif action == 'stop':
+                if strategy_worker and strategy_worker.is_running:
+                    strategy_worker.stop()
+                    message = "Strategy Worker stopped successfully"
+                    new_status = "stopped"
+                else:
+                    message = "Strategy Worker is already stopped"
+                    new_status = "stopped"
+            
+            elif action == 'restart':
+                if strategy_worker:
+                    if strategy_worker.is_running:
+                        strategy_worker.stop()
+                    strategy_worker.start()
+                    message = "Strategy Worker restarted successfully"
+                    new_status = "running"
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Strategy Worker not initialized'
+                    }), 500
+        
+        elif job_name == 'balance_snapshot':
+            if action == 'start':
+                if scheduler and not scheduler.running:
+                    scheduler.start()
+                    message = "Balance Snapshot Scheduler started successfully"
+                    new_status = "running"
+                else:
+                    message = "Balance Snapshot Scheduler is already running"
+                    new_status = "running"
+            
+            elif action == 'stop':
+                if scheduler and scheduler.running:
+                    scheduler.pause()
+                    message = "Balance Snapshot Scheduler stopped successfully"
+                    new_status = "stopped"
+                else:
+                    message = "Balance Snapshot Scheduler is already stopped"
+                    new_status = "stopped"
+            
+            elif action == 'restart':
+                if scheduler:
+                    if scheduler.running:
+                        scheduler.pause()
+                    scheduler.resume()
+                    message = "Balance Snapshot Scheduler restarted successfully"
+                    new_status = "running"
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Scheduler not initialized'
+                    }), 500
+        
+        logger.info(f"Job control: {job_name} - {action} - {message}")
+        
+        return jsonify({
+            'success': True,
+            'message': message,
+            'job': job_name,
+            'action': action,
+            'new_status': new_status
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error controlling job: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/jobs/trigger/<job_name>', methods=['POST'])
+def trigger_job_manually(job_name):
+    """
+    Dispara execução manual de um job (fora do schedule)
+    
+    Path Params:
+        job_name: Nome do job (strategy_worker | balance_snapshot)
+    
+    Returns:
+        200: Job disparado com sucesso
+        400: Job inválido
+        500: Erro interno
+    
+    Response Example:
+        {
+            "success": true,
+            "message": "Balance Snapshot triggered manually",
+            "job": "balance_snapshot"
+        }
+    """
+    try:
+        if job_name not in ['strategy_worker', 'balance_snapshot']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid job name',
+                'valid_jobs': ['strategy_worker', 'balance_snapshot']
+            }), 400
+        
+        if job_name == 'balance_snapshot':
+            logger.info("🔧 Manual trigger: Balance Snapshot")
+            run_scheduled_snapshot()
+            message = "Balance Snapshot triggered successfully"
+        
+        elif job_name == 'strategy_worker':
+            if strategy_worker and strategy_worker.is_running:
+                logger.info("🔧 Manual trigger: Strategy Worker")
+                strategy_worker._check_all_strategies()
+                message = "Strategy Worker check triggered successfully"
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Strategy Worker is not running'
+                }), 400
+        
+        return jsonify({
+            'success': True,
+            'message': message,
+            'job': job_name,
+            'triggered_at': datetime.utcnow().isoformat()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error triggering job: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+# ============================================
+
 
 
 if __name__ == '__main__':
