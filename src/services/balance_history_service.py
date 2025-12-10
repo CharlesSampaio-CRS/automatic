@@ -216,6 +216,10 @@ class BalanceHistoryService:
             
             start_date = datetime.utcnow() - timedelta(days=days)
             
+            # Calculate expected number of snapshots (6 per day at 4h intervals)
+            # Add 20% buffer for safety
+            max_snapshots = int(days * 6 * 1.2)
+            
             snapshots = list(self.collection.find(
                 {
                     'user_id': user_id,
@@ -226,8 +230,11 @@ class BalanceHistoryService:
                     'total_usd': 1,
                     'total_brl': 1
                 },
-                sort=[('timestamp', 1)]
+                sort=[('timestamp', 1)],
+                limit=max_snapshots
             ))
+            
+            logger.info(f"📊 Portfolio evolution: {len(snapshots)} snapshots for {days} days (limit: {max_snapshots})")
             
             time_series = {
                 'timestamps': [],
