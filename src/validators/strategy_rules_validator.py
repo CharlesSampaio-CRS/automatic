@@ -509,7 +509,7 @@ class StrategyRulesValidator:
                 "blackout_periods": [],
                 "volume_check": {
                     "enabled": True,
-                    "min_24h_volume_usd": 50000000
+                    "min_24h_volume_usd": 5000000
                 },
                 "indicators": {"rsi": {"enabled": False}},
                 "execution": {
@@ -555,7 +555,7 @@ class StrategyRulesValidator:
                 "blackout_periods": [],
                 "volume_check": {
                     "enabled": True,
-                    "min_24h_volume_usd": 100000000
+                    "min_24h_volume_usd": 10000000
                 },
                 "indicators": {"rsi": {"enabled": False}},
                 "execution": {
