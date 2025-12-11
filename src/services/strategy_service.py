@@ -119,6 +119,8 @@ class StrategyService:
             # Validate rules
             is_valid, error_msg = StrategyRulesValidator.validate_rules(rules)
             if not is_valid:
+                logger.error(f"Rule validation failed: {error_msg}")
+                logger.error(f"Rules received: {rules}")
                 return {
                     'success': False,
                     'error': f'Invalid rules: {error_msg}'
@@ -214,7 +216,9 @@ class StrategyService:
             }
             
         except Exception as e:
+            import traceback
             logger.error(f"Error creating strategy: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return {
                 'success': False,
                 'error': str(e)
@@ -524,15 +528,38 @@ class StrategyService:
             'exchange_id': strategy['exchange_id'],
             'exchange_name': strategy['exchange_name'],
             'token': strategy['token'],
-            'rules': {
-                'take_profit_percent': strategy['rules']['take_profit_percent'],
-                'stop_loss_percent': strategy['rules']['stop_loss_percent'],
-                'buy_dip_percent': strategy['rules'].get('buy_dip_percent')
-            },
+            'rules': strategy['rules'],  # Return complete rules object
             'is_active': strategy['is_active'],
-            'created_at': strategy['created_at'].isoformat(),
-            'updated_at': strategy['updated_at'].isoformat(),
-            'last_executed_at': strategy['last_executed_at'].isoformat() if strategy.get('last_executed_at') else None,
+            'execution_stats': strategy.get('execution_stats', {
+                'total_executions': 0,
+                'total_sells': 0,
+                'total_buys': 0,
+                'last_execution_at': None,
+                'last_execution_type': None,
+                'last_execution_reason': None
+            }),
+            'performance': strategy.get('performance', {
+                'total_profit_usd': 0.0,
+                'total_loss_usd': 0.0,
+                'win_rate': 0.0,
+                'daily_pnl': 0.0,
+                'weekly_pnl': 0.0,
+                'monthly_pnl': 0.0
+            }),
+            'trailing_stop_state': strategy.get('trailing_stop_state', {
+                'is_active': False,
+                'highest_price': None,
+                'current_stop_price': None,
+                'activated_at': None
+            }),
+            'cooldown_state': strategy.get('cooldown_state', {
+                'is_cooling': False,
+                'cooldown_until': None,
+                'last_action': None
+            }),
+            'created_at': strategy['created_at'].isoformat() if strategy.get('created_at') else None,
+            'updated_at': strategy['updated_at'].isoformat() if strategy.get('updated_at') else None,
+            'last_checked_at': strategy.get('last_checked_at').isoformat() if strategy.get('last_checked_at') else None,
             'execution_count': strategy.get('execution_count', 0)
         }
 
