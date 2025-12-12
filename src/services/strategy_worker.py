@@ -194,6 +194,7 @@ class StrategyWorker:
             # Strategy triggered! Execute order
             action = trigger_result['action']
             reason = trigger_result['reason']
+            quantity_percent = trigger_result.get('quantity_percent', 100)  # Default to 100%
             
             logger.warning(
                 f"🎯 STRATEGY TRIGGERED! "
@@ -202,32 +203,48 @@ class StrategyWorker:
                 f"Token: {token}, "
                 f"Action: {action}, "
                 f"Reason: {reason}, "
+                f"Quantity: {quantity_percent}%, "
                 f"Entry: ${position['entry_price']:.4f}, "
                 f"Current: ${current_price:.4f}"
             )
             
-            # Execute order based on action
+            # Calculate actual amount based on quantity_percent
             order_result = None
+            actual_amount = 0
             
             if action == 'SELL':
+                # Calculate amount to sell based on quantity_percent
+                total_amount = current_amount if current_amount else position['amount']
+                actual_amount = total_amount * (quantity_percent / 100.0)
+                
+                if actual_amount <= 0:
+                    logger.warning(f"Invalid sell amount: {actual_amount}")
+                    return {'triggered': True, 'executed': False, 'reason': 'invalid_amount'}
+                
                 # Execute sell order (market order for immediate execution)
                 order_result = self.order_execution_service.execute_market_sell(
                     user_id=user_id,
                     exchange_id=exchange_id,
                     token=token,
-                    amount=current_amount if current_amount else position['amount']
+                    amount=actual_amount
                 )
             
             elif action == 'BUY':
-                # For buy_dip, calculate amount based on some logic
-                # (here we use a simple default, can be enhanced)
-                buy_amount = position['amount'] * 0.1  # Buy 10% more
+                # Calculate buy amount based on quantity_percent
+                # For DCA: quantity_percent is the percentage of initial position to buy
+                # For simple buy_dip: use quantity_percent of position amount
+                base_amount = position['amount']
+                actual_amount = base_amount * (quantity_percent / 100.0)
+                
+                if actual_amount <= 0:
+                    logger.warning(f"Invalid buy amount: {actual_amount}")
+                    return {'triggered': True, 'executed': False, 'reason': 'invalid_amount'}
                 
                 order_result = self.order_execution_service.execute_market_buy(
                     user_id=user_id,
                     exchange_id=exchange_id,
                     token=token,
-                    amount=buy_amount
+                    amount=actual_amount
                 )
             
             # Check order result
@@ -261,8 +278,35 @@ class StrategyWorker:
                 f"Status: {order['status']}"
             )
             
-            # Record execution in strategy
-            self.strategy_service.record_execution(str(strategy['_id']))
+            # Calculate PnL for sells
+            pnl_usd = None
+            if action == 'SELL':
+                filled_amount = order.get('filled', actual_amount)
+                avg_price = order.get('average', current_price)
+                entry_price = position['entry_price']
+                pnl_usd = filled_amount * (avg_price - entry_price)
+            
+            # Record execution in strategy with full tracking
+            self.strategy_service.record_execution(
+                strategy_id=str(strategy['_id']),
+                action=action,
+                reason=reason,
+                price=order.get('average', current_price),
+                amount=order.get('filled', actual_amount),
+                pnl_usd=pnl_usd
+            )
+            
+            # Mark TP/DCA levels as executed
+            if 'tp_level' in trigger_result:
+                self.strategy_service.mark_tp_level_executed(
+                    str(strategy['_id']), 
+                    trigger_result['tp_level']
+                )
+            elif 'dca_level' in trigger_result:
+                self.strategy_service.mark_dca_level_executed(
+                    str(strategy['_id']), 
+                    trigger_result['dca_level']
+                )
             
             # Update position based on order
             if action == 'SELL' and order.get('filled'):
