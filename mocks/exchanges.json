@@ -1,0 +1,72 @@
+{
+  "exchanges": [
+    {
+      "exchange_id": "693481148b0a41e8b6acb07b",
+      "exchange_name": "MEXC",
+      "user_id": "charles_test_user",
+      "is_active": true,
+      "has_credentials": true,
+      "connection_status": "connected",
+      "last_sync": "2024-12-12T17:05:00Z",
+      "total_balance_usd": 6560.50,
+      "active_strategies": 3,
+      "total_assets": 4,
+      "api_key_label": "MEXC_Main_***7890",
+      "created_at": "2024-11-15T10:00:00Z"
+    },
+    {
+      "exchange_id": "693481148b0a41e8b6acb07c",
+      "exchange_name": "Binance",
+      "user_id": "charles_test_user",
+      "is_active": true,
+      "has_credentials": true,
+      "connection_status": "connected",
+      "last_sync": "2024-12-12T17:05:00Z",
+      "total_balance_usd": 4103.30,
+      "active_strategies": 0,
+      "total_assets": 3,
+      "api_key_label": "Binance_Main_***4567",
+      "created_at": "2024-11-15T10:30:00Z"
+    },
+    {
+      "exchange_id": "693481148b0a41e8b6acb07d",
+      "exchange_name": "OKX",
+      "user_id": "charles_test_user",
+      "is_active": false,
+      "has_credentials": false,
+      "connection_status": "not_configured",
+      "last_sync": null,
+      "total_balance_usd": 0,
+      "active_strategies": 0,
+      "total_assets": 0,
+      "api_key_label": null,
+      "created_at": null
+    }
+  ],
+  "available_exchanges": [
+    {
+      "name": "Binance",
+      "logo_url": "https://cryptologos.cc/logos/binance-coin-bnb-logo.png",
+      "supported": true,
+      "features": ["spot", "margin", "futures"]
+    },
+    {
+      "name": "MEXC",
+      "logo_url": "https://cryptologos.cc/logos/mexc-logo.png",
+      "supported": true,
+      "features": ["spot", "margin"]
+    },
+    {
+      "name": "OKX",
+      "logo_url": "https://cryptologos.cc/logos/okx-logo.png",
+      "supported": true,
+      "features": ["spot", "margin", "futures"]
+    },
+    {
+      "name": "KuCoin",
+      "logo_url": "https://cryptologos.cc/logos/kucoin-logo.png",
+      "supported": false,
+      "features": ["spot"]
+    }
+  ]
+}

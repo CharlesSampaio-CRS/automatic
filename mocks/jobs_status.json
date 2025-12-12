@@ -1,0 +1,41 @@
+{
+  "jobs": [
+    {
+      "id": "balance_snapshot_job",
+      "name": "Balance Snapshot",
+      "description": "Captura snapshot dos saldos de todas as exchanges",
+      "status": "running",
+      "next_run_time": "2024-12-12T18:00:00Z",
+      "last_run_time": "2024-12-12T14:00:00Z",
+      "interval": "4 hours",
+      "executions_count": 156,
+      "last_execution_status": "success",
+      "last_execution_duration_ms": 2450
+    },
+    {
+      "id": "strategy_worker_job",
+      "name": "Strategy Worker",
+      "description": "Verifica e executa estratégias ativas",
+      "status": "running",
+      "next_run_time": "2024-12-12T17:10:00Z",
+      "last_run_time": "2024-12-12T17:05:00Z",
+      "interval": "5 minutes",
+      "executions_count": 2340,
+      "last_execution_status": "success",
+      "last_execution_duration_ms": 1850,
+      "stats": {
+        "strategies_checked": 3,
+        "strategies_triggered": 1,
+        "orders_executed": 1,
+        "errors": 0
+      }
+    }
+  ],
+  "scheduler_running": true,
+  "scheduler_status": {
+    "uptime_hours": 72.5,
+    "total_jobs": 2,
+    "running_jobs": 2,
+    "paused_jobs": 0
+  }
+}

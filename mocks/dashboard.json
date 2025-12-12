@@ -1,0 +1,210 @@
+{
+  "dashboard": {
+    "user_id": "charles_test_user",
+    "summary": {
+      "total_portfolio_value_usd": 10663.80,
+      "portfolio_change_24h": 2.1,
+      "portfolio_change_7d": 8.5,
+      "total_strategies": 4,
+      "active_strategies": 3,
+      "paused_strategies": 1,
+      "total_strategies_pnl_usd": 172.87,
+      "today_pnl_usd": 8.30,
+      "week_pnl_usd": 72.90,
+      "month_pnl_usd": 172.87
+    },
+    "quick_stats": {
+      "best_performer_today": {
+        "token": "PEPE",
+        "pnl_usd": 8.30,
+        "pnl_percent": 10.8,
+        "exchange": "MEXC"
+      },
+      "worst_performer_today": {
+        "token": "SHIB",
+        "pnl_usd": -45.20,
+        "pnl_percent": -20.1,
+        "exchange": "MEXC"
+      },
+      "total_executions_today": 5,
+      "last_execution": {
+        "timestamp": "2024-12-12T16:45:00Z",
+        "token": "SHIB",
+        "type": "BUY",
+        "reason": "DCA_BUY",
+        "exchange": "MEXC"
+      }
+    },
+    "alerts": [
+      {
+        "id": "alert_001",
+        "type": "cooldown",
+        "severity": "info",
+        "title": "REKTCOIN em cooldown",
+        "message": "Aguardando 25 minutos para próxima operação",
+        "timestamp": "2024-12-12T15:30:00Z",
+        "strategy_id": "693a324fadc50a3be99c4eb7"
+      },
+      {
+        "id": "alert_002",
+        "type": "trailing_stop",
+        "severity": "success",
+        "title": "Trailing stop ativo - REKTCOIN",
+        "message": "Protegendo lucros de +25%. Trigger: $1.225",
+        "timestamp": "2024-12-12T15:25:00Z",
+        "strategy_id": "693a324fadc50a3be99c4eb7"
+      },
+      {
+        "id": "alert_003",
+        "type": "circuit_breaker",
+        "severity": "warning",
+        "title": "SHIB próximo do circuit breaker",
+        "message": "Perda diária: $45.20 de $1000 máximo",
+        "timestamp": "2024-12-12T16:45:00Z",
+        "strategy_id": "693a324fadc50a3be99c4ec0"
+      }
+    ],
+    "recent_executions": [
+      {
+        "id": "exec_101",
+        "timestamp": "2024-12-12T16:45:00Z",
+        "strategy_id": "693a324fadc50a3be99c4ec0",
+        "token": "SHIB",
+        "exchange": "MEXC",
+        "type": "BUY",
+        "reason": "DCA_BUY",
+        "price": 0.000012,
+        "amount": 10000000,
+        "value_usd": 120.00,
+        "pnl_usd": 0
+      },
+      {
+        "id": "exec_102",
+        "timestamp": "2024-12-12T15:30:00Z",
+        "strategy_id": "693a324fadc50a3be99c4eb7",
+        "token": "REKTCOIN",
+        "exchange": "MEXC",
+        "type": "SELL",
+        "reason": "TAKE_PROFIT",
+        "price": 1.22,
+        "amount": 300,
+        "value_usd": 366.00,
+        "pnl_usd": 66.00
+      },
+      {
+        "id": "exec_103",
+        "timestamp": "2024-12-12T14:20:00Z",
+        "strategy_id": "693a324fadc50a3be99c4eb8",
+        "token": "PEPE",
+        "exchange": "MEXC",
+        "type": "SELL",
+        "reason": "TAKE_PROFIT",
+        "price": 0.0000085,
+        "amount": 5000000,
+        "value_usd": 42.50,
+        "pnl_usd": 8.30
+      },
+      {
+        "id": "exec_104",
+        "timestamp": "2024-12-12T14:15:00Z",
+        "strategy_id": "693a324fadc50a3be99c4eb7",
+        "token": "REKTCOIN",
+        "exchange": "MEXC",
+        "type": "SELL",
+        "reason": "TAKE_PROFIT",
+        "price": 1.10,
+        "amount": 400,
+        "value_usd": 440.00,
+        "pnl_usd": 40.00
+      },
+      {
+        "id": "exec_105",
+        "timestamp": "2024-12-12T12:05:00Z",
+        "strategy_id": "693a324fadc50a3be99c4eb7",
+        "token": "REKTCOIN",
+        "exchange": "MEXC",
+        "type": "SELL",
+        "reason": "TAKE_PROFIT",
+        "price": 1.05,
+        "amount": 300,
+        "value_usd": 315.00,
+        "pnl_usd": 15.00
+      }
+    ],
+    "portfolio_distribution": {
+      "by_exchange": [
+        {
+          "exchange_id": "693481148b0a41e8b6acb07b",
+          "exchange_name": "MEXC",
+          "value_usd": 6560.50,
+          "percent": 61.5,
+          "active_strategies": 3
+        },
+        {
+          "exchange_id": "693481148b0a41e8b6acb07c",
+          "exchange_name": "Binance",
+          "value_usd": 4103.30,
+          "percent": 38.5,
+          "active_strategies": 0
+        }
+      ],
+      "by_asset_type": [
+        {
+          "type": "Stablecoins",
+          "value_usd": 7761.30,
+          "percent": 72.8
+        },
+        {
+          "type": "Altcoins",
+          "value_usd": 1140.00,
+          "percent": 10.7
+        },
+        {
+          "type": "Major Coins",
+          "value_usd": 1762.50,
+          "percent": 16.5
+        }
+      ]
+    },
+    "performance_chart": {
+      "period": "7d",
+      "data": [
+        {
+          "date": "2024-12-06",
+          "portfolio_value": 10150.20,
+          "pnl": -15.30
+        },
+        {
+          "date": "2024-12-07",
+          "portfolio_value": 10245.80,
+          "pnl": 95.60
+        },
+        {
+          "date": "2024-12-08",
+          "portfolio_value": 10180.50,
+          "pnl": -65.30
+        },
+        {
+          "date": "2024-12-09",
+          "portfolio_value": 10325.90,
+          "pnl": 145.40
+        },
+        {
+          "date": "2024-12-10",
+          "portfolio_value": 10450.20,
+          "pnl": 124.30
+        },
+        {
+          "date": "2024-12-11",
+          "portfolio_value": 10520.60,
+          "pnl": 70.40
+        },
+        {
+          "date": "2024-12-12",
+          "portfolio_value": 10663.80,
+          "pnl": 143.20
+        }
+      ]
+    }
+  }
+}
