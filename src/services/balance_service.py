@@ -339,11 +339,13 @@ class BalanceService:
                         value_usd = total * price_usd
                         total_usd += value_usd
                         
-                        # Build balance data
+                        # Build balance data (store raw values for sorting later)
                         balance_data_entry = {
-                            'total': total,
+                            'total': total,  # Keep as float for sorting
                             'price_usd': format_price(price_usd),
-                            'value_usd': format_usd(value_usd)
+                            'value_usd': format_usd(value_usd),
+                            '_price_raw': price_usd,  # Store raw price for sorting
+                            '_value_raw': value_usd   # Store raw value for sorting
                         }
                         
                         # Add price changes if requested and price was found
@@ -379,18 +381,39 @@ class BalanceService:
                             total_amount = processed_balances[currency]['total']
                             new_value_usd = total_amount * cg_price
                             
-                            # Update with CoinGecko price
+                            # Update with CoinGecko price (keep raw values)
+                            old_value = processed_balances[currency].get('_value_raw', 0.0)
                             processed_balances[currency]['price_usd'] = format_price(cg_price)
                             processed_balances[currency]['value_usd'] = format_usd(new_value_usd)
+                            processed_balances[currency]['_price_raw'] = cg_price
+                            processed_balances[currency]['_value_raw'] = new_value_usd
                             
                             # Update total
-                            old_value = float(processed_balances[currency]['value_usd'])
                             total_usd = total_usd - old_value + new_value_usd
                             
                             logger.debug(f"Updated {currency} price from CoinGecko: ${cg_price}")
                 
                 except Exception as e:
                     logger.warning(f"Could not fetch fallback prices from CoinGecko: {e}")
+            
+            # ✅ SORT balances by real value BEFORE returning
+            # Convert to list with real values for sorting
+            balances_list = []
+            for currency, balance_entry in processed_balances.items():
+                # Use stored raw value for accurate sorting
+                real_value = balance_entry.get('_value_raw', 0.0)
+                balances_list.append((currency, balance_entry, real_value))
+                logger.debug(f"Sort prep: {currency} = ${real_value}")
+            
+            # Sort by real_value (descending)
+            balances_list.sort(key=lambda x: x[2], reverse=True)
+            logger.debug(f"✅ Sorted order: {[f'{c}=${v:.2f}' for c, _, v in balances_list[:5]]}")
+            
+            # Rebuild dict in sorted order (KEEP raw values for now, will be cleaned in fetch_all_balances)
+            processed_balances = {currency: balance_entry for currency, balance_entry, _ in balances_list}
+            
+            # DEBUG: Log order after sorting
+            logger.info(f"📊 {exchange_info['nome']} sorted tokens: {list(processed_balances.keys())[:5]}")
             
             fetch_time = time.time() - start_time
             
@@ -518,29 +541,20 @@ class BalanceService:
                 exchange_total = float(exchange_result.get('total_usd', '0.0'))
                 total_portfolio_usd += exchange_total
                 
-                # Process tokens for this exchange
+                # Use tokens directly from exchange_result (already sorted and formatted)
+                # Just remove internal fields (_value_raw, _price_raw) and rename 'total' to 'amount'
                 for currency, amounts in exchange_result['balances'].items():
-                    # Convert strings back to float for comparison
-                    amount_val = amounts['total']
-                    price_val = float(amounts.get('price_usd', '0.0'))
-                    value_val = float(amounts.get('value_usd', '0.0'))
+                    # Clean up and format: remove internal fields, rename total to amount
+                    token_info = {}
+                    for k, v in amounts.items():
+                        if k.startswith('_'):
+                            continue  # Skip internal fields
+                        elif k == 'total':
+                            token_info['amount'] = format_amount(v)  # Rename total -> amount and format
+                        else:
+                            token_info[k] = v  # Keep price_usd, value_usd, change_* as-is (already formatted)
                     
-                    token_info = {
-                        'amount': format_amount(amount_val),
-                        'price_usd': format_price(price_val),
-                        'value_usd': format_usd(value_val)
-                    }
-                    
-                    # Only include tokens with value > 0 or if price is unknown but has balance
-                    if value_val > 0 or (price_val == 0 and amount_val > 0):
-                        exchange_tokens[currency] = token_info
-                
-                # Sort tokens by value_usd (descending) - convert string to float for sorting
-                exchange_tokens = dict(sorted(
-                    exchange_tokens.items(),
-                    key=lambda x: float(x[1]['value_usd']),
-                    reverse=True
-                ))
+                    exchange_tokens[currency] = token_info
             
             # Add exchange summary with its tokens
             exchange_summary = {
@@ -555,6 +569,13 @@ class BalanceService:
                 exchange_summary['error'] = exchange_result.get('error')
             
             exchanges_summary.append(exchange_summary)
+        
+        # ✅ SORT: Order exchanges by total_usd (highest to lowest)
+        exchanges_summary = sorted(
+            exchanges_summary,
+            key=lambda x: float(x.get('total_usd', '0.0')) if x.get('success') else 0,
+            reverse=True
+        )
         
         total_fetch_time = time.time() - start_time
         

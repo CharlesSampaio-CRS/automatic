@@ -5,6 +5,7 @@ API Principal - Sistema de Trading Multi-Exchange
 import os
 import ccxt
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from bson import ObjectId
@@ -37,6 +38,20 @@ logger = get_logger(__name__)
 
 # Inicializa Flask
 app = Flask(__name__)
+
+# ============================================================================
+# CORS CONFIGURATION - Allow frontend access
+# ============================================================================
+# Configura CORS para permitir chamadas do React app
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["*"],  # Em produção, especifique os domínios (ex: ["http://localhost:3000", "https://seu-app.com"])
+        "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
+logger.info("✅ CORS enabled - Frontend can access API")
 
 # Configuração MongoDB usando config centralizado
 def get_database():
