@@ -733,6 +733,355 @@ def unlink_exchange():
             'details': str(e)
         }), 500
 
+
+@app.route('/api/v1/exchanges/disconnect', methods=['POST'])
+def disconnect_exchange():
+    """
+    Desconecta uma exchange (soft delete - marca como inativa)
+    Alias para /unlink - mesma funcionalidade, nome mais intuitivo
+    
+    Request Body:
+        {
+            "user_id": "string",
+            "exchange_id": "string (MongoDB _id)"
+        }
+    
+    Returns:
+        200: Exchange desconectada com sucesso
+        400: Dados inválidos
+        404: Exchange não encontrada
+        500: Erro ao desconectar
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request body is required'
+            }), 400
+        
+        user_id = data.get('user_id')
+        exchange_id = data.get('exchange_id')
+        
+        if not user_id or not exchange_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id and exchange_id are required'
+            }), 400
+        
+        # Validar ObjectId
+        try:
+            exchange_object_id = ObjectId(exchange_id)
+        except:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid exchange_id format'
+            }), 400
+        
+        # Buscar documento do usuário
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_doc or 'exchanges' not in user_doc:
+            return jsonify({
+                'success': False,
+                'error': 'User has no linked exchanges'
+            }), 404
+        
+        # Encontrar índice da exchange no array
+        exchange_index = None
+        exchange_data = None
+        for idx, ex in enumerate(user_doc['exchanges']):
+            if ex['exchange_id'] == exchange_object_id:
+                exchange_index = idx
+                exchange_data = ex
+                break
+        
+        if exchange_index is None:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found in user\'s linked exchanges'
+            }), 404
+        
+        # Verificar se já está desconectada
+        if not exchange_data.get('is_active', True):
+            return jsonify({
+                'success': False,
+                'error': 'Exchange is already disconnected'
+            }), 400
+        
+        # Soft delete - marcar exchange como inativa
+        result = db.user_exchanges.update_one(
+            {'user_id': user_id},
+            {
+                '$set': {
+                    f'exchanges.{exchange_index}.is_active': False,
+                    f'exchanges.{exchange_index}.disconnected_at': datetime.utcnow(),
+                    f'exchanges.{exchange_index}.updated_at': datetime.utcnow(),
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            # Buscar nome da exchange
+            exchange = db.exchanges.find_one({'_id': exchange_object_id})
+            
+            logger.info(f"✅ {exchange['nome']} disconnected for user {user_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'{exchange["nome"]} disconnected successfully',
+                'exchange': {
+                    'id': exchange_id,
+                    'name': exchange['nome'],
+                    'is_active': False
+                }
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to disconnect exchange'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Error disconnecting exchange: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/exchanges/delete', methods=['DELETE'])
+def delete_exchange():
+    """
+    Deleta permanentemente uma conexão de exchange (hard delete)
+    ATENÇÃO: Esta ação é irreversível! Remove os dados criptografados da API.
+    
+    Request Body:
+        {
+            "user_id": "string",
+            "exchange_id": "string (MongoDB _id)"
+        }
+    
+    Returns:
+        200: Exchange deletada com sucesso
+        400: Dados inválidos
+        404: Exchange não encontrada
+        500: Erro ao deletar
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request body is required'
+            }), 400
+        
+        user_id = data.get('user_id')
+        exchange_id = data.get('exchange_id')
+        
+        if not user_id or not exchange_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id and exchange_id are required'
+            }), 400
+        
+        # Validar ObjectId
+        try:
+            exchange_object_id = ObjectId(exchange_id)
+        except:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid exchange_id format'
+            }), 400
+        
+        # Buscar documento do usuário
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_doc or 'exchanges' not in user_doc:
+            return jsonify({
+                'success': False,
+                'error': 'User has no linked exchanges'
+            }), 404
+        
+        # Verificar se a exchange existe no array
+        exchange_found = False
+        exchange_name = None
+        for ex in user_doc['exchanges']:
+            if ex['exchange_id'] == exchange_object_id:
+                exchange_found = True
+                # Buscar nome da exchange antes de deletar
+                exchange = db.exchanges.find_one({'_id': exchange_object_id})
+                if exchange:
+                    exchange_name = exchange['nome']
+                break
+        
+        if not exchange_found:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found in user\'s linked exchanges'
+            }), 404
+        
+        # Hard delete - remover exchange do array
+        result = db.user_exchanges.update_one(
+            {'user_id': user_id},
+            {
+                '$pull': {
+                    'exchanges': {'exchange_id': exchange_object_id}
+                },
+                '$set': {
+                    'updated_at': datetime.utcnow()
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            logger.warning(f"🗑️ {exchange_name or 'Exchange'} permanently deleted for user {user_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'{exchange_name or "Exchange"} deleted permanently',
+                'warning': 'This action is irreversible. The exchange connection has been removed.'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to delete exchange'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Error deleting exchange: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/exchanges/reconnect', methods=['POST'])
+def reconnect_exchange():
+    """
+    Reconecta uma exchange desconectada (reativa)
+    
+    Request Body:
+        {
+            "user_id": "string",
+            "exchange_id": "string (MongoDB _id)"
+        }
+    
+    Returns:
+        200: Exchange reconectada com sucesso
+        400: Dados inválidos ou exchange já está ativa
+        404: Exchange não encontrada
+        500: Erro ao reconectar
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request body is required'
+            }), 400
+        
+        user_id = data.get('user_id')
+        exchange_id = data.get('exchange_id')
+        
+        if not user_id or not exchange_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id and exchange_id are required'
+            }), 400
+        
+        # Validar ObjectId
+        try:
+            exchange_object_id = ObjectId(exchange_id)
+        except:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid exchange_id format'
+            }), 400
+        
+        # Buscar documento do usuário
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_doc or 'exchanges' not in user_doc:
+            return jsonify({
+                'success': False,
+                'error': 'User has no linked exchanges'
+            }), 404
+        
+        # Encontrar índice da exchange no array
+        exchange_index = None
+        exchange_data = None
+        for idx, ex in enumerate(user_doc['exchanges']):
+            if ex['exchange_id'] == exchange_object_id:
+                exchange_index = idx
+                exchange_data = ex
+                break
+        
+        if exchange_index is None:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found in user\'s linked exchanges'
+            }), 404
+        
+        # Verificar se já está ativa
+        if exchange_data.get('is_active', True):
+            return jsonify({
+                'success': False,
+                'error': 'Exchange is already connected'
+            }), 400
+        
+        # Reativar exchange
+        result = db.user_exchanges.update_one(
+            {'user_id': user_id},
+            {
+                '$set': {
+                    f'exchanges.{exchange_index}.is_active': True,
+                    f'exchanges.{exchange_index}.reconnected_at': datetime.utcnow(),
+                    f'exchanges.{exchange_index}.updated_at': datetime.utcnow(),
+                    'updated_at': datetime.utcnow()
+                },
+                '$unset': {
+                    f'exchanges.{exchange_index}.disconnected_at': ''
+                }
+            }
+        )
+        
+        if result.modified_count > 0:
+            # Buscar nome da exchange
+            exchange = db.exchanges.find_one({'_id': exchange_object_id})
+            
+            logger.info(f"✅ {exchange['nome']} reconnected for user {user_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'{exchange["nome"]} reconnected successfully',
+                'exchange': {
+                    'id': exchange_id,
+                    'name': exchange['nome'],
+                    'is_active': True
+                }
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to reconnect exchange'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Error reconnecting exchange: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
 # ============================================
 # ENDPOINTS DE BALANCES
 # ============================================
