@@ -283,13 +283,13 @@ def get_scheduler_status():
 def get_available_exchanges():
     """
     Lista exchanges disponíveis para vinculação (NOVA ESTRUTURA COM ARRAY)
-    Exclui as exchanges já vinculadas pelo usuário
+    Retorna APENAS exchanges que o usuário NUNCA conectou (não estão no array)
     
     Query Params:
         user_id (required): ID do usuário para filtrar exchanges já vinculadas
     
     Returns:
-        200: Lista de exchanges disponíveis (não vinculadas)
+        200: Lista de exchanges nunca conectadas pelo usuário
         400: user_id não fornecido
         500: Erro ao buscar exchanges
     """
@@ -302,7 +302,7 @@ def get_available_exchanges():
                 'error': 'user_id is required as query parameter'
             }), 400
         
-        # Busca exchanges ativas no banco
+        # Busca exchanges ativas no banco (exchanges habilitadas no sistema)
         exchanges = list(db.exchanges.find(
             {'is_active': True},
             {
@@ -316,18 +316,19 @@ def get_available_exchanges():
             }
         ).sort('nome', 1))
         
-        # Buscar documento do usuário e extrair exchange_ids vinculadas ativas
+        # Buscar documento do usuário e extrair TODAS exchange_ids que já foram conectadas
         user_doc = db.user_exchanges.find_one({'user_id': user_id})
         
         linked_exchange_ids = []
         if user_doc and 'exchanges' in user_doc:
+            # Todas as exchanges no array (independente de is_active)
+            # Tanto ativas quanto inativas são consideradas "já conectadas"
             linked_exchange_ids = [
                 ex['exchange_id']
                 for ex in user_doc['exchanges']
-                if ex.get('is_active', True)
             ]
         
-        # Filtrar exchanges que NÃO estão vinculadas
+        # Filtrar exchanges que NUNCA foram conectadas (não estão no array)
         exchanges = [
             ex for ex in exchanges 
             if ObjectId(ex['_id']) not in linked_exchange_ids
@@ -560,12 +561,14 @@ def link_exchange():
 def get_linked_exchanges():
     """
     Lista exchanges vinculadas por um usuário (NOVA ESTRUTURA COM ARRAY)
+    Retorna TODAS as exchanges que o usuário já conectou alguma vez
+    Campo 'status': 'active' (funcionando) ou 'inactive' (pausada/desconectada)
     
     Query Params:
         user_id (required): ID do usuário
     
     Returns:
-        200: Lista de exchanges vinculadas (sem expor credenciais)
+        200: Lista de exchanges vinculadas com status (active/inactive)
         400: user_id não fornecido
         500: Erro ao buscar exchanges
     """
@@ -588,13 +591,9 @@ def get_linked_exchanges():
                 'exchanges': []
             }), 200
         
-        # Buscar informações das exchanges ativas
+        # Buscar informações de TODAS as exchanges vinculadas (ativas e inativas)
         linked_exchanges = []
         for ex_data in user_doc['exchanges']:
-            # Filtra apenas exchanges ativas
-            if not ex_data.get('is_active', True):
-                continue
-                
             exchange = db.exchanges.find_one(
                 {'_id': ex_data['exchange_id']},
                 {
@@ -608,16 +607,29 @@ def get_linked_exchanges():
             )
             
             if exchange:
-                linked_exchanges.append({
+                # Determina o status: active (funcionando) ou inactive (pausada)
+                is_active = ex_data.get('is_active', True)
+                status = 'active' if is_active else 'inactive'
+                
+                exchange_info = {
                     'exchange_id': str(exchange['_id']),
                     'name': exchange['nome'],
                     'icon': exchange['icon'],
                     'url': exchange['url'],
                     'ccxt_id': exchange['ccxt_id'],
                     'country': exchange['pais_de_origem'],
+                    'status': status,  # 'active' ou 'inactive'
                     'linked_at': ex_data['created_at'].isoformat(),
                     'updated_at': ex_data['updated_at'].isoformat()
-                })
+                }
+                
+                # Adiciona timestamps de disconnect/reconnect se existirem
+                if 'disconnected_at' in ex_data:
+                    exchange_info['disconnected_at'] = ex_data['disconnected_at'].isoformat()
+                if 'reconnected_at' in ex_data:
+                    exchange_info['reconnected_at'] = ex_data['reconnected_at'].isoformat()
+                
+                linked_exchanges.append(exchange_info)
         
         return jsonify({
             'success': True,
@@ -961,10 +973,10 @@ def delete_exchange():
         }), 500
 
 
-@app.route('/api/v1/exchanges/reconnect', methods=['POST'])
-def reconnect_exchange():
+@app.route('/api/v1/exchanges/connect', methods=['POST'])
+def connect_exchange():
     """
-    Reconecta uma exchange desconectada (reativa)
+    Conecta/Reativa uma exchange desconectada (usando credenciais já salvas)
     
     Request Body:
         {
@@ -973,10 +985,10 @@ def reconnect_exchange():
         }
     
     Returns:
-        200: Exchange reconectada com sucesso
+        200: Exchange conectada com sucesso
         400: Dados inválidos ou exchange já está ativa
         404: Exchange não encontrada
-        500: Erro ao reconectar
+        500: Erro ao conectar
     """
     try:
         data = request.get_json()
@@ -1056,11 +1068,11 @@ def reconnect_exchange():
             # Buscar nome da exchange
             exchange = db.exchanges.find_one({'_id': exchange_object_id})
             
-            logger.info(f"✅ {exchange['nome']} reconnected for user {user_id}")
+            logger.info(f"✅ {exchange['nome']} connected for user {user_id}")
             
             return jsonify({
                 'success': True,
-                'message': f'{exchange["nome"]} reconnected successfully',
+                'message': f'{exchange["nome"]} connected successfully',
                 'exchange': {
                     'id': exchange_id,
                     'name': exchange['nome'],
@@ -1074,7 +1086,7 @@ def reconnect_exchange():
             }), 500
         
     except Exception as e:
-        logger.error(f"Error reconnecting exchange: {str(e)}")
+        logger.error(f"Error connecting exchange: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
