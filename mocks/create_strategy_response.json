@@ -1,0 +1,118 @@
+{
+  "message": "Strategy created successfully",
+  "strategy": {
+    "id": "693a324fadc50a3be99c4ec1",
+    "user_id": "charles_test_user",
+    "exchange_id": "693481148b0a41e8b6acb07b",
+    "exchange_name": "MEXC",
+    "token": "DOGE",
+    "is_active": true,
+    "rules": {
+      "take_profit_levels": [
+        {
+          "percent": 5,
+          "quantity_percent": 30
+        },
+        {
+          "percent": 10,
+          "quantity_percent": 40
+        },
+        {
+          "percent": 20,
+          "quantity_percent": 30
+        }
+      ],
+      "stop_loss": {
+        "enabled": true,
+        "percent": 3,
+        "trailing_enabled": true,
+        "trailing_percent": 2,
+        "trailing_activation_percent": 5
+      },
+      "buy_dip": {
+        "enabled": true,
+        "percent": 5,
+        "dca_enabled": true,
+        "dca_levels": [
+          {
+            "percent": 5,
+            "quantity_percent": 50
+          },
+          {
+            "percent": 10,
+            "quantity_percent": 50
+          }
+        ]
+      },
+      "cooldown": {
+        "enabled": true,
+        "after_buy_minutes": 15,
+        "after_sell_minutes": 10
+      },
+      "risk_management": {
+        "enabled": true,
+        "max_daily_loss_usd": 1000,
+        "max_weekly_loss_usd": 3000,
+        "max_monthly_loss_usd": 10000
+      },
+      "trading_hours": {
+        "enabled": false,
+        "start_time": "09:00",
+        "end_time": "18:00",
+        "timezone": "America/Sao_Paulo"
+      },
+      "blackout_periods": [],
+      "volume_check": {
+        "enabled": false,
+        "min_24h_volume_usd": 10000000
+      },
+      "indicators": {
+        "rsi": {
+          "enabled": false,
+          "period": 14,
+          "overbought": 70,
+          "oversold": 30
+        }
+      },
+      "execution": {
+        "max_slippage_percent": 2,
+        "order_type": "market"
+      }
+    },
+    "execution_stats": {
+      "total_executions": 0,
+      "total_sells": 0,
+      "total_buys": 0,
+      "total_pnl_usd": 0,
+      "daily_pnl_usd": 0,
+      "weekly_pnl_usd": 0,
+      "monthly_pnl_usd": 0,
+      "executed_tp_levels": [],
+      "executed_dca_levels": [],
+      "last_execution_at": null,
+      "last_execution_type": null,
+      "last_execution_reason": null,
+      "last_execution_price": null,
+      "last_execution_amount": null
+    },
+    "trailing_stop_state": {
+      "highest_price_seen": null,
+      "is_active": false,
+      "last_updated": null
+    },
+    "cooldown_state": {
+      "cooldown_until": null,
+      "last_action": null,
+      "last_action_at": null
+    },
+    "performance": {
+      "win_rate": 0,
+      "avg_profit_percent": 0,
+      "avg_loss_percent": 0,
+      "profit_factor": 0,
+      "sharpe_ratio": 0
+    },
+    "created_at": "2024-12-12T17:00:00Z",
+    "updated_at": "2024-12-12T17:00:00Z"
+  }
+}

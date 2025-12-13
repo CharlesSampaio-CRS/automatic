@@ -1,0 +1,458 @@
+{
+  "strategies": [
+    {
+      "id": "693a324fadc50a3be99c4eb7",
+      "user_id": "charles_test_user",
+      "exchange_id": "693481148b0a41e8b6acb07b",
+      "exchange_name": "MEXC",
+      "token": "REKTCOIN",
+      "is_active": true,
+      "rules": {
+        "take_profit_levels": [
+          {
+            "percent": 5,
+            "quantity_percent": 30
+          },
+          {
+            "percent": 10,
+            "quantity_percent": 40
+          },
+          {
+            "percent": 20,
+            "quantity_percent": 30
+          }
+        ],
+        "stop_loss": {
+          "enabled": true,
+          "percent": 3,
+          "trailing_enabled": true,
+          "trailing_percent": 2,
+          "trailing_activation_percent": 5
+        },
+        "buy_dip": {
+          "enabled": true,
+          "percent": 5,
+          "dca_enabled": true,
+          "dca_levels": [
+            {
+              "percent": 5,
+              "quantity_percent": 50
+            },
+            {
+              "percent": 10,
+              "quantity_percent": 50
+            }
+          ]
+        },
+        "cooldown": {
+          "enabled": true,
+          "after_buy_minutes": 15,
+          "after_sell_minutes": 10
+        },
+        "risk_management": {
+          "enabled": true,
+          "max_daily_loss_usd": 1000,
+          "max_weekly_loss_usd": 3000,
+          "max_monthly_loss_usd": 10000
+        },
+        "trading_hours": {
+          "enabled": false,
+          "start_time": "09:00",
+          "end_time": "18:00",
+          "timezone": "America/Sao_Paulo"
+        },
+        "blackout_periods": [],
+        "volume_check": {
+          "enabled": false,
+          "min_24h_volume_usd": 10000000
+        },
+        "indicators": {
+          "rsi": {
+            "enabled": false,
+            "period": 14,
+            "overbought": 70,
+            "oversold": 30
+          }
+        },
+        "execution": {
+          "max_slippage_percent": 2,
+          "order_type": "market"
+        }
+      },
+      "execution_stats": {
+        "total_executions": 12,
+        "total_sells": 7,
+        "total_buys": 5,
+        "total_pnl_usd": 245.67,
+        "daily_pnl_usd": 45.20,
+        "weekly_pnl_usd": 180.50,
+        "monthly_pnl_usd": 245.67,
+        "executed_tp_levels": [5, 10],
+        "executed_dca_levels": [5],
+        "last_execution_at": "2024-12-12T15:30:00Z",
+        "last_execution_type": "SELL",
+        "last_execution_reason": "TAKE_PROFIT",
+        "last_execution_price": 1.22,
+        "last_execution_amount": 300
+      },
+      "trailing_stop_state": {
+        "highest_price_seen": 1.25,
+        "is_active": true,
+        "last_updated": "2024-12-12T15:25:00Z"
+      },
+      "cooldown_state": {
+        "cooldown_until": "2024-12-12T16:00:00Z",
+        "last_action": "SELL",
+        "last_action_at": "2024-12-12T15:30:00Z"
+      },
+      "performance": {
+        "win_rate": 71.4,
+        "avg_profit_percent": 8.5,
+        "avg_loss_percent": -2.1,
+        "profit_factor": 3.2,
+        "sharpe_ratio": 1.8
+      },
+      "created_at": "2024-12-10T10:00:00Z",
+      "updated_at": "2024-12-12T15:30:00Z"
+    },
+    {
+      "id": "693a324fadc50a3be99c4eb8",
+      "user_id": "charles_test_user",
+      "exchange_id": "693481148b0a41e8b6acb07b",
+      "exchange_name": "MEXC",
+      "token": "PEPE",
+      "is_active": true,
+      "rules": {
+        "take_profit_levels": [
+          {
+            "percent": 2,
+            "quantity_percent": 50
+          },
+          {
+            "percent": 4,
+            "quantity_percent": 50
+          }
+        ],
+        "stop_loss": {
+          "enabled": true,
+          "percent": 1,
+          "trailing_enabled": true,
+          "trailing_percent": 0.5,
+          "trailing_activation_percent": 2
+        },
+        "buy_dip": {
+          "enabled": true,
+          "percent": 3,
+          "dca_enabled": false,
+          "dca_levels": []
+        },
+        "cooldown": {
+          "enabled": true,
+          "after_buy_minutes": 60,
+          "after_sell_minutes": 30
+        },
+        "risk_management": {
+          "enabled": true,
+          "max_daily_loss_usd": 200,
+          "max_weekly_loss_usd": 500,
+          "max_monthly_loss_usd": 1000
+        },
+        "trading_hours": {
+          "enabled": true,
+          "start_time": "09:00",
+          "end_time": "18:00",
+          "timezone": "America/Sao_Paulo"
+        },
+        "blackout_periods": [],
+        "volume_check": {
+          "enabled": false,
+          "min_24h_volume_usd": 5000000
+        },
+        "indicators": {
+          "rsi": {
+            "enabled": false,
+            "period": 14,
+            "overbought": 70,
+            "oversold": 30
+          }
+        },
+        "execution": {
+          "max_slippage_percent": 1,
+          "order_type": "market"
+        }
+      },
+      "execution_stats": {
+        "total_executions": 3,
+        "total_sells": 2,
+        "total_buys": 1,
+        "total_pnl_usd": 12.50,
+        "daily_pnl_usd": 8.30,
+        "weekly_pnl_usd": 12.50,
+        "monthly_pnl_usd": 12.50,
+        "executed_tp_levels": [2],
+        "executed_dca_levels": [],
+        "last_execution_at": "2024-12-12T14:20:00Z",
+        "last_execution_type": "SELL",
+        "last_execution_reason": "TAKE_PROFIT",
+        "last_execution_price": 0.0000085,
+        "last_execution_amount": 5000000
+      },
+      "trailing_stop_state": {
+        "highest_price_seen": 0.0000088,
+        "is_active": true,
+        "last_updated": "2024-12-12T14:15:00Z"
+      },
+      "cooldown_state": {
+        "cooldown_until": "2024-12-12T14:50:00Z",
+        "last_action": "SELL",
+        "last_action_at": "2024-12-12T14:20:00Z"
+      },
+      "performance": {
+        "win_rate": 100,
+        "avg_profit_percent": 2.8,
+        "avg_loss_percent": 0,
+        "profit_factor": 5.0,
+        "sharpe_ratio": 2.5
+      },
+      "created_at": "2024-12-11T08:00:00Z",
+      "updated_at": "2024-12-12T14:20:00Z"
+    },
+    {
+      "id": "693a324fadc50a3be99c4eb9",
+      "user_id": "charles_test_user",
+      "exchange_id": "693481148b0a41e8b6acb07c",
+      "exchange_name": "Binance",
+      "token": "BTC",
+      "is_active": false,
+      "rules": {
+        "take_profit_levels": [
+          {
+            "percent": 5,
+            "quantity_percent": 100
+          }
+        ],
+        "stop_loss": {
+          "enabled": true,
+          "percent": 2,
+          "trailing_enabled": false,
+          "trailing_percent": 0,
+          "trailing_activation_percent": 0
+        },
+        "buy_dip": {
+          "enabled": true,
+          "percent": 3,
+          "dca_enabled": false,
+          "dca_levels": []
+        },
+        "cooldown": {
+          "enabled": false,
+          "after_buy_minutes": 0,
+          "after_sell_minutes": 0
+        },
+        "risk_management": {
+          "enabled": false,
+          "max_daily_loss_usd": 0,
+          "max_weekly_loss_usd": 0,
+          "max_monthly_loss_usd": 0
+        },
+        "trading_hours": {
+          "enabled": false,
+          "start_time": "00:00",
+          "end_time": "23:59",
+          "timezone": "UTC"
+        },
+        "blackout_periods": [],
+        "volume_check": {
+          "enabled": false,
+          "min_24h_volume_usd": 0
+        },
+        "indicators": {
+          "rsi": {
+            "enabled": false,
+            "period": 14,
+            "overbought": 70,
+            "oversold": 30
+          }
+        },
+        "execution": {
+          "max_slippage_percent": 2,
+          "order_type": "market"
+        }
+      },
+      "execution_stats": {
+        "total_executions": 0,
+        "total_sells": 0,
+        "total_buys": 0,
+        "total_pnl_usd": 0,
+        "daily_pnl_usd": 0,
+        "weekly_pnl_usd": 0,
+        "monthly_pnl_usd": 0,
+        "executed_tp_levels": [],
+        "executed_dca_levels": [],
+        "last_execution_at": null,
+        "last_execution_type": null,
+        "last_execution_reason": null,
+        "last_execution_price": null,
+        "last_execution_amount": null
+      },
+      "trailing_stop_state": {
+        "highest_price_seen": null,
+        "is_active": false,
+        "last_updated": null
+      },
+      "cooldown_state": {
+        "cooldown_until": null,
+        "last_action": null,
+        "last_action_at": null
+      },
+      "performance": {
+        "win_rate": 0,
+        "avg_profit_percent": 0,
+        "avg_loss_percent": 0,
+        "profit_factor": 0,
+        "sharpe_ratio": 0
+      },
+      "created_at": "2024-12-12T09:00:00Z",
+      "updated_at": "2024-12-12T09:00:00Z"
+    },
+    {
+      "id": "693a324fadc50a3be99c4ec0",
+      "user_id": "charles_test_user",
+      "exchange_id": "693481148b0a41e8b6acb07b",
+      "exchange_name": "MEXC",
+      "token": "SHIB",
+      "is_active": true,
+      "rules": {
+        "take_profit_levels": [
+          {
+            "percent": 5,
+            "quantity_percent": 30
+          },
+          {
+            "percent": 10,
+            "quantity_percent": 40
+          },
+          {
+            "percent": 20,
+            "quantity_percent": 30
+          }
+        ],
+        "stop_loss": {
+          "enabled": true,
+          "percent": 3,
+          "trailing_enabled": true,
+          "trailing_percent": 2,
+          "trailing_activation_percent": 5
+        },
+        "buy_dip": {
+          "enabled": true,
+          "percent": 5,
+          "dca_enabled": true,
+          "dca_levels": [
+            {
+              "percent": 5,
+              "quantity_percent": 50
+            },
+            {
+              "percent": 10,
+              "quantity_percent": 50
+            }
+          ]
+        },
+        "cooldown": {
+          "enabled": true,
+          "after_buy_minutes": 15,
+          "after_sell_minutes": 10
+        },
+        "risk_management": {
+          "enabled": true,
+          "max_daily_loss_usd": 1000,
+          "max_weekly_loss_usd": 3000,
+          "max_monthly_loss_usd": 10000
+        },
+        "trading_hours": {
+          "enabled": false,
+          "start_time": "09:00",
+          "end_time": "18:00",
+          "timezone": "America/Sao_Paulo"
+        },
+        "blackout_periods": [
+          {
+            "start": "2024-12-15T14:00:00Z",
+            "end": "2024-12-15T15:00:00Z",
+            "reason": "FED announcement"
+          }
+        ],
+        "volume_check": {
+          "enabled": false,
+          "min_24h_volume_usd": 10000000
+        },
+        "indicators": {
+          "rsi": {
+            "enabled": false,
+            "period": 14,
+            "overbought": 70,
+            "oversold": 30
+          }
+        },
+        "execution": {
+          "max_slippage_percent": 2,
+          "order_type": "market"
+        }
+      },
+      "execution_stats": {
+        "total_executions": 25,
+        "total_sells": 15,
+        "total_buys": 10,
+        "total_pnl_usd": -85.30,
+        "daily_pnl_usd": -45.20,
+        "weekly_pnl_usd": -120.80,
+        "monthly_pnl_usd": -85.30,
+        "executed_tp_levels": [5, 10, 20],
+        "executed_dca_levels": [5, 10],
+        "last_execution_at": "2024-12-12T16:45:00Z",
+        "last_execution_type": "BUY",
+        "last_execution_reason": "DCA_BUY",
+        "last_execution_price": 0.000012,
+        "last_execution_amount": 10000000
+      },
+      "trailing_stop_state": {
+        "highest_price_seen": 0.000015,
+        "is_active": false,
+        "last_updated": "2024-12-12T16:40:00Z"
+      },
+      "cooldown_state": {
+        "cooldown_until": "2024-12-12T17:00:00Z",
+        "last_action": "BUY",
+        "last_action_at": "2024-12-12T16:45:00Z"
+      },
+      "performance": {
+        "win_rate": 45.5,
+        "avg_profit_percent": 6.2,
+        "avg_loss_percent": -3.8,
+        "profit_factor": 0.8,
+        "sharpe_ratio": -0.5
+      },
+      "created_at": "2024-11-25T10:00:00Z",
+      "updated_at": "2024-12-12T16:45:00Z"
+    }
+  ],
+  "total": 4,
+  "summary": {
+    "total_strategies": 4,
+    "active_strategies": 3,
+    "paused_strategies": 1,
+    "total_portfolio_pnl_usd": 172.87,
+    "today_portfolio_pnl_usd": 8.30,
+    "best_performer": {
+      "token": "PEPE",
+      "pnl_usd": 12.50,
+      "win_rate": 100
+    },
+    "worst_performer": {
+      "token": "SHIB",
+      "pnl_usd": -85.30,
+      "win_rate": 45.5
+    }
+  }
+}

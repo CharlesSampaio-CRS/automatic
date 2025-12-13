@@ -1,0 +1,130 @@
+{
+  "balances": [
+    {
+      "exchange_id": "693481148b0a41e8b6acb07b",
+      "exchange_name": "MEXC",
+      "balances": [
+        {
+          "asset": "REKTCOIN",
+          "free": 700,
+          "locked": 0,
+          "total": 700,
+          "price_usd": 1.25,
+          "value_usd": 875.00,
+          "change_24h": 5.2,
+          "change_7d": 18.5,
+          "has_active_strategy": true,
+          "strategy_pnl_usd": 245.67
+        },
+        {
+          "asset": "PEPE",
+          "free": 10000000,
+          "locked": 0,
+          "total": 10000000,
+          "price_usd": 0.0000085,
+          "value_usd": 85.00,
+          "change_24h": 2.8,
+          "change_7d": 12.3,
+          "has_active_strategy": true,
+          "strategy_pnl_usd": 12.50
+        },
+        {
+          "asset": "SHIB",
+          "free": 15000000,
+          "locked": 0,
+          "total": 15000000,
+          "price_usd": 0.000012,
+          "value_usd": 180.00,
+          "change_24h": -3.5,
+          "change_7d": -8.2,
+          "has_active_strategy": true,
+          "strategy_pnl_usd": -85.30
+        },
+        {
+          "asset": "USDT",
+          "free": 5420.50,
+          "locked": 0,
+          "total": 5420.50,
+          "price_usd": 1.00,
+          "value_usd": 5420.50,
+          "change_24h": 0,
+          "change_7d": 0,
+          "has_active_strategy": false,
+          "strategy_pnl_usd": 0
+        }
+      ],
+      "total_value_usd": 6560.50,
+      "last_updated": "2024-12-12T17:05:00Z"
+    },
+    {
+      "exchange_id": "693481148b0a41e8b6acb07c",
+      "exchange_name": "Binance",
+      "balances": [
+        {
+          "asset": "BTC",
+          "free": 0.015,
+          "locked": 0,
+          "total": 0.015,
+          "price_usd": 42500.00,
+          "value_usd": 637.50,
+          "change_24h": 1.2,
+          "change_7d": 4.8,
+          "has_active_strategy": false,
+          "strategy_pnl_usd": 0
+        },
+        {
+          "asset": "ETH",
+          "free": 0.5,
+          "locked": 0,
+          "total": 0.5,
+          "price_usd": 2250.00,
+          "value_usd": 1125.00,
+          "change_24h": 2.5,
+          "change_7d": 8.3,
+          "has_active_strategy": false,
+          "strategy_pnl_usd": 0
+        },
+        {
+          "asset": "USDT",
+          "free": 2340.80,
+          "locked": 0,
+          "total": 2340.80,
+          "price_usd": 1.00,
+          "value_usd": 2340.80,
+          "change_24h": 0,
+          "change_7d": 0,
+          "has_active_strategy": false,
+          "strategy_pnl_usd": 0
+        }
+      ],
+      "total_value_usd": 4103.30,
+      "last_updated": "2024-12-12T17:05:00Z"
+    }
+  ],
+  "total_portfolio_value_usd": 10663.80,
+  "portfolio_change_24h": 2.1,
+  "portfolio_change_7d": 8.5,
+  "total_strategies_pnl_usd": 172.87,
+  "summary": {
+    "total_assets": 9,
+    "total_exchanges": 2,
+    "active_strategies": 3,
+    "top_holdings": [
+      {
+        "asset": "USDT",
+        "value_usd": 7761.30,
+        "percent": 72.8
+      },
+      {
+        "asset": "ETH",
+        "value_usd": 1125.00,
+        "percent": 10.6
+      },
+      {
+        "asset": "REKTCOIN",
+        "value_usd": 875.00,
+        "percent": 8.2
+      }
+    ]
+  }
+}

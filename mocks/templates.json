@@ -1,0 +1,204 @@
+{
+  "templates": [
+    {
+      "name": "simple",
+      "display_name": "Simple",
+      "description": "Estratégia básica com 1 take profit e stop loss simples. Ideal para iniciantes.",
+      "risk_level": "low",
+      "recommended_for": ["Iniciantes", "Pequenos valores", "Tokens estáveis"],
+      "preview": {
+        "take_profit_levels": [
+          {
+            "percent": 5,
+            "quantity_percent": 100
+          }
+        ],
+        "stop_loss": {
+          "enabled": true,
+          "percent": 2,
+          "trailing_enabled": false
+        },
+        "buy_dip": {
+          "enabled": true,
+          "percent": 3,
+          "dca_enabled": false
+        },
+        "cooldown": {
+          "enabled": false
+        },
+        "risk_management": {
+          "enabled": false
+        }
+      },
+      "features": [
+        "✅ 1 Take Profit (5%)",
+        "✅ Stop Loss Fixo (2%)",
+        "✅ Buy Dip Simples (3%)",
+        "❌ Sem Trailing Stop",
+        "❌ Sem DCA",
+        "❌ Sem Circuit Breakers"
+      ]
+    },
+    {
+      "name": "conservative",
+      "display_name": "Conservative",
+      "description": "Estratégia conservadora com proteções avançadas e múltiplos níveis. Ideal para preservar capital.",
+      "risk_level": "medium",
+      "recommended_for": ["Investidores moderados", "Médios valores", "Trading de longo prazo"],
+      "preview": {
+        "take_profit_levels": [
+          {
+            "percent": 2,
+            "quantity_percent": 50
+          },
+          {
+            "percent": 4,
+            "quantity_percent": 50
+          }
+        ],
+        "stop_loss": {
+          "enabled": true,
+          "percent": 1,
+          "trailing_enabled": true,
+          "trailing_percent": 0.5,
+          "trailing_activation_percent": 2
+        },
+        "buy_dip": {
+          "enabled": true,
+          "percent": 3,
+          "dca_enabled": false
+        },
+        "cooldown": {
+          "enabled": true,
+          "after_buy_minutes": 60,
+          "after_sell_minutes": 30
+        },
+        "risk_management": {
+          "enabled": true,
+          "max_daily_loss_usd": 200,
+          "max_weekly_loss_usd": 500,
+          "max_monthly_loss_usd": 1000
+        }
+      },
+      "features": [
+        "✅ 2 Take Profits (2%, 4%)",
+        "✅ Trailing Stop (0.5% após 2% ganho)",
+        "✅ Stop Loss (1%)",
+        "✅ Cooldown (60min buy, 30min sell)",
+        "✅ Circuit Breakers ($200/$500/$1000)",
+        "❌ Sem DCA"
+      ]
+    },
+    {
+      "name": "aggressive",
+      "display_name": "Aggressive",
+      "description": "Estratégia agressiva com múltiplos níveis e DCA. Ideal para maximizar lucros em tokens voláteis.",
+      "risk_level": "high",
+      "recommended_for": ["Traders experientes", "Grandes valores", "Tokens voláteis"],
+      "preview": {
+        "take_profit_levels": [
+          {
+            "percent": 5,
+            "quantity_percent": 30
+          },
+          {
+            "percent": 10,
+            "quantity_percent": 40
+          },
+          {
+            "percent": 20,
+            "quantity_percent": 30
+          }
+        ],
+        "stop_loss": {
+          "enabled": true,
+          "percent": 3,
+          "trailing_enabled": true,
+          "trailing_percent": 2,
+          "trailing_activation_percent": 5
+        },
+        "buy_dip": {
+          "enabled": true,
+          "percent": 5,
+          "dca_enabled": true,
+          "dca_levels": [
+            {
+              "percent": 5,
+              "quantity_percent": 50
+            },
+            {
+              "percent": 10,
+              "quantity_percent": 50
+            }
+          ]
+        },
+        "cooldown": {
+          "enabled": true,
+          "after_buy_minutes": 15,
+          "after_sell_minutes": 10
+        },
+        "risk_management": {
+          "enabled": true,
+          "max_daily_loss_usd": 1000,
+          "max_weekly_loss_usd": 3000,
+          "max_monthly_loss_usd": 10000
+        }
+      },
+      "features": [
+        "✅ 3 Take Profits (5%, 10%, 20%)",
+        "✅ Trailing Stop (2% após 5% ganho)",
+        "✅ Stop Loss (3%)",
+        "✅ DCA com 2 níveis (5%, 10%)",
+        "✅ Cooldown (15min buy, 10min sell)",
+        "✅ Circuit Breakers ($1000/$3000/$10000)"
+      ]
+    }
+  ],
+  "comparison": {
+    "headers": ["Feature", "Simple", "Conservative", "Aggressive"],
+    "rows": [
+      {
+        "feature": "Take Profit Levels",
+        "simple": "1 nível (5%)",
+        "conservative": "2 níveis (2%, 4%)",
+        "aggressive": "3 níveis (5%, 10%, 20%)"
+      },
+      {
+        "feature": "Stop Loss",
+        "simple": "2% fixo",
+        "conservative": "1% fixo",
+        "aggressive": "3% fixo"
+      },
+      {
+        "feature": "Trailing Stop",
+        "simple": "❌",
+        "conservative": "✅ 0.5% após 2%",
+        "aggressive": "✅ 2% após 5%"
+      },
+      {
+        "feature": "DCA",
+        "simple": "❌",
+        "conservative": "❌",
+        "aggressive": "✅ 2 níveis"
+      },
+      {
+        "feature": "Cooldown",
+        "simple": "❌",
+        "conservative": "✅ 60/30 min",
+        "aggressive": "✅ 15/10 min"
+      },
+      {
+        "feature": "Circuit Breaker",
+        "simple": "❌",
+        "conservative": "✅ $200/dia",
+        "aggressive": "✅ $1000/dia"
+      },
+      {
+        "feature": "Risk Level",
+        "simple": "🟢 Baixo",
+        "conservative": "🟡 Médio",
+        "aggressive": "🔴 Alto"
+      }
+    ]
+  }
+}
