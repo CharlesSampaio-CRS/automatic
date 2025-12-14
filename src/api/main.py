@@ -1726,6 +1726,22 @@ def get_exchange_info(exchange_id):
 # ENDPOINTS DE ESTRATÉGIAS DE TRADING
 # ============================================
 
+def invalidate_strategy_caches(user_id: str, strategy_id: str = None):
+    """Invalidate all strategy-related caches for a user"""
+    from src.utils.cache import get_strategies_cache, get_single_strategy_cache
+    
+    strategies_cache = get_strategies_cache()
+    single_cache = get_single_strategy_cache()
+    
+    # Invalidate user's strategies list cache
+    strategies_cache.delete(f"strategies_{user_id}")
+    
+    # If strategy_id provided, invalidate that specific strategy cache
+    if strategy_id:
+        single_cache.delete(f"strategy_{strategy_id}")
+    
+    logger.debug(f"Strategy cache invalidated for user {user_id}" + (f", strategy {strategy_id}" if strategy_id else ""))
+
 @app.route('/api/v1/strategies', methods=['POST'])
 def create_strategy():
     """
@@ -1855,6 +1871,8 @@ def create_strategy():
             }), 400
         
         if result['success']:
+            # Invalidate cache after creating strategy
+            invalidate_strategy_caches(data['user_id'])
             return jsonify(result), 201
         else:
             return jsonify(result), 400
@@ -1901,6 +1919,9 @@ def update_strategy(strategy_id):
         
         strategy_service = get_strategy_service(db)
         
+        # Get strategy to find user_id for cache invalidation
+        strategy = strategy_service.get_strategy(strategy_id)
+        
         result = strategy_service.update_strategy(
             strategy_id=strategy_id,
             take_profit_percent=data.get('take_profit_percent'),
@@ -1910,6 +1931,9 @@ def update_strategy(strategy_id):
         )
         
         if result['success']:
+            # Invalidate cache after updating
+            if strategy:
+                invalidate_strategy_caches(strategy.get('user_id'), strategy_id)
             return jsonify(result), 200
         else:
             status_code = 404 if 'not found' in result.get('error', '').lower() else 400
@@ -1939,9 +1963,16 @@ def delete_strategy(strategy_id):
     """
     try:
         strategy_service = get_strategy_service(db)
+        
+        # Get strategy to find user_id for cache invalidation
+        strategy = strategy_service.get_strategy(strategy_id)
+        
         result = strategy_service.delete_strategy(strategy_id)
         
         if result['success']:
+            # Invalidate cache after deleting
+            if strategy:
+                invalidate_strategy_caches(strategy.get('user_id'), strategy_id)
             return jsonify(result), 200
         else:
             status_code = 404 if 'not found' in result.get('error', '').lower() else 400
@@ -1964,20 +1995,49 @@ def get_strategy(strategy_id):
     Path Params:
         strategy_id: MongoDB ObjectId da estratégia
     
+    Query Params:
+        force_refresh (optional): Forçar atualização do cache (true/false)
+    
     Returns:
         200: Estratégia encontrada
         404: Estratégia não encontrada
         500: Erro interno
+    
+    Cache: 180 segundos (3 minutos)
     """
     try:
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        cache_key = f"strategy_{strategy_id}"
+        
+        # Try to get from cache
+        from src.utils.cache import get_single_strategy_cache
+        single_cache = get_single_strategy_cache()
+        
+        if not force_refresh:
+            is_valid, cached_data = single_cache.get(cache_key)
+            if is_valid:
+                logger.debug(f"Cache HIT for strategy: {strategy_id}")
+                response_data = cached_data.copy()
+                response_data['from_cache'] = True
+                return jsonify(response_data), 200
+        
+        logger.debug(f"Cache MISS for strategy: {strategy_id}")
+        
+        # Get from database
         strategy_service = get_strategy_service(db)
         strategy = strategy_service.get_strategy(strategy_id)
         
         if strategy:
-            return jsonify({
+            response_data = {
                 'success': True,
-                'strategy': strategy
-            }), 200
+                'strategy': strategy,
+                'from_cache': False
+            }
+            
+            # Store in cache
+            single_cache.set(cache_key, response_data)
+            
+            return jsonify(response_data), 200
         else:
             return jsonify({
                 'success': False,
@@ -2003,16 +2063,20 @@ def get_user_strategies():
         exchange_id (optional): Filtrar por exchange
         token (optional): Filtrar por token
         is_active (optional): Filtrar por status (true/false)
+        force_refresh (optional): Forçar atualização do cache (true/false)
     
     Returns:
         200: Lista de estratégias
         400: user_id não fornecido
         500: Erro interno
     
+    Cache: 120 segundos (2 minutos)
+    
     Exemplo:
         GET /api/v1/strategies?user_id=charles_test_user
         GET /api/v1/strategies?user_id=charles_test_user&exchange_id=693481148b0a41e8b6acb07b
         GET /api/v1/strategies?user_id=charles_test_user&token=BTC&is_active=true
+        GET /api/v1/strategies?user_id=charles_test_user&force_refresh=true
     """
     try:
         user_id = request.args.get('user_id')
@@ -2027,7 +2091,32 @@ def get_user_strategies():
         token = request.args.get('token')
         is_active_str = request.args.get('is_active')
         is_active = None if is_active_str is None else is_active_str.lower() == 'true'
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
         
+        # Build cache key including filters
+        cache_key = f"strategies_{user_id}"
+        if exchange_id:
+            cache_key += f"_ex_{exchange_id}"
+        if token:
+            cache_key += f"_tk_{token}"
+        if is_active is not None:
+            cache_key += f"_act_{is_active}"
+        
+        # Try to get from cache
+        from src.utils.cache import get_strategies_cache
+        strategies_cache = get_strategies_cache()
+        
+        if not force_refresh:
+            is_valid, cached_data = strategies_cache.get(cache_key)
+            if is_valid:
+                logger.debug(f"Cache HIT for strategies: {cache_key}")
+                response_data = cached_data.copy()
+                response_data['from_cache'] = True
+                return jsonify(response_data), 200
+        
+        logger.debug(f"Cache MISS for strategies: {cache_key}")
+        
+        # Get from database
         strategy_service = get_strategy_service(db)
         strategies = strategy_service.get_user_strategies(
             user_id=user_id,
@@ -2036,11 +2125,17 @@ def get_user_strategies():
             is_active=is_active
         )
         
-        return jsonify({
+        response_data = {
             'success': True,
             'count': len(strategies),
-            'strategies': strategies
-        }), 200
+            'strategies': strategies,
+            'from_cache': False
+        }
+        
+        # Store in cache
+        strategies_cache.set(cache_key, response_data)
+        
+        return jsonify(response_data), 200
         
     except Exception as e:
         logger.error(f"Error getting strategies: {str(e)}")

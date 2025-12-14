@@ -1,0 +1,602 @@
+{
+	"info": {
+		"_postman_id": "strategies-api-v1",
+		"name": "Strategies API",
+		"description": "API completa para gerenciamento de estratégias de trading\n\n## Recursos:\n- ✅ Criar estratégias (3 modos: Template, Custom, Legacy)\n- ✅ Listar estratégias com filtros\n- ✅ Atualizar e deletar estratégias\n- ✅ Verificar triggers de execução\n\n## Templates Disponíveis:\n- **simple**: Estratégia básica (1 TP 5%, SL 2%)\n- **conservative**: Proteção máxima (2 TPs, trailing stop)\n- **aggressive**: Máximo lucro (3 TPs, DCA ativo)\n\n## Autenticação:\nNenhuma autenticação implementada atualmente.\n\n## URL Base:\n- Local: `http://localhost:5000`\n- Produção: `https://automatic-anfg.onrender.com`",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Strategies",
+			"item": [
+				{
+					"name": "Create Strategy (Template Mode)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"exchange_id\": \"{{exchange_id}}\",\n    \"token\": \"BTC\",\n    \"template\": \"simple\",\n    \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/strategies",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"strategies"
+							]
+						},
+						"description": "Cria uma nova estratégia usando template pré-definido (RECOMENDADO).\n\n**Templates disponíveis:**\n- `simple`: Estratégia básica (1 TP 5%, SL 2%, sem trailing)\n- `conservative`: Proteção máxima (2 TPs, trailing stop, max loss $200/dia)\n- `aggressive`: Máximo lucro (3 TPs, DCA ativo, max loss $1000/dia)\n\n**Campos obrigatórios:**\n- `user_id`: ID do usuário\n- `exchange_id`: MongoDB ObjectId da exchange\n- `token`: Símbolo do token (ex: BTC, ETH, REKTCOIN)\n- `template`: Nome do template (simple, conservative, aggressive)\n\n**Campos opcionais:**\n- `is_active`: Status da estratégia (default: true)"
+					},
+					"response": [
+						{
+							"name": "Success - Template Simple",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"user_id\": \"charles_test_user\",\n    \"exchange_id\": \"693481148b0a41e8b6acb07b\",\n    \"token\": \"BTC\",\n    \"template\": \"simple\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Strategy created successfully\",\n    \"strategy_id\": \"674a1234567890abcdef1234\",\n    \"strategy\": {\n        \"_id\": \"674a1234567890abcdef1234\",\n        \"user_id\": \"charles_test_user\",\n        \"exchange_id\": \"693481148b0a41e8b6acb07b\",\n        \"token\": \"BTC\",\n        \"template\": \"simple\",\n        \"rules\": {\n            \"take_profit_levels\": [\n                {\"percent\": 5, \"sell_percent\": 100}\n            ],\n            \"stop_loss\": {\"percent\": 2, \"enabled\": true},\n            \"buy_dip\": {\"enabled\": false},\n            \"trailing_stop\": {\"enabled\": false}\n        },\n        \"is_active\": true,\n        \"created_at\": \"2024-11-30T10:00:00.000Z\",\n        \"updated_at\": \"2024-11-30T10:00:00.000Z\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Create Strategy (Legacy Mode)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"exchange_id\": \"{{exchange_id}}\",\n    \"token\": \"ETH\",\n    \"take_profit_percent\": 5,\n    \"stop_loss_percent\": 3,\n    \"buy_dip_percent\": 2,\n    \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/strategies",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"strategies"
+							]
+						},
+						"description": "Cria estratégia usando modo legado (DEPRECATED - use Template Mode).\n\n**Campos obrigatórios:**\n- `user_id`: ID do usuário\n- `exchange_id`: MongoDB ObjectId da exchange\n- `token`: Símbolo do token\n- `take_profit_percent`: % de lucro para vender (ex: 5)\n- `stop_loss_percent`: % de perda para vender (ex: 3)\n\n**Campos opcionais:**\n- `buy_dip_percent`: % de queda para comprar mais (ex: 2)\n- `is_active`: Status da estratégia (default: true)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All User Strategies",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/strategies?user_id={{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"strategies"
+							],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}",
+									"description": "ID do usuário (obrigatório)"
+								},
+								{
+									"key": "exchange_id",
+									"value": "",
+									"description": "Filtrar por exchange (opcional)",
+									"disabled": true
+								},
+								{
+									"key": "token",
+									"value": "",
+									"description": "Filtrar por token (opcional)",
+									"disabled": true
+								},
+								{
+									"key": "is_active",
+									"value": "",
+									"description": "Filtrar por status: true ou false (opcional)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Lista todas as estratégias de um usuário com filtros opcionais.\n\n**Query Params:**\n- `user_id` (obrigatório): ID do usuário\n- `exchange_id` (opcional): Filtrar por exchange específica\n- `token` (opcional): Filtrar por token específico (ex: BTC)\n- `is_active` (opcional): Filtrar por status (true/false)\n\n**Exemplos:**\n- Todas as estratégias: `?user_id=charles_test_user`\n- Por exchange: `?user_id=charles_test_user&exchange_id=693481148b0a41e8b6acb07b`\n- Por token: `?user_id=charles_test_user&token=BTC`\n- Apenas ativas: `?user_id=charles_test_user&is_active=true`"
+					},
+					"response": [
+						{
+							"name": "Success - Multiple Strategies",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies?user_id=charles_test_user",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies"
+									],
+									"query": [
+										{
+											"key": "user_id",
+											"value": "charles_test_user"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"count\": 2,\n    \"strategies\": [\n        {\n            \"_id\": \"674a1234567890abcdef1234\",\n            \"user_id\": \"charles_test_user\",\n            \"exchange_id\": \"693481148b0a41e8b6acb07b\",\n            \"exchange_name\": \"NovaDAX\",\n            \"token\": \"BTC\",\n            \"template\": \"simple\",\n            \"rules\": {\n                \"take_profit_levels\": [{\"percent\": 5, \"sell_percent\": 100}],\n                \"stop_loss\": {\"percent\": 2, \"enabled\": true}\n            },\n            \"is_active\": true,\n            \"created_at\": \"2024-11-30T10:00:00.000Z\",\n            \"updated_at\": \"2024-11-30T10:00:00.000Z\"\n        },\n        {\n            \"_id\": \"674a5678901234abcdef5678\",\n            \"user_id\": \"charles_test_user\",\n            \"exchange_id\": \"693481148b0a41e8b6acb07c\",\n            \"exchange_name\": \"MEXC\",\n            \"token\": \"ETH\",\n            \"template\": \"aggressive\",\n            \"rules\": {\n                \"take_profit_levels\": [\n                    {\"percent\": 3, \"sell_percent\": 30},\n                    {\"percent\": 6, \"sell_percent\": 40},\n                    {\"percent\": 10, \"sell_percent\": 30}\n                ],\n                \"stop_loss\": {\"percent\": 5, \"enabled\": true},\n                \"trailing_stop\": {\"enabled\": true, \"activation\": 5, \"distance\": 2}\n            },\n            \"is_active\": false,\n            \"created_at\": \"2024-11-30T11:00:00.000Z\",\n            \"updated_at\": \"2024-11-30T12:00:00.000Z\"\n        }\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Single Strategy",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/strategies/{{strategy_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"strategies",
+								"{{strategy_id}}"
+							]
+						},
+						"description": "Busca uma estratégia específica por ID.\n\n**Path Params:**\n- `strategy_id`: MongoDB ObjectId da estratégia"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies/674a1234567890abcdef1234",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies",
+										"674a1234567890abcdef1234"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"strategy\": {\n        \"_id\": \"674a1234567890abcdef1234\",\n        \"user_id\": \"charles_test_user\",\n        \"exchange_id\": \"693481148b0a41e8b6acb07b\",\n        \"exchange_name\": \"NovaDAX\",\n        \"token\": \"BTC\",\n        \"template\": \"simple\",\n        \"rules\": {\n            \"take_profit_levels\": [{\"percent\": 5, \"sell_percent\": 100}],\n            \"stop_loss\": {\"percent\": 2, \"enabled\": true}\n        },\n        \"is_active\": true,\n        \"created_at\": \"2024-11-30T10:00:00.000Z\",\n        \"updated_at\": \"2024-11-30T10:00:00.000Z\"\n    }\n}"
+						},
+						{
+							"name": "Error - Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies/000000000000000000000000",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies",
+										"000000000000000000000000"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Strategy not found: 000000000000000000000000\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Update Strategy",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"take_profit_percent\": 7,\n    \"stop_loss_percent\": 4,\n    \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/strategies/{{strategy_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"strategies",
+								"{{strategy_id}}"
+							]
+						},
+						"description": "Atualiza uma estratégia existente.\n\n**Path Params:**\n- `strategy_id`: MongoDB ObjectId da estratégia\n\n**Body (todos opcionais):**\n- `take_profit_percent`: Novo % de lucro\n- `stop_loss_percent`: Novo % de perda\n- `buy_dip_percent`: Novo % de buy dip\n- `is_active`: Ativar/desativar estratégia\n\n**Nota:** Envie apenas os campos que deseja atualizar."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"take_profit_percent\": 7,\n    \"is_active\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies/674a1234567890abcdef1234",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies",
+										"674a1234567890abcdef1234"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Strategy updated successfully\",\n    \"strategy\": {\n        \"_id\": \"674a1234567890abcdef1234\",\n        \"user_id\": \"charles_test_user\",\n        \"exchange_id\": \"693481148b0a41e8b6acb07b\",\n        \"token\": \"BTC\",\n        \"take_profit_percent\": 7,\n        \"stop_loss_percent\": 2,\n        \"is_active\": true,\n        \"updated_at\": \"2024-11-30T15:00:00.000Z\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Delete Strategy",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/strategies/{{strategy_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"strategies",
+								"{{strategy_id}}"
+							]
+						},
+						"description": "Deleta uma estratégia.\n\n**Path Params:**\n- `strategy_id`: MongoDB ObjectId da estratégia\n\n**Atenção:** Esta ação é irreversível!"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies/674a1234567890abcdef1234",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies",
+										"674a1234567890abcdef1234"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Strategy deleted successfully\"\n}"
+						},
+						{
+							"name": "Error - Not Found",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies/000000000000000000000000",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies",
+										"000000000000000000000000"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"success\": false,\n    \"error\": \"Strategy not found: 000000000000000000000000\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Check Strategy Triggers",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"current_price\": 106500.00,\n    \"entry_price\": 100000.00\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/strategies/{{strategy_id}}/check",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"strategies",
+								"{{strategy_id}}",
+								"check"
+							]
+						},
+						"description": "Verifica se uma estratégia deve ser acionada com base no preço atual.\n\n**Path Params:**\n- `strategy_id`: MongoDB ObjectId da estratégia\n\n**Request Body:**\n- `current_price`: Preço atual do token (float)\n- `entry_price`: Preço de entrada da posição (float)\n\n**Use Case:** O frontend pode chamar este endpoint periodicamente para verificar se deve executar uma ordem de venda (take profit ou stop loss)."
+					},
+					"response": [
+						{
+							"name": "Take Profit Triggered",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"current_price\": 106500.00,\n    \"entry_price\": 100000.00\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies/674a1234567890abcdef1234/check",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies",
+										"674a1234567890abcdef1234",
+										"check"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"should_trigger\": true,\n    \"action\": \"SELL\",\n    \"reason\": \"TAKE_PROFIT\",\n    \"trigger_percent\": 5.0,\n    \"current_change_percent\": 6.5,\n    \"strategy\": {\n        \"_id\": \"674a1234567890abcdef1234\",\n        \"token\": \"BTC\",\n        \"take_profit_percent\": 5.0,\n        \"stop_loss_percent\": 2.0,\n        \"is_active\": true\n    }\n}"
+						},
+						{
+							"name": "Stop Loss Triggered",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"current_price\": 97000.00,\n    \"entry_price\": 100000.00\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies/674a1234567890abcdef1234/check",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies",
+										"674a1234567890abcdef1234",
+										"check"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"should_trigger\": true,\n    \"action\": \"SELL\",\n    \"reason\": \"STOP_LOSS\",\n    \"trigger_percent\": -2.0,\n    \"current_change_percent\": -3.0,\n    \"strategy\": {\n        \"_id\": \"674a1234567890abcdef1234\",\n        \"token\": \"BTC\",\n        \"take_profit_percent\": 5.0,\n        \"stop_loss_percent\": 2.0,\n        \"is_active\": true\n    }\n}"
+						},
+						{
+							"name": "No Trigger",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"current_price\": 102000.00,\n    \"entry_price\": 100000.00\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/api/v1/strategies/674a1234567890abcdef1234/check",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"strategies",
+										"674a1234567890abcdef1234",
+										"check"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"should_trigger\": false,\n    \"action\": null,\n    \"reason\": null,\n    \"trigger_percent\": null,\n    \"current_change_percent\": 2.0,\n    \"strategy\": {\n        \"_id\": \"674a1234567890abcdef1234\",\n        \"token\": \"BTC\",\n        \"take_profit_percent\": 5.0,\n        \"stop_loss_percent\": 2.0,\n        \"is_active\": true\n    }\n}"
+						}
+					]
+				}
+			],
+			"description": "Endpoints para gerenciamento completo de estratégias de trading."
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "charles_test_user",
+			"type": "string"
+		},
+		{
+			"key": "exchange_id",
+			"value": "693481148b0a41e8b6acb07b",
+			"type": "string"
+		},
+		{
+			"key": "strategy_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

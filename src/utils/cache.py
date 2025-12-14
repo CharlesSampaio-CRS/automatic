@@ -108,6 +108,8 @@ class SimpleCache:
 # Global cache instances
 _exchanges_cache = SimpleCache(default_ttl_seconds=300)  # 5 minutes for exchanges data
 _linked_exchanges_cache = SimpleCache(default_ttl_seconds=60)  # 1 minute for user-specific data
+_strategies_cache = SimpleCache(default_ttl_seconds=120)  # 2 minutes for strategies data
+_single_strategy_cache = SimpleCache(default_ttl_seconds=180)  # 3 minutes for single strategy
 
 
 def get_exchanges_cache() -> SimpleCache:
@@ -118,3 +120,13 @@ def get_exchanges_cache() -> SimpleCache:
 def get_linked_exchanges_cache() -> SimpleCache:
     """Get global linked exchanges cache instance"""
     return _linked_exchanges_cache
+
+
+def get_strategies_cache() -> SimpleCache:
+    """Get global strategies cache instance"""
+    return _strategies_cache
+
+
+def get_single_strategy_cache() -> SimpleCache:
+    """Get global single strategy cache instance"""
+    return _single_strategy_cache
