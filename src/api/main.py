@@ -276,6 +276,23 @@ def get_scheduler_status():
         }), 500
 
 # ============================================
+# HELPER FUNCTIONS
+# ============================================
+
+def invalidate_exchange_caches(user_id: str):
+    """Invalidate all exchange-related caches for a user"""
+    from src.utils.cache import get_exchanges_cache, get_linked_exchanges_cache
+    
+    exchanges_cache = get_exchanges_cache()
+    linked_cache = get_linked_exchanges_cache()
+    
+    # Clear user-specific caches
+    exchanges_cache.delete(f"available_{user_id}")
+    linked_cache.delete(f"linked_{user_id}")
+    
+    logger.debug(f"Cache invalidated for user {user_id}")
+
+# ============================================
 # ENDPOINTS DE EXCHANGES
 # ============================================
 
@@ -287,6 +304,7 @@ def get_available_exchanges():
     
     Query Params:
         user_id (required): ID do usuário para filtrar exchanges já vinculadas
+        force_refresh (optional): true para ignorar cache
     
     Returns:
         200: Lista de exchanges nunca conectadas pelo usuário
@@ -294,6 +312,8 @@ def get_available_exchanges():
         500: Erro ao buscar exchanges
     """
     try:
+        from src.utils.cache import get_exchanges_cache
+        
         # user_id é obrigatório
         user_id = request.args.get('user_id')
         if not user_id:
@@ -301,6 +321,17 @@ def get_available_exchanges():
                 'success': False,
                 'error': 'user_id is required as query parameter'
             }), 400
+        
+        # Check cache
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        cache = get_exchanges_cache()
+        cache_key = f"available_{user_id}"
+        
+        if not force_refresh:
+            is_valid, cached_data = cache.get(cache_key)
+            if is_valid:
+                cached_data['from_cache'] = True
+                return jsonify(cached_data), 200
         
         # Busca exchanges ativas no banco (exchanges habilitadas no sistema)
         exchanges = list(db.exchanges.find(
@@ -338,11 +369,17 @@ def get_available_exchanges():
         for exchange in exchanges:
             exchange['_id'] = str(exchange['_id'])
         
-        return jsonify({
+        result = {
             'success': True,
             'total': len(exchanges),
-            'exchanges': exchanges
-        }), 200
+            'exchanges': exchanges,
+            'from_cache': False
+        }
+        
+        # Cache for 5 minutes
+        cache.set(cache_key, result, ttl_seconds=300)
+        
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({
@@ -496,6 +533,9 @@ def link_exchange():
                             }
                         )
                         
+                        # Invalidate cache
+                        invalidate_exchange_caches(user_id)
+                        
                         return jsonify({
                             'success': True,
                             'message': f'{exchange["nome"]} credentials updated successfully',
@@ -517,6 +557,9 @@ def link_exchange():
                     }
                 )
                 
+                # Invalidate cache
+                invalidate_exchange_caches(user_id)
+                
                 return jsonify({
                     'success': True,
                     'message': f'{exchange["nome"]} linked successfully',
@@ -537,6 +580,9 @@ def link_exchange():
             }
             
             db.user_exchanges.insert_one(new_user_doc)
+            
+            # Invalidate cache
+            invalidate_exchange_caches(user_id)
             
             return jsonify({
                 'success': True,
@@ -566,6 +612,7 @@ def get_linked_exchanges():
     
     Query Params:
         user_id (required): ID do usuário
+        force_refresh (optional): true para ignorar cache
     
     Returns:
         200: Lista de exchanges vinculadas com status (active/inactive)
@@ -573,6 +620,8 @@ def get_linked_exchanges():
         500: Erro ao buscar exchanges
     """
     try:
+        from src.utils.cache import get_linked_exchanges_cache
+        
         user_id = request.args.get('user_id')
         
         if not user_id:
@@ -580,6 +629,17 @@ def get_linked_exchanges():
                 'success': False,
                 'error': 'user_id is required as query parameter'
             }), 400
+        
+        # Check cache
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        cache = get_linked_exchanges_cache()
+        cache_key = f"linked_{user_id}"
+        
+        if not force_refresh:
+            is_valid, cached_data = cache.get(cache_key)
+            if is_valid:
+                cached_data['from_cache'] = True
+                return jsonify(cached_data), 200
         
         # Buscar documento do usuário com array de exchanges
         user_doc = db.user_exchanges.find_one({'user_id': user_id})
@@ -631,11 +691,17 @@ def get_linked_exchanges():
                 
                 linked_exchanges.append(exchange_info)
         
-        return jsonify({
+        result = {
             'success': True,
             'total': len(linked_exchanges),
-            'exchanges': linked_exchanges
-        }), 200
+            'exchanges': linked_exchanges,
+            'from_cache': False
+        }
+        
+        # Cache for 1 minute (user-specific data changes more frequently)
+        cache.set(cache_key, result, ttl_seconds=60)
+        
+        return jsonify(result), 200
         
     except Exception as e:
         logger.error(f"Error fetching linked exchanges: {str(e)}")
@@ -726,6 +792,9 @@ def unlink_exchange():
         if result.modified_count > 0:
             # Buscar nome da exchange
             exchange = db.exchanges.find_one({'_id': exchange_object_id})
+            
+            # Invalidate cache
+            invalidate_exchange_caches(user_id)
             
             return jsonify({
                 'success': True,
@@ -838,6 +907,9 @@ def disconnect_exchange():
         if result.modified_count > 0:
             # Buscar nome da exchange
             exchange = db.exchanges.find_one({'_id': exchange_object_id})
+            
+            # Invalidate cache
+            invalidate_exchange_caches(user_id)
             
             logger.info(f"✅ {exchange['nome']} disconnected for user {user_id}")
             
@@ -1067,6 +1139,9 @@ def connect_exchange():
         if result.modified_count > 0:
             # Buscar nome da exchange
             exchange = db.exchanges.find_one({'_id': exchange_object_id})
+            
+            # Invalidate cache
+            invalidate_exchange_caches(user_id)
             
             logger.info(f"✅ {exchange['nome']} connected for user {user_id}")
             
