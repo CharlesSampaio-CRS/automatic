@@ -1919,9 +1919,6 @@ def update_strategy(strategy_id):
         
         strategy_service = get_strategy_service(db)
         
-        # Get strategy to find user_id for cache invalidation
-        strategy = strategy_service.get_strategy(strategy_id)
-        
         result = strategy_service.update_strategy(
             strategy_id=strategy_id,
             take_profit_percent=data.get('take_profit_percent'),
@@ -1931,9 +1928,11 @@ def update_strategy(strategy_id):
         )
         
         if result['success']:
-            # Invalidate cache after updating
-            if strategy:
-                invalidate_strategy_caches(strategy.get('user_id'), strategy_id)
+            # Invalidate cache after updating (get user_id from result)
+            updated_strategy = result.get('strategy', {})
+            user_id = updated_strategy.get('user_id')
+            if user_id:
+                invalidate_strategy_caches(user_id, strategy_id)
             return jsonify(result), 200
         else:
             status_code = 404 if 'not found' in result.get('error', '').lower() else 400
@@ -1964,15 +1963,21 @@ def delete_strategy(strategy_id):
     try:
         strategy_service = get_strategy_service(db)
         
-        # Get strategy to find user_id for cache invalidation
-        strategy = strategy_service.get_strategy(strategy_id)
+        # Get strategy to find user_id for cache invalidation (before delete)
+        user_id_for_cache = None
+        try:
+            strategy = strategy_service.get_strategy(strategy_id)
+            if strategy:
+                user_id_for_cache = strategy.get('user_id')
+        except Exception as get_error:
+            logger.warning(f"Could not get strategy for cache invalidation: {get_error}")
         
         result = strategy_service.delete_strategy(strategy_id)
         
         if result['success']:
             # Invalidate cache after deleting
-            if strategy:
-                invalidate_strategy_caches(strategy.get('user_id'), strategy_id)
+            if user_id_for_cache:
+                invalidate_strategy_caches(user_id_for_cache, strategy_id)
             return jsonify(result), 200
         else:
             status_code = 404 if 'not found' in result.get('error', '').lower() else 400
