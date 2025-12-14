@@ -4,16 +4,17 @@ Collection completa para gerenciamento de estratégias de trading no sistema Mul
 
 ## 📋 Visão Geral
 
-Esta collection contém **6 endpoints** para criar, gerenciar e monitorar estratégias de trading automatizado.
+Esta collection contém **7 endpoints** para criar, gerenciar e monitorar estratégias de trading automatizado.
 
 ### Endpoints Disponíveis
 
 1. **POST /api/v1/strategies** - Criar estratégia (3 modos)
 2. **GET /api/v1/strategies** - Listar estratégias do usuário
 3. **GET /api/v1/strategies/:id** - Buscar estratégia específica
-4. **PUT /api/v1/strategies/:id** - Atualizar estratégia
-5. **DELETE /api/v1/strategies/:id** - Deletar estratégia
-6. **POST /api/v1/strategies/:id/check** - Verificar triggers
+4. **GET /api/v1/strategies/:id/stats** - Estatísticas de execução 📊 **NOVO**
+5. **PUT /api/v1/strategies/:id** - Atualizar estratégia
+6. **DELETE /api/v1/strategies/:id** - Deletar estratégia
+7. **POST /api/v1/strategies/:id/check** - Verificar triggers
 
 ## 🎯 Modos de Criação de Estratégia
 
@@ -236,6 +237,38 @@ strategies.forEach(strategy => {
 });
 ```
 
+### Dashboard: Exibir Estatísticas da Estratégia 📊 **NOVO**
+
+```javascript
+// Buscar estatísticas de execução de uma estratégia
+const response = await fetch(
+    `${API_URL}/strategies/${strategyId}/stats?user_id=${userId}`
+);
+
+const { stats, strategy_info, from_cache } = await response.json();
+
+console.log(`📊 Estatísticas de ${strategy_info.token}:`);
+console.log(`Total de execuções: ${stats.total_executions}`);
+console.log(`Compras: ${stats.total_buys} | Vendas: ${stats.total_sells}`);
+console.log(`Win Rate: ${stats.win_rate}%`);
+console.log(`PnL Total: $${stats.total_pnl_usd.toFixed(2)}`);
+console.log(`PnL Mensal: $${stats.monthly_pnl_usd.toFixed(2)}`);
+console.log(`Lucro médio/trade: $${stats.avg_profit_per_trade.toFixed(2)}`);
+
+if (stats.last_execution_at) {
+    console.log(`Última execução: ${stats.last_execution_type} - ${stats.last_execution_reason}`);
+    console.log(`Preço: $${stats.last_execution_price}`);
+}
+```
+
+**Recursos:**
+- ✅ **Cache de 3 minutos** para performance
+- ✅ **Validação de user_id** para segurança
+- ✅ **Win rate calculado** baseado em sells com lucro
+- ✅ **PnL por período** (dia/semana/mês)
+- ✅ **Force refresh** com query param `force_refresh=true`
+```
+
 ## 📊 Estrutura dos Dados
 
 ### Strategy Object
@@ -273,6 +306,52 @@ interface Strategy {
     is_active: boolean;
     created_at: string;       // ISO timestamp
     updated_at: string;       // ISO timestamp
+    execution_stats?: {       // Estatísticas de execução
+        total_executions: number;
+        total_buys: number;
+        total_sells: number;
+        last_execution_at?: string;
+        last_execution_type?: 'BUY' | 'SELL';
+        last_execution_reason?: string;
+        last_execution_price?: number;
+        last_execution_amount?: number;
+        total_pnl_usd: number;
+        daily_pnl_usd: number;
+        weekly_pnl_usd: number;
+        monthly_pnl_usd: number;
+    };
+}
+```
+
+### Strategy Stats Response 📊 **NOVO**
+
+```typescript
+interface StrategyStatsResponse {
+    success: boolean;
+    stats: {
+        total_executions: number;     // Total de trades executados
+        total_buys: number;            // Total de compras
+        total_sells: number;           // Total de vendas
+        last_execution_at: string | null;     // Última execução
+        last_execution_type: 'BUY' | 'SELL' | null;
+        last_execution_reason: string | null;  // Razão da execução
+        last_execution_price: number | null;
+        last_execution_amount: number | null;
+        total_pnl_usd: number;         // PnL total em USD
+        daily_pnl_usd: number;         // PnL do dia
+        weekly_pnl_usd: number;        // PnL da semana
+        monthly_pnl_usd: number;       // PnL do mês
+        win_rate: number;              // % de trades vencedores (calculado)
+        avg_profit_per_trade: number;  // Lucro médio por trade (calculado)
+    };
+    strategy_info: {
+        _id: string;
+        token: string;
+        exchange_name: string;
+        is_active: boolean;
+        created_at: string;
+    };
+    from_cache: boolean;               // Se veio do cache
 }
 ```
 

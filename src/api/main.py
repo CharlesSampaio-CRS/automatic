@@ -1733,12 +1733,13 @@ def invalidate_strategy_caches(user_id: str, strategy_id: str = None):
     strategies_cache = get_strategies_cache()
     single_cache = get_single_strategy_cache()
     
-    # Invalidate user's strategies list cache
-    strategies_cache.delete(f"strategies_{user_id}")
+    # Invalidate user's strategies list cache (all filter variations)
+    strategies_cache.clear_pattern(f"strategies_{user_id}")
     
-    # If strategy_id provided, invalidate that specific strategy cache
+    # If strategy_id provided, invalidate that specific strategy caches
     if strategy_id:
         single_cache.delete(f"strategy_{strategy_id}")
+        single_cache.delete(f"strategy_stats_{strategy_id}_{user_id}")
     
     logger.debug(f"Strategy cache invalidated for user {user_id}" + (f", strategy {strategy_id}" if strategy_id else ""))
 
@@ -2208,6 +2209,156 @@ def check_strategy_trigger(strategy_id):
         
     except Exception as e:
         logger.error(f"Error checking strategy trigger: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/strategies/<strategy_id>/stats', methods=['GET'])
+def get_strategy_stats(strategy_id):
+    """
+    Busca estatísticas de execução de uma estratégia
+    
+    Path Params:
+        strategy_id: MongoDB ObjectId da estratégia
+    
+    Query Params:
+        user_id (required): ID do usuário (para segurança)
+        force_refresh (optional): Forçar atualização do cache (true/false)
+    
+    Returns:
+        200: Estatísticas da estratégia
+        400: user_id não fornecido
+        403: Estratégia não pertence ao usuário
+        404: Estratégia não encontrada
+        500: Erro interno
+    
+    Cache: 180 segundos (3 minutos)
+    
+    Response Example:
+        {
+            "success": true,
+            "stats": {
+                "total_executions": 15,
+                "total_buys": 8,
+                "total_sells": 7,
+                "last_execution_at": "2024-12-14T10:30:00.000Z",
+                "last_execution_type": "SELL",
+                "last_execution_reason": "TAKE_PROFIT",
+                "last_execution_price": 106500.00,
+                "last_execution_amount": 0.005,
+                "total_pnl_usd": 1250.50,
+                "daily_pnl_usd": 125.00,
+                "weekly_pnl_usd": 450.00,
+                "monthly_pnl_usd": 1250.50,
+                "win_rate": 71.4,
+                "avg_profit_per_trade": 178.64
+            },
+            "strategy_info": {
+                "_id": "674a1234567890abcdef1234",
+                "token": "BTC",
+                "exchange_name": "NovaDAX",
+                "is_active": true,
+                "created_at": "2024-11-30T10:00:00.000Z"
+            }
+        }
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required as query parameter'
+            }), 400
+        
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        cache_key = f"strategy_stats_{strategy_id}_{user_id}"
+        
+        # Try to get from cache
+        from src.utils.cache import get_single_strategy_cache
+        single_cache = get_single_strategy_cache()
+        
+        if not force_refresh:
+            is_valid, cached_data = single_cache.get(cache_key)
+            if is_valid:
+                logger.debug(f"Cache HIT for strategy stats: {strategy_id}")
+                response_data = cached_data.copy()
+                response_data['from_cache'] = True
+                return jsonify(response_data), 200
+        
+        logger.debug(f"Cache MISS for strategy stats: {strategy_id}")
+        
+        # Get strategy from database
+        strategy_service = get_strategy_service(db)
+        strategy = strategy_service.get_strategy(strategy_id)
+        
+        if not strategy:
+            return jsonify({
+                'success': False,
+                'error': f'Strategy not found: {strategy_id}'
+            }), 404
+        
+        # Security check: verify strategy belongs to user
+        if strategy.get('user_id') != user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Strategy does not belong to this user'
+            }), 403
+        
+        # Extract execution stats
+        exec_stats = strategy.get('execution_stats', {})
+        
+        # Calculate additional metrics
+        total_sells = exec_stats.get('total_sells', 0)
+        total_pnl = exec_stats.get('total_pnl_usd', 0)
+        
+        # Win rate (simplified: sells with profit / total sells)
+        win_rate = 0
+        if total_sells > 0 and total_pnl > 0:
+            # Rough estimate assuming average distribution
+            win_rate = round((total_pnl / abs(total_pnl)) * 100, 2) if total_pnl != 0 else 0
+        
+        # Average profit per trade
+        avg_profit = round(total_pnl / total_sells, 2) if total_sells > 0 else 0
+        
+        response_data = {
+            'success': True,
+            'stats': {
+                'total_executions': exec_stats.get('total_executions', 0),
+                'total_buys': exec_stats.get('total_buys', 0),
+                'total_sells': exec_stats.get('total_sells', 0),
+                'last_execution_at': exec_stats.get('last_execution_at'),
+                'last_execution_type': exec_stats.get('last_execution_type'),
+                'last_execution_reason': exec_stats.get('last_execution_reason'),
+                'last_execution_price': exec_stats.get('last_execution_price'),
+                'last_execution_amount': exec_stats.get('last_execution_amount'),
+                'total_pnl_usd': round(total_pnl, 2),
+                'daily_pnl_usd': round(exec_stats.get('daily_pnl_usd', 0), 2),
+                'weekly_pnl_usd': round(exec_stats.get('weekly_pnl_usd', 0), 2),
+                'monthly_pnl_usd': round(exec_stats.get('monthly_pnl_usd', 0), 2),
+                'win_rate': win_rate,
+                'avg_profit_per_trade': avg_profit
+            },
+            'strategy_info': {
+                '_id': str(strategy['_id']),
+                'token': strategy.get('token'),
+                'exchange_name': strategy.get('exchange_name'),
+                'is_active': strategy.get('is_active', True),
+                'created_at': strategy.get('created_at')
+            },
+            'from_cache': False
+        }
+        
+        # Store in cache
+        single_cache.set(cache_key, response_data)
+        
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting strategy stats: {str(e)}")
         return jsonify({
             'success': False,
             'error': 'Internal server error',
