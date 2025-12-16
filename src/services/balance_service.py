@@ -66,7 +66,7 @@ class BalanceCache:
 
 
 # Global cache instance
-_balance_cache = BalanceCache(ttl_seconds=120)  # 2 minutes cache
+_balance_cache = BalanceCache(ttl_seconds=300)  # 5 minutes cache (optimized for performance)
 
 
 class BalanceService:
@@ -79,7 +79,7 @@ class BalanceService:
     
     def _calculate_price_changes(self, exchange, currency: str, current_price: float, quote_currency: str = 'USDT') -> Dict:
         """
-        Calculate price changes for 1h, 4h, and 24h
+        Calculate price changes for 24h (OPTIMIZED - removed 1h/4h for performance)
         
         Args:
             exchange: CCXT exchange instance
@@ -88,49 +88,20 @@ class BalanceService:
             quote_currency: Quote currency to use for fetching data
             
         Returns:
-            Dict with price changes: {'change_1h': float, 'change_4h': float, 'change_24h': float}
+            Dict with price changes: {'change_24h': float}
         """
         changes = {
-            'change_1h': None,
-            'change_4h': None,
             'change_24h': None
         }
         
         try:
             symbol = f"{currency}/{quote_currency}"
             
-            # Try to get 24h change from ticker first (most reliable)
+            # Get 24h change from ticker (most efficient - single call)
             try:
                 ticker = exchange.fetch_ticker(symbol)
                 if ticker.get('percentage') is not None:
                     changes['change_24h'] = round(float(ticker['percentage']), 2)
-            except:
-                pass
-            
-            # Try to get 1h and 4h changes from OHLCV
-            try:
-                # Fetch 1h data (last 2 candles)
-                ohlcv_1h = exchange.fetch_ohlcv(symbol, timeframe='1h', limit=2)
-                if len(ohlcv_1h) >= 2:
-                    prev_close = ohlcv_1h[-2][4]  # Previous candle close
-                    curr_close = ohlcv_1h[-1][4]  # Current candle close
-                    
-                    if prev_close > 0:
-                        change_1h = ((curr_close - prev_close) / prev_close) * 100
-                        changes['change_1h'] = round(change_1h, 2)
-            except:
-                pass
-            
-            try:
-                # Fetch 4h data (last 2 candles)
-                ohlcv_4h = exchange.fetch_ohlcv(symbol, timeframe='4h', limit=2)
-                if len(ohlcv_4h) >= 2:
-                    prev_close = ohlcv_4h[-2][4]
-                    curr_close = ohlcv_4h[-1][4]
-                    
-                    if prev_close > 0:
-                        change_4h = ((curr_close - prev_close) / prev_close) * 100
-                        changes['change_4h'] = round(change_4h, 2)
             except:
                 pass
                 
@@ -178,6 +149,7 @@ class BalanceService:
                 'apiKey': decrypted['api_key'],
                 'secret': decrypted['api_secret'],
                 'enableRateLimit': True,
+                'timeout': 10000,  # 10 second timeout to prevent hanging
                 'options': {'defaultType': 'spot'}
             }
             
@@ -200,99 +172,80 @@ class BalanceService:
             
             logger.debug(f"{exchange_info['nome']}: Found {len(currencies_with_balance)} currencies with balance")
             
-            # Fetch tickers to get current prices (try multiple quote currencies)
+            # Fetch tickers to get current prices (OPTIMIZED - fetch only needed tickers)
             tickers = {}
             usd_brl_rate = None
             
             try:
-                # OPTIMIZATION: For large exchanges (Binance, etc), only fetch tickers we need
-                # This reduces API load and response time
-                exchange_id_lower = exchange_info['ccxt_id'].lower()
+                # OPTIMIZATION: For ALL exchanges, only fetch tickers we need
+                # This drastically reduces API load and response time
                 
-                if exchange_id_lower in ['binance', 'binanceus'] and len(currencies_with_balance) > 0:
-                    # Binance: fetch specific tickers for currencies we have
-                    logger.debug(f"Binance optimization: fetching only needed tickers")
+                if len(currencies_with_balance) > 0:
+                    logger.debug(f"{exchange_info['nome']}: Fetching only {len(currencies_with_balance)} needed tickers")
                     
                     for currency in currencies_with_balance:
-                        if currency in ['USDT', 'USDC', 'USD']:
+                        # Stablecoins don't need price lookup
+                        if currency in ['USDT', 'USDC', 'USD', 'BUSD']:
                             tickers[currency] = 1.0
                             continue
                         
-                        # Try USDT pair first (most common on Binance)
-                        for quote in ['USDT', 'BUSD', 'USDC', 'BTC', 'ETH']:
+                        # Try common quote currencies in order of preference
+                        quote_currencies = ['USDT', 'USDC', 'USD', 'BUSD', 'BRL', 'BTC', 'ETH']
+                        
+                        for quote in quote_currencies:
                             symbol = f"{currency}/{quote}"
                             try:
                                 ticker = exchange.fetch_ticker(symbol)
                                 price = ticker.get('last', 0) or ticker.get('close', 0) or 0
                                 
-                                if price and quote == 'USDT':
+                                if not price:
+                                    continue
+                                
+                                # Direct USD quotes (USDT, USDC, USD, BUSD)
+                                if quote in ['USDT', 'USDC', 'USD', 'BUSD']:
                                     tickers[currency] = float(price)
                                     break
-                                elif price and quote == 'BUSD':
-                                    tickers[currency] = float(price)
+                                
+                                # BRL pairs - need conversion to USD
+                                elif quote == 'BRL':
+                                    if usd_brl_rate is None:
+                                        try:
+                                            price_feed = get_price_feed_service()
+                                            usd_brl_rate = price_feed.get_usd_brl_rate()
+                                        except:
+                                            usd_brl_rate = 5.0  # Fallback rate
+                                    tickers[currency] = float(price) / usd_brl_rate
                                     break
-                                elif price and quote == 'USDC':
-                                    tickers[currency] = float(price)
-                                    break
-                                elif price and quote == 'BTC':
-                                    # BTC pair - need BTC price in USD
+                                
+                                # BTC pair - need BTC price in USD
+                                elif quote == 'BTC':
                                     if 'BTC' not in tickers:
                                         try:
                                             btc_ticker = exchange.fetch_ticker('BTC/USDT')
                                             btc_price = btc_ticker.get('last', 0) or btc_ticker.get('close', 0) or 0
-                                            tickers['BTC'] = float(btc_price)
+                                            if btc_price:
+                                                tickers['BTC'] = float(btc_price)
                                         except:
                                             pass
                                     if 'BTC' in tickers and tickers['BTC'] > 0:
                                         tickers[currency] = float(price) * tickers['BTC']
                                         break
-                                elif price and quote == 'ETH':
-                                    # ETH pair - need ETH price in USD
+                                
+                                # ETH pair - need ETH price in USD
+                                elif quote == 'ETH':
                                     if 'ETH' not in tickers:
                                         try:
                                             eth_ticker = exchange.fetch_ticker('ETH/USDT')
                                             eth_price = eth_ticker.get('last', 0) or eth_ticker.get('close', 0) or 0
-                                            tickers['ETH'] = float(eth_price)
+                                            if eth_price:
+                                                tickers['ETH'] = float(eth_price)
                                         except:
                                             pass
                                     if 'ETH' in tickers and tickers['ETH'] > 0:
                                         tickers[currency] = float(price) * tickers['ETH']
                                         break
                             except:
-                                continue
-                else:
-                    # Other exchanges: fetch all tickers (original method)
-                    all_tickers = exchange.fetch_tickers()
-                    
-                    # Map ticker prices - try USDT, BRL, USD, USDC in order of preference
-                    for symbol, ticker in all_tickers.items():
-                        if '/' not in symbol:
-                            continue
-                        
-                        base, quote = symbol.split('/')
-                        price = ticker.get('last', 0) or ticker.get('close', 0) or 0
-                        
-                        if not price:
-                            continue
-                        
-                        # Priority: USDT > USD > USDC (direct USD quotes)
-                        if quote in ['USDT', 'USD', 'USDC']:
-                            if base not in tickers:  # Only set if not already set
-                                tickers[base] = float(price)
-                        
-                        # BRL pairs - need conversion to USD
-                        elif quote == 'BRL':
-                            if base not in tickers:  # Use BRL as fallback
-                                # Get USD/BRL rate if not already fetched
-                                if usd_brl_rate is None:
-                                    try:
-                                        price_feed = get_price_feed_service()
-                                        usd_brl_rate = price_feed.get_usd_brl_rate()
-                                    except:
-                                        usd_brl_rate = 5.0  # Fallback rate
-                                
-                                # Convert BRL price to USD
-                                tickers[base] = float(price) / usd_brl_rate
+                                continue  # Try next quote currency
                 
                 logger.debug(f"Fetched {len(tickers)} ticker prices from {exchange_info['nome']}")
                 
@@ -348,8 +301,8 @@ class BalanceService:
                             '_value_raw': value_usd   # Store raw value for sorting
                         }
                         
-                        # Add price changes if requested and price was found
-                        if include_changes and price_usd > 0 and currency not in ['USDT', 'USDC', 'BRL']:
+                        # Add 24h price change ONLY if explicitly requested (performance optimization)
+                        if include_changes and price_usd > 0 and currency not in ['USDT', 'USDC', 'BRL', 'BUSD']:
                             # Determine quote currency used for this token
                             quote_currency = 'USDT'
                             if exchange_info.get('nome', '').lower() == 'novadax':
@@ -357,11 +310,7 @@ class BalanceService:
                             
                             changes = self._calculate_price_changes(exchange, currency, price_usd, quote_currency)
                             
-                            # Only add non-null changes
-                            if changes['change_1h'] is not None:
-                                balance_data_entry['change_1h'] = changes['change_1h']
-                            if changes['change_4h'] is not None:
-                                balance_data_entry['change_4h'] = changes['change_4h']
+                            # Add 24h change (only field returned now for performance)
                             if changes['change_24h'] is not None:
                                 balance_data_entry['change_24h'] = changes['change_24h']
                         
