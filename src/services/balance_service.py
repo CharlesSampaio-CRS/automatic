@@ -153,6 +153,17 @@ class BalanceService:
                 'options': {'defaultType': 'spot'}
             }
             
+            # Bybit specific configuration for Unified Trading Account
+            if exchange_info['ccxt_id'].lower() == 'bybit':
+                config['options'].update({
+                    'defaultType': 'spot',
+                    'accountType': 'unified',  # Use unified trading account
+                    'fetchBalance': {
+                        'type': 'spot'  # Explicitly fetch spot balances
+                    }
+                })
+                logger.debug("Bybit: Using unified account configuration for spot trading")
+            
             if decrypted.get('passphrase'):
                 config['password'] = decrypted['passphrase']
             
@@ -160,6 +171,12 @@ class BalanceService:
             
             # Fetch balance and tickers for prices
             balance_data = exchange.fetch_balance()
+            
+            # DEBUG: Log raw balance structure for Bybit
+            if exchange_info['ccxt_id'].lower() == 'bybit':
+                logger.info(f"🔍 Bybit raw balance keys: {list(balance_data.keys())[:10]}")
+                if 'info' in balance_data:
+                    logger.debug(f"Bybit balance.info keys: {list(balance_data['info'].keys()) if isinstance(balance_data['info'], dict) else 'not a dict'}")
             
             # Get list of currencies with balance > 0 first (optimization)
             currencies_with_balance = set()
@@ -169,6 +186,9 @@ class BalanceService:
                         total = float(amounts.get('total', 0))
                         if total > 0:
                             currencies_with_balance.add(currency)
+                            # DEBUG: Log Bybit balances found
+                            if exchange_info['ccxt_id'].lower() == 'bybit':
+                                logger.info(f"🔍 Bybit token found: {currency} = {total}")
             
             logger.debug(f"{exchange_info['nome']}: Found {len(currencies_with_balance)} currencies with balance")
             
