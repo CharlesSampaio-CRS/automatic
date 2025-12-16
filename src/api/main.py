@@ -1233,6 +1233,104 @@ def get_balances():
             'error': 'Internal server error',
             'details': str(e)
         }), 500
+@app.route('/api/v1/balances/summary', methods=['GET'])
+def get_balances_summary():
+    """
+    🚀 FAST: Get only totals from all exchanges (no token details)
+    Perfect for initial page load - loads in ~1-2 seconds
+    
+    Query Params:
+        user_id (required): ID do usuário
+        force_refresh (optional): true para ignorar cache
+    
+    Returns:
+        200: Exchange summaries with totals only
+        400: user_id não fornecido
+        500: Erro ao buscar balances
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required as query parameter'
+            }), 400
+        
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        use_cache = not force_refresh
+        
+        balance_service = get_balance_service(db)
+        
+        logger.debug(f"Fetching summary for user {user_id} (cache: {use_cache})...")
+        result = balance_service.fetch_exchanges_summary(user_id, use_cache=use_cache)
+        
+        logger.info(f"✅ Summary fetched: {result['summary']['exchanges_count']} exchanges in {result['meta']['fetch_time']}s")
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching summary: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+@app.route('/api/v1/balances/exchange/<exchange_id>', methods=['GET'])
+def get_exchange_details(exchange_id):
+    """
+    📊 LAZY LOAD: Get detailed token list for ONE exchange
+    Called when user clicks to expand exchange in UI
+    
+    Path Params:
+        exchange_id: MongoDB _id of the exchange
+    
+    Query Params:
+        user_id (required): ID do usuário
+        include_changes (optional): true para incluir variações
+    
+    Returns:
+        200: Detailed token list for exchange
+        400: user_id não fornecido
+        404: Exchange not found
+        500: Erro ao buscar detalhes
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required as query parameter'
+            }), 400
+        
+        include_changes = request.args.get('include_changes', 'false').lower() == 'true'
+        
+        balance_service = get_balance_service(db)
+        
+        logger.debug(f"Fetching details for exchange {exchange_id}...")
+        result = balance_service.fetch_single_exchange_details(user_id, exchange_id, include_changes)
+        
+        if not result.get('success'):
+            return jsonify(result), 404
+        
+        logger.info(f"✅ Details fetched for {result['name']}: {len(result['tokens'])} tokens")
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching exchange details: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
 @app.route('/api/v1/balances/clear-cache', methods=['POST'])
 def clear_balance_cache():
     """

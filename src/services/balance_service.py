@@ -111,6 +111,105 @@ class BalanceService:
         
         return changes
     
+    def fetch_exchange_total_only(self, link: Dict, exchange_info: Dict) -> Dict:
+        """
+        Fetch ONLY total balance from exchange (ultra-fast for listing)
+        
+        Args:
+            link: User exchange link document
+            exchange_info: Exchange information document
+            
+        Returns:
+            Dict with only total_usd (no token details)
+        """
+        result = {
+            'exchange_id': str(exchange_info['_id']),
+            'exchange_name': exchange_info['nome'],
+            'exchange_icon': exchange_info['icon'],
+            'success': False,
+            'error': None,
+            'total_usd': 0.0,
+            'fetch_time': None
+        }
+        
+        try:
+            start_time = time.time()
+            
+            # Decrypt credentials
+            decrypted = self.encryption_service.decrypt_credentials({
+                'api_key': link['api_key_encrypted'],
+                'api_secret': link['api_secret_encrypted'],
+                'passphrase': link.get('passphrase_encrypted')
+            })
+            
+            # Create exchange instance
+            exchange_class = getattr(ccxt, exchange_info['ccxt_id'])
+            config = {
+                'apiKey': decrypted['api_key'],
+                'secret': decrypted['api_secret'],
+                'enableRateLimit': True,
+                'timeout': 10000,
+                'options': {'defaultType': 'spot'}
+            }
+            
+            # Bybit specific configuration
+            if exchange_info['ccxt_id'].lower() == 'bybit':
+                config['options'].update({
+                    'defaultType': 'spot',
+                    'accountType': 'unified',
+                    'fetchBalance': {'type': 'spot'}
+                })
+                proxy_url = os.getenv('BYBIT_PROXY_URL')
+                if proxy_url:
+                    config['proxies'] = {'http': proxy_url, 'https': proxy_url}
+            
+            if decrypted.get('passphrase'):
+                config['password'] = decrypted['passphrase']
+            
+            exchange = exchange_class(config)
+            
+            # Fetch balance (only structure, no price lookups)
+            balance_data = exchange.fetch_balance()
+            
+            # Quick calculation: use USDT value from exchange if available
+            total_usd = 0.0
+            
+            # Try to get total from exchange's built-in calculation
+            if 'total' in balance_data and isinstance(balance_data['total'], dict):
+                # Check if exchange provides USDT total
+                if 'USDT' in balance_data['total']:
+                    total_usd = float(balance_data['total'].get('USDT', 0))
+                    logger.debug(f"{exchange_info['nome']}: Using exchange's USDT total = ${total_usd}")
+            
+            # Fallback: quick estimation using only stablecoins
+            if total_usd == 0:
+                for currency in ['USDT', 'USDC', 'USD', 'BUSD']:
+                    if currency in balance_data and isinstance(balance_data[currency], dict):
+                        amount = float(balance_data[currency].get('total', 0))
+                        total_usd += amount
+                
+                logger.debug(f"{exchange_info['nome']}: Estimated from stablecoins = ${total_usd}")
+            
+            fetch_time = time.time() - start_time
+            
+            result.update({
+                'success': True,
+                'total_usd': format_usd(total_usd),
+                'fetch_time': round(fetch_time, 3),
+                'is_estimate': total_usd > 0  # Flag if this is just stablecoin estimate
+            })
+            
+        except Exception as e:
+            error_msg = str(e)
+            if '403' in error_msg and 'CloudFront' in error_msg:
+                result['error'] = f"🌍 Geo-blocked"
+                logger.error(f"🌍 {exchange_info['nome']}: GEO-BLOCKED")
+            else:
+                result['error'] = f"Error: {error_msg[:100]}"
+                logger.error(f"❌ {exchange_info['nome']}: {error_msg[:100]}")
+        
+        return result
+    
     def fetch_single_exchange_balance(self, link: Dict, exchange_info: Dict, include_changes: bool = False) -> Dict:
         """
         Fetch balance from a single exchange
@@ -615,6 +714,231 @@ class BalanceService:
             _balance_cache.set(cache_key, result)
         
         return result
+    
+    def fetch_exchanges_summary(self, user_id: str, use_cache: bool = True) -> Dict:
+        """
+        Fetch ONLY totals from all exchanges (ultra-fast for listing)
+        Perfect for initial load - no token details
+        
+        Args:
+            user_id: User ID
+            use_cache: Whether to use cached data
+            
+        Returns:
+            Dict with exchange summaries (totals only, no tokens)
+        """
+        # Check cache first
+        if use_cache:
+            cache_key = f"summary_{user_id}"
+            is_valid, cached_data = _balance_cache.get(cache_key)
+            if is_valid:
+                cached_data['from_cache'] = True
+                return cached_data
+        
+        start_time = time.time()
+        
+        # Get user exchanges
+        user_doc = self.db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_doc or 'exchanges' not in user_doc:
+            return {
+                'success': True,
+                'user_id': user_id,
+                'exchanges': [],
+                'summary': {'total_usd': '0.00', 'exchanges_count': 0},
+                'meta': {'from_cache': False, 'fetch_time': 0}
+            }
+        
+        active_exchanges = [ex for ex in user_doc['exchanges'] if ex.get('is_active', True)]
+        
+        if not active_exchanges:
+            return {
+                'success': True,
+                'user_id': user_id,
+                'exchanges': [],
+                'summary': {'total_usd': '0.00', 'exchanges_count': 0},
+                'meta': {'from_cache': False, 'fetch_time': 0}
+            }
+        
+        # Get exchange info
+        exchange_ids = [ex['exchange_id'] for ex in active_exchanges]
+        exchanges_info = {
+            ex['_id']: ex
+            for ex in self.db.exchanges.find({'_id': {'$in': exchange_ids}})
+        }
+        
+        # Fetch totals in parallel (FAST - no token details!)
+        exchange_results = []
+        
+        with ThreadPoolExecutor(max_workers=min(len(active_exchanges), 10)) as executor:
+            futures = {
+                executor.submit(
+                    self.fetch_exchange_total_only,
+                    ex_data,
+                    exchanges_info[ex_data['exchange_id']]
+                ): ex_data
+                for ex_data in active_exchanges
+            }
+            
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    exchange_results.append(result)
+                except Exception as e:
+                    ex_data = futures[future]
+                    exchange_info = exchanges_info[ex_data['exchange_id']]
+                    exchange_results.append({
+                        'exchange_id': str(exchange_info['_id']),
+                        'exchange_name': exchange_info['nome'],
+                        'exchange_icon': exchange_info['icon'],
+                        'success': False,
+                        'error': f"Error: {str(e)}",
+                        'total_usd': '0.00'
+                    })
+        
+        # Build summary
+        total_portfolio_usd = 0.0
+        exchanges_summary = []
+        
+        for result in exchange_results:
+            if result['success']:
+                total_usd = float(result.get('total_usd', '0.0'))
+                total_portfolio_usd += total_usd
+            
+            exchanges_summary.append({
+                'exchange_id': result['exchange_id'],
+                'name': result['exchange_name'],
+                'icon': result.get('exchange_icon'),
+                'success': result['success'],
+                'total_usd': result.get('total_usd', '0.00'),
+                'error': result.get('error'),
+                'has_details': False  # Flag: details not loaded yet
+            })
+        
+        # Sort by total
+        exchanges_summary = sorted(
+            exchanges_summary,
+            key=lambda x: float(x.get('total_usd', '0.0')),
+            reverse=True
+        )
+        
+        fetch_time = time.time() - start_time
+        
+        result = {
+            'success': True,
+            'user_id': user_id,
+            'timestamp': datetime.utcnow().isoformat(),
+            'summary': {
+                'total_usd': format_usd(total_portfolio_usd),
+                'exchanges_count': len([e for e in exchanges_summary if e['success']])
+            },
+            'exchanges': exchanges_summary,
+            'meta': {
+                'from_cache': False,
+                'fetch_time': round(fetch_time, 3),
+                'type': 'summary_only'  # Indicates this is lightweight version
+            }
+        }
+        
+        # Cache summary
+        if use_cache:
+            cache_key = f"summary_{user_id}"
+            _balance_cache.set(cache_key, result)
+        
+        logger.info(f"✅ Summary fetched in {fetch_time:.2f}s: {len(exchanges_summary)} exchanges, total ${total_portfolio_usd:.2f}")
+        
+        return result
+    
+    def fetch_single_exchange_details(self, user_id: str, exchange_id: str, include_changes: bool = False) -> Dict:
+        """
+        Fetch detailed token list for ONE specific exchange
+        Used when user clicks to expand exchange details
+        
+        Args:
+            user_id: User ID
+            exchange_id: Exchange MongoDB _id
+            include_changes: Whether to include price changes
+            
+        Returns:
+            Dict with detailed token list for the exchange
+        """
+        from bson import ObjectId
+        
+        # Check cache first
+        cache_key = f"exchange_{user_id}_{exchange_id}"
+        is_valid, cached_data = _balance_cache.get(cache_key)
+        if is_valid:
+            cached_data['from_cache'] = True
+            return cached_data
+        
+        # Get user exchange link
+        user_doc = self.db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_doc or 'exchanges' not in user_doc:
+            return {'success': False, 'error': 'User not found'}
+        
+        # Find specific exchange link
+        exchange_link = None
+        for ex in user_doc['exchanges']:
+            if str(ex['exchange_id']) == exchange_id:
+                exchange_link = ex
+                break
+        
+        if not exchange_link:
+            return {'success': False, 'error': 'Exchange not linked'}
+        
+        # Get exchange info
+        try:
+            exchange_info = self.db.exchanges.find_one({'_id': ObjectId(exchange_id)})
+        except:
+            return {'success': False, 'error': 'Invalid exchange ID'}
+        
+        if not exchange_info:
+            return {'success': False, 'error': 'Exchange not found'}
+        
+        # Fetch full details for this exchange
+        logger.info(f"📊 Fetching details for {exchange_info['nome']}...")
+        result = self.fetch_single_exchange_balance(exchange_link, exchange_info, include_changes)
+        
+        # Transform to API format
+        if result['success']:
+            tokens = {}
+            for currency, amounts in result['balances'].items():
+                token_info = {}
+                for k, v in amounts.items():
+                    if k.startswith('_'):
+                        continue
+                    elif k == 'total':
+                        token_info['amount'] = format_amount(v)
+                    else:
+                        token_info[k] = v
+                tokens[currency] = token_info
+            
+            response = {
+                'success': True,
+                'exchange_id': result['exchange_id'],
+                'name': result['exchange_name'],
+                'icon': result.get('exchange_icon'),
+                'total_usd': result['total_usd'],
+                'tokens': tokens,
+                'meta': {
+                    'from_cache': False,
+                    'fetch_time': result.get('fetch_time', 0)
+                }
+            }
+        else:
+            response = {
+                'success': False,
+                'exchange_id': result['exchange_id'],
+                'name': result['exchange_name'],
+                'error': result.get('error'),
+                'tokens': {}
+            }
+        
+        # Cache details
+        _balance_cache.set(cache_key, response)
+        
+        return response
     
     def clear_cache(self, user_id: str = None):
         """Clear cache for specific user or all cache"""
