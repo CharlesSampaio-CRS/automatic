@@ -168,27 +168,141 @@ class BalanceService:
             
             exchange = exchange_class(config)
             
-            # Fetch balance (only structure, no price lookups)
+            # Fetch balance (structure with amounts)
             balance_data = exchange.fetch_balance()
             
-            # Quick calculation: use USDT value from exchange if available
+            # Get list of currencies with balance > 0
+            currencies_with_balance = {}
+            for currency, amounts in balance_data.items():
+                if currency not in ['info', 'free', 'used', 'total', 'timestamp', 'datetime']:
+                    if isinstance(amounts, dict):
+                        total = float(amounts.get('total', 0))
+                        if total > 0:
+                            currencies_with_balance[currency] = total
+            
+            logger.debug(f"{exchange_info['nome']}: Found {len(currencies_with_balance)} currencies with balance")
+            
+            # Calculate total using same logic as fetch_single_exchange_balance (ACCURATE)
             total_usd = 0.0
+            tickers = {}
+            usd_brl_rate = None
             
-            # Try to get total from exchange's built-in calculation
-            if 'total' in balance_data and isinstance(balance_data['total'], dict):
-                # Check if exchange provides USDT total
-                if 'USDT' in balance_data['total']:
-                    total_usd = float(balance_data['total'].get('USDT', 0))
-                    logger.debug(f"{exchange_info['nome']}: Using exchange's USDT total = ${total_usd}")
-            
-            # Fallback: quick estimation using only stablecoins
-            if total_usd == 0:
-                for currency in ['USDT', 'USDC', 'USD', 'BUSD']:
-                    if currency in balance_data and isinstance(balance_data[currency], dict):
-                        amount = float(balance_data[currency].get('total', 0))
-                        total_usd += amount
+            # Fetch tickers from exchange (MOST ACCURATE - real-time prices)
+            try:
+                if len(currencies_with_balance) > 0:
+                    logger.debug(f"{exchange_info['nome']}: Fetching only {len(currencies_with_balance)} needed tickers")
+                    
+                    for currency in list(currencies_with_balance.keys()):
+                        # Stablecoins don't need price lookup
+                        if currency in ['USDT', 'USDC', 'USD', 'BUSD']:
+                            tickers[currency] = 1.0
+                            continue
+                        
+                        # Try common quote currencies in order of preference
+                        # NovaDAX: Try BRL first (it's a Brazilian exchange)
+                        if exchange_info.get('nome', '').lower() == 'novadax':
+                            quote_currencies = ['BRL', 'USDT', 'USDC', 'USD', 'BUSD', 'BTC', 'ETH']
+                        else:
+                            quote_currencies = ['USDT', 'USDC', 'USD', 'BUSD', 'BRL', 'BTC', 'ETH']
+                        
+                        for quote in quote_currencies:
+                            symbol = f"{currency}/{quote}"
+                            try:
+                                ticker = exchange.fetch_ticker(symbol)
+                                price = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                                
+                                if not price:
+                                    continue
+                                
+                                # Direct USD quotes (USDT, USDC, USD, BUSD)
+                                if quote in ['USDT', 'USDC', 'USD', 'BUSD']:
+                                    tickers[currency] = float(price)
+                                    break
+                                
+                                # BRL pairs - need conversion to USD
+                                elif quote == 'BRL':
+                                    if usd_brl_rate is None:
+                                        try:
+                                            price_feed = get_price_feed_service()
+                                            usd_brl_rate = price_feed.get_usd_brl_rate()
+                                        except:
+                                            usd_brl_rate = 5.0  # Fallback rate
+                                    tickers[currency] = float(price) / usd_brl_rate
+                                    break
+                                
+                                # BTC pair - need BTC price in USD
+                                elif quote == 'BTC':
+                                    if 'BTC' not in tickers:
+                                        try:
+                                            btc_ticker = exchange.fetch_ticker('BTC/USDT')
+                                            btc_price = btc_ticker.get('last', 0) or btc_ticker.get('close', 0) or 0
+                                            if btc_price:
+                                                tickers['BTC'] = float(btc_price)
+                                        except:
+                                            pass
+                                    if 'BTC' in tickers and tickers['BTC'] > 0:
+                                        tickers[currency] = float(price) * tickers['BTC']
+                                        break
+                                
+                                # ETH pair - need ETH price in USD
+                                elif quote == 'ETH':
+                                    if 'ETH' not in tickers:
+                                        try:
+                                            eth_ticker = exchange.fetch_ticker('ETH/USDT')
+                                            eth_price = eth_ticker.get('last', 0) or eth_ticker.get('close', 0) or 0
+                                            if eth_price:
+                                                tickers['ETH'] = float(eth_price)
+                                        except:
+                                            pass
+                                    if 'ETH' in tickers and tickers['ETH'] > 0:
+                                        tickers[currency] = float(price) * tickers['ETH']
+                                        break
+                            except:
+                                continue  # Try next quote currency
                 
-                logger.debug(f"{exchange_info['nome']}: Estimated from stablecoins = ${total_usd}")
+                logger.debug(f"Fetched {len(tickers)} ticker prices from {exchange_info['nome']}")
+                
+            except Exception as e:
+                logger.warning(f"Could not fetch tickers from {exchange_info['nome']}: {e}")
+            
+            # Collect tokens that need CoinGecko fallback
+            tokens_needing_prices = []
+            
+            # Calculate total with tickers
+            for currency, amount in currencies_with_balance.items():
+                if currency in tickers:
+                    price_usd = tickers[currency]
+                    value_usd = amount * price_usd
+                    total_usd += value_usd
+                    logger.debug(f"  {currency}: {amount:.4f} × ${price_usd:.6f} = ${value_usd:.2f}")
+                else:
+                    # No ticker found - will use CoinGecko fallback
+                    tokens_needing_prices.append(currency)
+            
+            # FALLBACK: Use CoinGecko for tokens without tickers
+            if tokens_needing_prices:
+                # Filter out fiat currencies (BRL, EUR, etc) - they shouldn't go to CoinGecko
+                fiat_currencies = ['BRL', 'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'ARS', 'MXN']
+                tokens_for_coingecko = [t for t in tokens_needing_prices if t not in fiat_currencies]
+                
+                if tokens_for_coingecko:
+                    try:
+                        logger.info(f"Fetching prices from CoinGecko for {len(tokens_for_coingecko)} tokens: {tokens_for_coingecko}")
+                        price_feed = get_price_feed_service()
+                        coingecko_prices = price_feed.fetch_prices_batch(tokens_for_coingecko)
+                        
+                        for currency in tokens_for_coingecko:
+                            if currency in coingecko_prices and currency in currencies_with_balance:
+                                cg_price = coingecko_prices[currency]
+                                amount = currencies_with_balance[currency]
+                                value_usd = amount * cg_price
+                                total_usd += value_usd
+                                logger.debug(f"  {currency}: {amount:.4f} × ${cg_price:.6f} = ${value_usd:.2f} (CoinGecko)")
+                        
+                    except Exception as e:
+                        logger.warning(f"Could not fetch fallback prices from CoinGecko: {e}")
+            
+            logger.info(f"📊 {exchange_info['nome']}: Total = ${total_usd:.2f}")
             
             fetch_time = time.time() - start_time
             
@@ -196,7 +310,7 @@ class BalanceService:
                 'success': True,
                 'total_usd': format_usd(total_usd),
                 'fetch_time': round(fetch_time, 3),
-                'is_estimate': total_usd > 0  # Flag if this is just stablecoin estimate
+                'token_count': len(currencies_with_balance)  # Number of tokens found
             })
             
         except Exception as e:
@@ -319,7 +433,11 @@ class BalanceService:
                             continue
                         
                         # Try common quote currencies in order of preference
-                        quote_currencies = ['USDT', 'USDC', 'USD', 'BUSD', 'BRL', 'BTC', 'ETH']
+                        # NovaDAX: Try BRL first (it's a Brazilian exchange)
+                        if exchange_info.get('nome', '').lower() == 'novadax':
+                            quote_currencies = ['BRL', 'USDT', 'USDC', 'USD', 'BUSD', 'BTC', 'ETH']
+                        else:
+                            quote_currencies = ['USDT', 'USDC', 'USD', 'BUSD', 'BRL', 'BTC', 'ETH']
                         
                         for quote in quote_currencies:
                             symbol = f"{currency}/{quote}"
@@ -447,32 +565,37 @@ class BalanceService:
             
             # FALLBACK: Use CoinGecko for tokens without prices
             if tokens_needing_prices:
-                try:
-                    logger.info(f"Fetching prices from CoinGecko for {len(tokens_needing_prices)} tokens: {tokens_needing_prices}")
-                    price_feed = get_price_feed_service()
-                    coingecko_prices = price_feed.fetch_prices_batch(tokens_needing_prices)
-                    
-                    # Update balances with CoinGecko prices
-                    for currency in tokens_needing_prices:
-                        if currency in processed_balances and currency in coingecko_prices:
-                            cg_price = coingecko_prices[currency]
-                            total_amount = processed_balances[currency]['total']
-                            new_value_usd = total_amount * cg_price
-                            
-                            # Update with CoinGecko price (keep raw values)
-                            old_value = processed_balances[currency].get('_value_raw', 0.0)
-                            processed_balances[currency]['price_usd'] = format_price(cg_price)
-                            processed_balances[currency]['value_usd'] = format_usd(new_value_usd)
-                            processed_balances[currency]['_price_raw'] = cg_price
-                            processed_balances[currency]['_value_raw'] = new_value_usd
-                            
-                            # Update total
-                            total_usd = total_usd - old_value + new_value_usd
-                            
-                            logger.debug(f"Updated {currency} price from CoinGecko: ${cg_price}")
+                # Filter out fiat currencies (BRL, EUR, etc) - they shouldn't go to CoinGecko
+                fiat_currencies = ['BRL', 'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'ARS', 'MXN']
+                tokens_for_coingecko = [t for t in tokens_needing_prices if t not in fiat_currencies]
                 
-                except Exception as e:
-                    logger.warning(f"Could not fetch fallback prices from CoinGecko: {e}")
+                if tokens_for_coingecko:
+                    try:
+                        logger.info(f"Fetching prices from CoinGecko for {len(tokens_for_coingecko)} tokens: {tokens_for_coingecko}")
+                        price_feed = get_price_feed_service()
+                        coingecko_prices = price_feed.fetch_prices_batch(tokens_for_coingecko)
+                        
+                        # Update balances with CoinGecko prices
+                        for currency in tokens_for_coingecko:
+                            if currency in processed_balances and currency in coingecko_prices:
+                                cg_price = coingecko_prices[currency]
+                                total_amount = processed_balances[currency]['total']
+                                new_value_usd = total_amount * cg_price
+                                
+                                # Update with CoinGecko price (keep raw values)
+                                old_value = processed_balances[currency].get('_value_raw', 0.0)
+                                processed_balances[currency]['price_usd'] = format_price(cg_price)
+                                processed_balances[currency]['value_usd'] = format_usd(new_value_usd)
+                                processed_balances[currency]['_price_raw'] = cg_price
+                                processed_balances[currency]['_value_raw'] = new_value_usd
+                                
+                                # Update total
+                                total_usd = total_usd - old_value + new_value_usd
+                                
+                                logger.debug(f"Updated {currency} price from CoinGecko: ${cg_price}")
+                        
+                    except Exception as e:
+                        logger.warning(f"Could not fetch fallback prices from CoinGecko: {e}")
             
             # ✅ SORT balances by real value BEFORE returning
             # Convert to list with real values for sorting
