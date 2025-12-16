@@ -3,6 +3,7 @@ Balance Service - Fetch balances from multiple exchanges in parallel
 Optimized for performance with concurrent execution
 """
 
+import os
 import ccxt
 from typing import Dict, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -162,6 +163,15 @@ class BalanceService:
                         'type': 'spot'  # Explicitly fetch spot balances
                     }
                 })
+                # Add proxy settings to bypass geo-blocking (if PROXY_URL is set)
+                proxy_url = os.getenv('BYBIT_PROXY_URL')
+                if proxy_url:
+                    config['proxies'] = {
+                        'http': proxy_url,
+                        'https': proxy_url
+                    }
+                    logger.debug(f"Bybit: Using proxy to bypass geo-restrictions")
+                
                 logger.debug("Bybit: Using unified account configuration for spot trading")
             
             if decrypted.get('passphrase'):
@@ -395,10 +405,22 @@ class BalanceService:
             
         except ccxt.AuthenticationError as e:
             result['error'] = f"Authentication failed: {str(e)}"
+            logger.error(f"❌ {exchange_info['nome']}: Authentication error - {str(e)}")
         except ccxt.ExchangeError as e:
-            result['error'] = f"Exchange error: {str(e)}"
+            error_msg = str(e)
+            result['error'] = f"Exchange error: {error_msg}"
+            logger.error(f"❌ {exchange_info['nome']}: Exchange error - {error_msg}")
         except Exception as e:
-            result['error'] = f"Error: {str(e)}"
+            error_msg = str(e)
+            
+            # Special handling for geo-blocking errors
+            if '403' in error_msg and ('CloudFront' in error_msg or 'configured to block access from your country' in error_msg):
+                result['error'] = f"🌍 Geo-blocked: {exchange_info['nome']} is blocking access from your region. Consider using a VPN or proxy."
+                logger.error(f"🌍 {exchange_info['nome']}: GEO-BLOCKED - Access denied from current region")
+                logger.info(f"💡 Solution: Set BYBIT_PROXY_URL in .env to use a proxy server")
+            else:
+                result['error'] = f"Error: {error_msg}"
+                logger.error(f"❌ {exchange_info['nome']}: Unexpected error - {error_msg}")
         
         return result
     
