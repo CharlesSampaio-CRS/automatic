@@ -200,6 +200,57 @@ def health_check():
         }
     }, 200
 
+
+@app.route('/api/v1/metrics', methods=['GET'])
+def get_metrics():
+    """
+    📊 PERFORMANCE METRICS - Cache statistics and system info
+    
+    Returns:
+        200: System metrics and cache statistics
+        500: Error getting metrics
+    """
+    try:
+        # Get cache statistics
+        from src.utils.cache import get_exchanges_cache, get_linked_exchanges_cache
+        from src.services.balance_service import _balance_cache
+        
+        exchanges_cache = get_exchanges_cache()
+        linked_cache = get_linked_exchanges_cache()
+        
+        # Balance cache stats (global cache)
+        balance_cache_stats = _balance_cache.get_stats()
+        
+        return jsonify({
+            'success': True,
+            'timestamp': datetime.utcnow().isoformat(),
+            'system': {
+                'database': 'connected' if db is not None else 'disconnected',
+                'scheduler_running': scheduler.running if scheduler else False,
+                'strategy_worker_running': strategy_worker.is_running if strategy_worker else False
+            },
+            'cache': {
+                'balance_cache': balance_cache_stats,
+                'exchanges_cache_size': len(exchanges_cache.cache) if hasattr(exchanges_cache, 'cache') else 0,
+                'linked_cache_size': len(linked_cache.cache) if hasattr(linked_cache, 'cache') else 0
+            },
+            'performance': {
+                'max_workers': 20,
+                'request_timeout': '15s',
+                'summary_ttl': '10min',
+                'full_ttl': '5min',
+                'single_ttl': '3min'
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting metrics: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
 # Rota raiz
 @app.route('/', methods=['GET'])
 def index():

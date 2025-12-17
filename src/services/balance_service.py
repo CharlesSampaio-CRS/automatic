@@ -21,21 +21,33 @@ logger = get_logger(__name__)
 
 
 class BalanceCache:
-    """Simple in-memory cache for balance data"""
+    """
+    Enhanced in-memory cache for balance data with intelligent TTL
+    Different cache durations for different data types
+    """
     
-    def __init__(self, ttl_seconds: int = 120):
+    def __init__(self, default_ttl_seconds: int = 600):
         """
-        Initialize cache
+        Initialize cache with intelligent TTL strategy
         
         Args:
-            ttl_seconds: Time to live for cached data (default 2 minutes)
+            default_ttl_seconds: Default time to live for cached data (10 minutes)
         """
         self.cache = {}
-        self.ttl_seconds = ttl_seconds
+        self.default_ttl = default_ttl_seconds
+        
+        # Intelligent TTL by cache type (PERFORMANCE OPTIMIZED)
+        self.ttl_by_type = {
+            'summary': 600,      # 10 minutes - Summary rarely changes
+            'full': 300,         # 5 minutes - Full balance with tokens
+            'single': 180,       # 3 minutes - Single exchange details
+            'price': 60,         # 1 minute - Price changes
+            'history': 900       # 15 minutes - Historical data
+        }
     
     def get(self, key: str) -> Tuple[bool, any]:
         """
-        Get cached data if still valid
+        Get cached data if still valid (with intelligent TTL)
         
         Returns:
             Tuple of (is_valid, data)
@@ -43,19 +55,29 @@ class BalanceCache:
         if key not in self.cache:
             return False, None
         
-        cached_data, timestamp = self.cache[key]
+        cached_data, timestamp, cache_type = self.cache[key]
+        
+        # Get TTL for this cache type
+        ttl = self.ttl_by_type.get(cache_type, self.default_ttl)
         
         # Check if cache is still valid
-        if datetime.utcnow() - timestamp < timedelta(seconds=self.ttl_seconds):
+        if datetime.utcnow() - timestamp < timedelta(seconds=ttl):
             return True, cached_data
         
         # Cache expired, remove it
         del self.cache[key]
         return False, None
     
-    def set(self, key: str, data: any):
-        """Set cache data with current timestamp"""
-        self.cache[key] = (data, datetime.utcnow())
+    def set(self, key: str, data: any, cache_type: str = 'default'):
+        """
+        Set cache data with current timestamp and type
+        
+        Args:
+            key: Cache key
+            data: Data to cache
+            cache_type: Type of cache ('summary', 'full', 'single', 'price', 'history')
+        """
+        self.cache[key] = (data, datetime.utcnow(), cache_type)
     
     def clear(self, key: str = None):
         """Clear cache for specific key or all cache"""
@@ -64,10 +86,26 @@ class BalanceCache:
                 del self.cache[key]
         else:
             self.cache.clear()
+    
+    def clear_pattern(self, pattern: str):
+        """Clear all cache keys matching pattern"""
+        keys_to_delete = [k for k in self.cache.keys() if pattern in k]
+        for key in keys_to_delete:
+            del self.cache[key]
+    
+    def get_stats(self) -> Dict:
+        """Get cache statistics"""
+        return {
+            'total_entries': len(self.cache),
+            'cache_types': {
+                cache_type: sum(1 for _, _, ct in self.cache.values() if ct == cache_type)
+                for cache_type in self.ttl_by_type.keys()
+            }
+        }
 
 
-# Global cache instance
-_balance_cache = BalanceCache(ttl_seconds=300)  # 5 minutes cache (optimized for performance)
+# Global cache instance with intelligent TTL (PERFORMANCE OPTIMIZED)
+_balance_cache = BalanceCache(default_ttl_seconds=600)  # 10 minutes default
 
 
 class BalanceService:
@@ -710,10 +748,10 @@ class BalanceService:
             for ex in self.db.exchanges.find({'_id': {'$in': exchange_ids}})
         }
         
-        # Fetch balances in parallel
+        # Fetch balances in parallel - OPTIMIZED: 20 workers, 30s timeout
         exchange_results = []
         
-        with ThreadPoolExecutor(max_workers=min(len(active_exchanges), 10)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(active_exchanges), 20)) as executor:
             futures = {
                 executor.submit(
                     self.fetch_single_exchange_balance,
@@ -724,9 +762,9 @@ class BalanceService:
                 for ex_data in active_exchanges
             }
             
-            for future in as_completed(futures):
+            for future in as_completed(futures, timeout=30):
                 try:
-                    result = future.result()
+                    result = future.result(timeout=15)  # 15s per exchange
                     exchange_results.append(result)
                 except Exception as e:
                     ex_data = futures[future]
@@ -831,10 +869,10 @@ class BalanceService:
         # Agora é salvo apenas pelo script hourly_balance_snapshot.py (a cada hora)
         # Isso evita poluir o histórico com múltiplas requisições do mesmo horário
         
-        # Cache the result (after price enrichment)
+        # Cache the result (after price enrichment) - TIPO: 'full' - 5min TTL
         if use_cache:
             cache_key = f"balances_{user_id}"
-            _balance_cache.set(cache_key, result)
+            _balance_cache.set(cache_key, result, cache_type='full')
         
         return result
     
@@ -890,10 +928,10 @@ class BalanceService:
             for ex in self.db.exchanges.find({'_id': {'$in': exchange_ids}})
         }
         
-        # Fetch totals in parallel (FAST - no token details!)
+        # Fetch totals in parallel - OPTIMIZED: 20 workers, 20s timeout (FAST!)
         exchange_results = []
         
-        with ThreadPoolExecutor(max_workers=min(len(active_exchanges), 10)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(active_exchanges), 20)) as executor:
             futures = {
                 executor.submit(
                     self.fetch_exchange_total_only,
@@ -903,9 +941,9 @@ class BalanceService:
                 for ex_data in active_exchanges
             }
             
-            for future in as_completed(futures):
+            for future in as_completed(futures, timeout=20):
                 try:
-                    result = future.result()
+                    result = future.result(timeout=10)  # 10s per exchange (summary is fast)
                     exchange_results.append(result)
                 except Exception as e:
                     ex_data = futures[future]
@@ -963,10 +1001,10 @@ class BalanceService:
             }
         }
         
-        # Cache summary
+        # Cache summary - TIPO: 'summary' - 10min TTL (OPTIMIZED)
         if use_cache:
             cache_key = f"summary_{user_id}"
-            _balance_cache.set(cache_key, result)
+            _balance_cache.set(cache_key, result, cache_type='summary')
         
         logger.info(f"✅ Summary fetched in {fetch_time:.2f}s: {len(exchanges_summary)} exchanges, total ${total_portfolio_usd:.2f}")
         
@@ -1058,8 +1096,8 @@ class BalanceService:
                 'tokens': {}
             }
         
-        # Cache details
-        _balance_cache.set(cache_key, response)
+        # Cache details - TIPO: 'single' - 3min TTL (OPTIMIZED)
+        _balance_cache.set(cache_key, response, cache_type='single')
         
         return response
     
