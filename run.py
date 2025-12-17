@@ -15,6 +15,10 @@ load_dotenv()
 # Importa e executa a aplicação
 from src.api.main import app
 
+# Expõe app para Gunicorn (necessário para produção)
+# Gunicorn usa: gunicorn run:app
+application = app
+
 if __name__ == "__main__":
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('FLASK_ENV') == 'development'
