@@ -110,6 +110,7 @@ _exchanges_cache = SimpleCache(default_ttl_seconds=300)  # 5 minutes for exchang
 _linked_exchanges_cache = SimpleCache(default_ttl_seconds=60)  # 1 minute for user-specific data
 _strategies_cache = SimpleCache(default_ttl_seconds=120)  # 2 minutes for strategies data
 _single_strategy_cache = SimpleCache(default_ttl_seconds=180)  # 3 minutes for single strategy
+_token_search_cache = SimpleCache(default_ttl_seconds=60)  # 1 minute for token search/prices
 
 
 def get_exchanges_cache() -> SimpleCache:
@@ -130,3 +131,8 @@ def get_strategies_cache() -> SimpleCache:
 def get_single_strategy_cache() -> SimpleCache:
     """Get global single strategy cache instance"""
     return _single_strategy_cache
+
+
+def get_token_search_cache() -> SimpleCache:
+    """Get global token search cache instance"""
+    return _token_search_cache

@@ -94,6 +94,30 @@ def run_scheduled_snapshot():
         traceback.print_exc()
 
 
+def run_tokens_update():
+    """
+    Atualiza lista de tokens disponíveis em todas as exchanges (chamado pelo scheduler)
+    """
+    try:
+        logger.info("=" * 80)
+        logger.info(f"TOKENS UPDATE JOB TRIGGERED - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        logger.info("=" * 80)
+        
+        # Import aqui para evitar circular imports
+        from scripts.update_exchange_tokens import update_all_exchange_tokens
+        result = update_all_exchange_tokens()
+        
+        if result.get('success'):
+            logger.info(f"✅ Tokens update completed: {result['successful_updates']}/{result['total_exchanges']} exchanges")
+        else:
+            logger.error(f"❌ Tokens update failed: {result.get('error')}")
+            
+    except Exception as e:
+        logger.error(f"Error in tokens update job: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 # Initialize BackgroundScheduler
 scheduler = BackgroundScheduler(timezone='UTC')
 
@@ -107,9 +131,20 @@ scheduler.add_job(
     max_instances=1
 )
 
+# Add job: update exchange tokens daily at 00:01 (1 minute after midnight)
+scheduler.add_job(
+    func=run_tokens_update,
+    trigger=CronTrigger(minute=1, hour=0),  # Daily at 00:01 UTC
+    id='tokens_update_job',
+    name='Daily Tokens Update at 00:01',
+    replace_existing=True,
+    max_instances=1
+)
+
 # Start scheduler
 scheduler.start()
 logger.info("✅ Scheduler started - Balance snapshots daily at 00:00 UTC")
+logger.info("✅ Scheduler started - Tokens update daily at 00:01 UTC")
 
 # Shutdown scheduler when app exits
 atexit.register(lambda: scheduler.shutdown())
@@ -276,7 +311,8 @@ def index():
             'jobs_control': '/api/v1/jobs/control'
         },
         'features': {
-            'automated_snapshots': 'Every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)',
+            'automated_snapshots': 'Daily at 00:00 UTC (balance snapshots)',
+            'automated_tokens_update': 'Daily at 00:01 UTC (exchange tokens cache)',
             'automated_trading': f"Strategy Worker checking every {os.getenv('STRATEGY_CHECK_INTERVAL', '5')} minutes",
             'dry_run_mode': os.getenv('STRATEGY_DRY_RUN', 'true')
         }
@@ -2515,6 +2551,413 @@ def get_strategy_stats(strategy_id):
         }), 500
 
 # ============================================
+# TOKEN SEARCH ENDPOINT
+# ============================================
+
+@app.route('/api/v1/tokens/search', methods=['GET'])
+def search_token():
+    """
+    🔍 Busca informações de um token em uma exchange específica
+    Verifica se o par existe e retorna dados como preço, volume, variação, etc.
+    
+    Query Params:
+        user_id (required): ID do usuário
+        exchange_id (required): MongoDB ObjectId da exchange
+        token (required): Símbolo do token (ex: PEPE, BTC, ETH)
+        quote (optional): Moeda de cotação (default: USDT, tenta USD, USDC, BUSD)
+    
+    Returns:
+        200: Dados do token encontrado
+        400: Parâmetros faltando
+        404: Token/par não encontrado na exchange
+        500: Erro interno
+    
+    Response Example:
+        {
+            "success": true,
+            "token": "PEPE",
+            "exchange": {
+                "id": "693481148b0a41e8b6acb07b",
+                "name": "Binance",
+                "ccxt_id": "binance"
+            },
+            "pair": "PEPE/USDT",
+            "ticker": {
+                "symbol": "PEPE/USDT",
+                "last": 0.00001234,
+                "bid": 0.00001233,
+                "ask": 0.00001235,
+                "high": 0.00001250,
+                "low": 0.00001200,
+                "volume": 1234567890.50,
+                "change": 5.67,
+                "percentage": 5.67,
+                "timestamp": 1702835400000
+            },
+            "usd_price": 0.00001234
+        }
+    """
+    try:
+        user_id = request.args.get('user_id')
+        exchange_id = request.args.get('exchange_id')
+        token = request.args.get('token', '').upper().strip()
+        preferred_quote = request.args.get('quote', 'USDT').upper()
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        
+        # Validate required params
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required as query parameter'
+            }), 400
+        
+        if not exchange_id:
+            return jsonify({
+                'success': False,
+                'error': 'exchange_id is required as query parameter'
+            }), 400
+        
+        if not token:
+            return jsonify({
+                'success': False,
+                'error': 'token is required as query parameter'
+            }), 400
+        
+        # Check cache first (unless force_refresh is true)
+        from src.utils.cache import get_token_search_cache
+        token_cache = get_token_search_cache()
+        cache_key = f"token_search_{user_id}_{exchange_id}_{token}_{preferred_quote}"
+        
+        if not force_refresh:
+            is_valid, cached_data = token_cache.get(cache_key)
+            if is_valid:
+                logger.debug(f"💾 Cache HIT for token search: {token} on exchange {exchange_id}")
+                cached_response = cached_data.copy()
+                cached_response['from_cache'] = True
+                return jsonify(cached_response), 200
+        
+        logger.debug(f"🔍 Cache MISS for token search: {token} on exchange {exchange_id}")
+        
+        # Get exchange info from database
+        try:
+            exchange_info = db.exchanges.find_one({'_id': ObjectId(exchange_id)})
+        except:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid exchange_id format'
+            }), 400
+        
+        if not exchange_info:
+            return jsonify({
+                'success': False,
+                'error': f'Exchange not found: {exchange_id}'
+            }), 404
+        
+        # Get user exchange credentials
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_doc or 'exchanges' not in user_doc:
+            return jsonify({
+                'success': False,
+                'error': 'User has no linked exchanges'
+            }), 404
+        
+        # Find this specific exchange link
+        exchange_link = None
+        for ex in user_doc['exchanges']:
+            if str(ex['exchange_id']) == exchange_id:
+                exchange_link = ex
+                break
+        
+        if not exchange_link:
+            return jsonify({
+                'success': False,
+                'error': f'Exchange {exchange_info["nome"]} not linked to this user'
+            }), 404
+        
+        # Decrypt credentials
+        encryption_service = get_encryption_service()
+        decrypted = encryption_service.decrypt_credentials({
+            'api_key': exchange_link['api_key_encrypted'],
+            'api_secret': exchange_link['api_secret_encrypted'],
+            'passphrase': exchange_link.get('passphrase_encrypted')
+        })
+        
+        # Create exchange instance
+        exchange_class = getattr(ccxt, exchange_info['ccxt_id'])
+        config = {
+            'apiKey': decrypted['api_key'],
+            'secret': decrypted['api_secret'],
+            'enableRateLimit': True,
+            'timeout': 10000,
+            'options': {'defaultType': 'spot'}
+        }
+        
+        if decrypted.get('passphrase'):
+            config['password'] = decrypted['passphrase']
+        
+        exchange = exchange_class(config)
+        
+        # Try to find the trading pair
+        # Priority order: USDT, USD, USDC, BUSD
+        quote_currencies = [preferred_quote]
+        if preferred_quote not in ['USDT', 'USD', 'USDC', 'BUSD']:
+            quote_currencies.extend(['USDT', 'USD', 'USDC', 'BUSD'])
+        else:
+            # Add other common quotes if preferred not found
+            for q in ['USDT', 'USD', 'USDC', 'BUSD']:
+                if q not in quote_currencies:
+                    quote_currencies.append(q)
+        
+        ticker = None
+        pair = None
+        
+        logger.info(f"🔍 Searching for {token} in {exchange_info['nome']}...")
+        
+        for quote in quote_currencies:
+            symbol = f"{token}/{quote}"
+            try:
+                logger.debug(f"Trying pair: {symbol}")
+                ticker = exchange.fetch_ticker(symbol)
+                pair = symbol
+                logger.info(f"✅ Found pair: {pair}")
+                break
+            except ccxt.BadSymbol as e:
+                logger.debug(f"Pair {symbol} not found: {str(e)}")
+                continue
+            except Exception as e:
+                logger.debug(f"Error fetching {symbol}: {str(e)}")
+                continue
+        
+        if not ticker or not pair:
+            return jsonify({
+                'success': False,
+                'error': f'Token {token} not found in {exchange_info["nome"]}',
+                'message': f'Tried pairs: {", ".join([f"{token}/{q}" for q in quote_currencies])}',
+                'exchange': {
+                    'id': str(exchange_info['_id']),
+                    'name': exchange_info['nome'],
+                    'ccxt_id': exchange_info['ccxt_id']
+                }
+            }), 404
+        
+        # Get USD price
+        usd_price = None
+        quote_used = pair.split('/')[1]
+        
+        if quote_used in ['USDT', 'USDC', 'USD', 'BUSD']:
+            # Already in USD equivalent
+            usd_price = ticker.get('last', 0) or ticker.get('close', 0)
+        else:
+            # Need to convert (future enhancement)
+            usd_price = ticker.get('last', 0) or ticker.get('close', 0)
+        
+        # Build response
+        response = {
+            'success': True,
+            'token': token,
+            'exchange': {
+                'id': str(exchange_info['_id']),
+                'name': exchange_info['nome'],
+                'ccxt_id': exchange_info['ccxt_id'],
+                'icon': exchange_info.get('icon')
+            },
+            'pair': pair,
+            'quote_currency': quote_used,
+            'ticker': {
+                'symbol': ticker.get('symbol'),
+                'last': ticker.get('last'),
+                'bid': ticker.get('bid'),
+                'ask': ticker.get('ask'),
+                'high': ticker.get('high'),
+                'low': ticker.get('low'),
+                'volume': ticker.get('baseVolume'),
+                'quoteVolume': ticker.get('quoteVolume'),
+                'change': ticker.get('change'),
+                'percentage': ticker.get('percentage'),
+                'timestamp': ticker.get('timestamp'),
+                'datetime': ticker.get('datetime')
+            },
+            'usd_price': float(usd_price) if usd_price else None,
+            'from_cache': False
+        }
+        
+        # Store in cache (TTL: 60 seconds)
+        token_cache.set(cache_key, response)
+        
+        logger.info(f"✅ Token search successful: {token} = ${usd_price:.8f} (cached for 60s)")
+        
+        return jsonify(response), 200
+        
+    except ccxt.AuthenticationError as e:
+        logger.error(f"Authentication error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Authentication failed with exchange',
+            'details': str(e)
+        }), 401
+        
+    except ccxt.ExchangeError as e:
+        logger.error(f"Exchange error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Exchange error',
+            'details': str(e)
+        }), 500
+        
+    except Exception as e:
+        logger.error(f"Error searching token: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/tokens/available', methods=['GET'])
+def get_available_tokens():
+    """
+    Lista tokens disponíveis em uma exchange (do cache MongoDB - super rápido!)
+    📝 UNIVERSAL: Serve para TODOS os usuários (não precisa de credenciais)
+    
+    Query Params:
+        exchange_id (required): MongoDB ObjectId da exchange
+        quote (optional): Filtrar por moeda de cotação (USDT, USD, USDC, BUSD, BRL)
+    
+    Returns:
+        200: Lista de tokens do cache MongoDB
+        400: Parâmetros inválidos
+        404: Exchange não encontrada
+        503: Cache não disponível (precisa rodar update job)
+    
+    Response Example:
+        {
+            "success": true,
+            "exchange": {
+                "id": "...",
+                "name": "Binance",
+                "ccxt_id": "binance"
+            },
+            "quote_filter": "USDT",
+            "total_tokens": 150,
+            "tokens": [
+                {
+                    "symbol": "BTC",
+                    "pair": "BTC/USDT",
+                    "quote": "USDT",
+                    "min_amount": 0.00001,
+                    "max_amount": 9000.0,
+                    "min_cost": 10.0
+                }
+            ],
+            "updated_at": "2024-12-17T03:00:00.000Z",
+            "cache_age_hours": 14.5,
+            "from_cache": true
+        }
+    """
+    try:
+        # Get parameters
+        exchange_id = request.args.get('exchange_id')
+        quote_filter = request.args.get('quote', '').upper()
+        
+        # Validate required parameters
+        if not exchange_id:
+            return jsonify({
+                'success': False,
+                'error': 'exchange_id is required as query parameter'
+            }), 400
+        
+        # Validate quote filter if provided
+        valid_quotes = ['USDT', 'USD', 'USDC', 'BUSD', 'BRL', '']
+        if quote_filter not in valid_quotes:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid quote filter. Must be one of: {", ".join([q for q in valid_quotes if q])}'
+            }), 400
+        
+        # Get cached tokens from MongoDB (UNIVERSAL - no user_id needed)
+        tokens_exchanges_collection = db.tokens_exchanges
+        cached_data = tokens_exchanges_collection.find_one({
+            'exchange_id': exchange_id
+        })
+        
+        if not cached_data:
+            # No cache available - need to run update job
+            return jsonify({
+                'success': False,
+                'error': 'Token list not available in cache',
+                'message': 'Please run the token update job first or wait for the nightly update',
+                'hint': 'Run: python scripts/update_exchange_tokens.py'
+            }), 503
+        
+        # Check if update was successful
+        if cached_data.get('update_status') != 'success':
+            return jsonify({
+                'success': False,
+                'error': f"Last update failed: {cached_data.get('error', 'Unknown error')}",
+                'updated_at': cached_data.get('updated_at')
+            }), 503
+        
+        # Get exchange info
+        exchange_info = db.exchanges.find_one({'_id': ObjectId(exchange_id)})
+        
+        if not exchange_info:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found'
+            }), 404
+        
+        # Filter tokens by quote if specified
+        tokens_by_quote = cached_data.get('tokens_by_quote', {})
+        
+        if quote_filter:
+            # Return only specified quote
+            tokens_list = tokens_by_quote.get(quote_filter, [])
+        else:
+            # Return all quotes
+            tokens_list = []
+            for quote, tokens in tokens_by_quote.items():
+                tokens_list.extend(tokens)
+        
+        # Calculate cache age
+        updated_at = cached_data.get('updated_at')
+        cache_age_hours = None
+        if updated_at:
+            cache_age = datetime.utcnow() - updated_at
+            cache_age_hours = round(cache_age.total_seconds() / 3600, 1)
+        
+        # Build response
+        response = {
+            'success': True,
+            'exchange': {
+                'id': str(exchange_info['_id']),
+                'name': exchange_info['nome'],
+                'ccxt_id': exchange_info['ccxt_id'],
+                'icon': exchange_info.get('icon')
+            },
+            'quote_filter': quote_filter or 'all',
+            'total_tokens': len(tokens_list),
+            'tokens': tokens_list,
+            'updated_at': updated_at.isoformat() if updated_at else None,
+            'cache_age_hours': cache_age_hours,
+            'from_cache': True
+        }
+        
+        logger.info(f"✅ Returned {len(tokens_list)} cached tokens for {exchange_info['nome']} (age: {cache_age_hours}h)")
+        
+        return jsonify(response), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting available tokens: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
 
 
 # ============================================

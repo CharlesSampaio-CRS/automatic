@@ -433,6 +433,19 @@ class BalanceService:
             # Fetch balance and tickers for prices
             balance_data = exchange.fetch_balance()
             
+            # DEBUG: Log raw balance structure for Coinbase
+            if exchange_info['ccxt_id'].lower() == 'coinbase':
+                logger.info(f"🔍 Coinbase raw balance keys: {list(balance_data.keys())[:10]}")
+                logger.info(f"🔍 Coinbase balance type: {type(balance_data)}")
+                if 'info' in balance_data:
+                    logger.info(f"🔍 Coinbase balance.info type: {type(balance_data['info'])}")
+                    if isinstance(balance_data['info'], dict):
+                        logger.info(f"🔍 Coinbase balance.info keys: {list(balance_data['info'].keys())[:10]}")
+                    elif isinstance(balance_data['info'], list):
+                        logger.info(f"🔍 Coinbase balance.info is a list with {len(balance_data['info'])} items")
+                        if len(balance_data['info']) > 0:
+                            logger.info(f"🔍 Coinbase balance.info[0] type: {type(balance_data['info'][0])}")
+            
             # DEBUG: Log raw balance structure for Bybit
             if exchange_info['ccxt_id'].lower() == 'bybit':
                 logger.info(f"🔍 Bybit raw balance keys: {list(balance_data.keys())[:10]}")
@@ -681,6 +694,9 @@ class BalanceService:
             else:
                 result['error'] = f"Error: {error_msg}"
                 logger.error(f"❌ {exchange_info['nome']}: Unexpected error - {error_msg}")
+                # Log full traceback for debugging
+                import traceback
+                logger.debug(f"Full traceback for {exchange_info['nome']}: {traceback.format_exc()}")
         
         return result
     
