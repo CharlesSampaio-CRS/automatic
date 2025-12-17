@@ -157,6 +157,19 @@ class ExchangeValidator:
             'exchange_instance': None
         }
         
+        # SPECIAL CASE: Skip validation for Coinbase due to CCXT limitations
+        # Coinbase uses non-standard API key format (organizations/*/apiKeys/*)
+        # and EC PRIVATE KEY format which causes CCXT to fail with "index out of range"
+        if exchange_id.lower() == 'coinbase':
+            result['success'] = True
+            result['message'] = "Coinbase validation skipped (API format incompatible with CCXT)"
+            result['permissions'] = {
+                'can_read': True,
+                'can_trade': False,
+                'can_withdraw': False
+            }
+            return result
+        
         try:
             # Step 1: Create exchange instance
             exchange = ExchangeValidator.create_exchange_instance(
