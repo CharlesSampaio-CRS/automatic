@@ -97,19 +97,19 @@ def run_scheduled_snapshot():
 # Initialize BackgroundScheduler
 scheduler = BackgroundScheduler(timezone='UTC')
 
-# Add job: execute every 4 hours at minute 0
+# Add job: execute daily at midnight (00:00)
 scheduler.add_job(
     func=run_scheduled_snapshot,
-    trigger=CronTrigger(minute=0, hour='*/4'),
+    trigger=CronTrigger(minute=0, hour=0),  # Daily at 00:00 UTC
     id='balance_snapshot_job',
-    name='Balance Snapshot Every 4 Hours',
+    name='Daily Balance Snapshot at Midnight',
     replace_existing=True,
     max_instances=1
 )
 
 # Start scheduler
 scheduler.start()
-logger.info("✅ Scheduler started - Balance snapshots every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)")
+logger.info("✅ Scheduler started - Balance snapshots daily at 00:00 UTC")
 
 # Shutdown scheduler when app exits
 atexit.register(lambda: scheduler.shutdown())
