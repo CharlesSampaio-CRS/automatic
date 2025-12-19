@@ -209,16 +209,17 @@ class BalanceService:
             # Fetch balance (structure with amounts)
             balance_data = exchange.fetch_balance()
             
-            # Get list of currencies with balance > 0
+            # Get list of currencies with balance > 0 (ignore zero balances completely)
             currencies_with_balance = {}
             for currency, amounts in balance_data.items():
                 if currency not in ['info', 'free', 'used', 'total', 'timestamp', 'datetime']:
                     if isinstance(amounts, dict):
                         total = float(amounts.get('total', 0))
-                        if total > 0:
+                        # ✅ OPTIMIZATION: Only process tokens with real balance (> 0.00)
+                        if total > 0.00:
                             currencies_with_balance[currency] = total
             
-            logger.debug(f"{exchange_info['nome']}: Found {len(currencies_with_balance)} currencies with balance")
+            logger.debug(f"{exchange_info['nome']}: Found {len(currencies_with_balance)} currencies with balance > 0")
             
             # Calculate total using same logic as fetch_single_exchange_balance (ACCURATE)
             total_usd = 0.0
@@ -236,12 +237,12 @@ class BalanceService:
                             tickers[currency] = 1.0
                             continue
                         
-                        # Try common quote currencies in order of preference
+                        # ⚡ FAST: Only try 2 quote currencies (USDT and BRL)
                         # NovaDAX: Try BRL first (it's a Brazilian exchange)
                         if exchange_info.get('nome', '').lower() == 'novadax':
-                            quote_currencies = ['BRL', 'USDT', 'USDC', 'USD', 'BUSD', 'BTC', 'ETH']
+                            quote_currencies = ['BRL', 'USDT']
                         else:
-                            quote_currencies = ['USDT', 'USDC', 'USD', 'BUSD', 'BRL', 'BTC', 'ETH']
+                            quote_currencies = ['USDT', 'BRL']
                         
                         for quote in quote_currencies:
                             symbol = f"{currency}/{quote}"
@@ -264,37 +265,9 @@ class BalanceService:
                                             price_feed = get_price_feed_service()
                                             usd_brl_rate = price_feed.get_usd_brl_rate()
                                         except:
-                                            usd_brl_rate = 5.0  # Fallback rate
+                                            usd_brl_rate = 5.5  # Fallback rate
                                     tickers[currency] = float(price) / usd_brl_rate
                                     break
-                                
-                                # BTC pair - need BTC price in USD
-                                elif quote == 'BTC':
-                                    if 'BTC' not in tickers:
-                                        try:
-                                            btc_ticker = exchange.fetch_ticker('BTC/USDT')
-                                            btc_price = btc_ticker.get('last', 0) or btc_ticker.get('close', 0) or 0
-                                            if btc_price:
-                                                tickers['BTC'] = float(btc_price)
-                                        except:
-                                            pass
-                                    if 'BTC' in tickers and tickers['BTC'] > 0:
-                                        tickers[currency] = float(price) * tickers['BTC']
-                                        break
-                                
-                                # ETH pair - need ETH price in USD
-                                elif quote == 'ETH':
-                                    if 'ETH' not in tickers:
-                                        try:
-                                            eth_ticker = exchange.fetch_ticker('ETH/USDT')
-                                            eth_price = eth_ticker.get('last', 0) or eth_ticker.get('close', 0) or 0
-                                            if eth_price:
-                                                tickers['ETH'] = float(eth_price)
-                                        except:
-                                            pass
-                                    if 'ETH' in tickers and tickers['ETH'] > 0:
-                                        tickers[currency] = float(price) * tickers['ETH']
-                                        break
                             except:
                                 continue  # Try next quote currency
                 
@@ -317,19 +290,29 @@ class BalanceService:
                     # No ticker found - will use CoinGecko fallback
                     tokens_needing_prices.append(currency)
             
-            # FALLBACK: Use CoinGecko for tokens without tickers
+            # FALLBACK: Use CoinGecko for tokens without tickers (with additional filtering)
             if tokens_needing_prices:
                 # Filter out fiat currencies (BRL, EUR, etc) - they shouldn't go to CoinGecko
                 fiat_currencies = ['BRL', 'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'ARS', 'MXN']
                 tokens_for_coingecko = [t for t in tokens_needing_prices if t not in fiat_currencies]
                 
-                if tokens_for_coingecko:
+                # ✅ OPTIMIZATION: Only fetch prices for tokens that have meaningful balance
+                tokens_for_coingecko_filtered = []
+                for token in tokens_for_coingecko:
+                    if token in currencies_with_balance:
+                        # Only fetch if balance * $0.01 (minimum expected price) >= $0.01
+                        if currencies_with_balance[token] * 0.01 >= 0.01:
+                            tokens_for_coingecko_filtered.append(token)
+                        else:
+                            logger.debug(f"Skipping CoinGecko for {token}: balance too low ({currencies_with_balance[token]})")
+                
+                if tokens_for_coingecko_filtered:
                     try:
-                        logger.info(f"Fetching prices from CoinGecko for {len(tokens_for_coingecko)} tokens: {tokens_for_coingecko}")
+                        logger.info(f"Fetching prices from CoinGecko for {len(tokens_for_coingecko_filtered)} tokens: {tokens_for_coingecko_filtered}")
                         price_feed = get_price_feed_service()
-                        coingecko_prices = price_feed.fetch_prices_batch(tokens_for_coingecko)
+                        coingecko_prices = price_feed.fetch_prices_batch(tokens_for_coingecko_filtered)
                         
-                        for currency in tokens_for_coingecko:
+                        for currency in tokens_for_coingecko_filtered:
                             if currency in coingecko_prices and currency in currencies_with_balance:
                                 cg_price = coingecko_prices[currency]
                                 amount = currencies_with_balance[currency]
@@ -401,7 +384,7 @@ class BalanceService:
                 'apiKey': decrypted['api_key'],
                 'secret': decrypted['api_secret'],
                 'enableRateLimit': True,
-                'timeout': 10000,  # 10 second timeout to prevent hanging
+                'timeout': 5000,  # ⚡ 5 second timeout for faster failures
                 'options': {'defaultType': 'spot'}
             }
             
@@ -433,18 +416,24 @@ class BalanceService:
             # Fetch balance and tickers for prices
             balance_data = exchange.fetch_balance()
             
-            # DEBUG: Log raw balance structure for Coinbase
+            # DEBUG: Log raw balance structure for Coinbase (with safe error handling)
             if exchange_info['ccxt_id'].lower() == 'coinbase':
-                logger.info(f"🔍 Coinbase raw balance keys: {list(balance_data.keys())[:10]}")
-                logger.info(f"🔍 Coinbase balance type: {type(balance_data)}")
-                if 'info' in balance_data:
-                    logger.info(f"🔍 Coinbase balance.info type: {type(balance_data['info'])}")
-                    if isinstance(balance_data['info'], dict):
-                        logger.info(f"🔍 Coinbase balance.info keys: {list(balance_data['info'].keys())[:10]}")
-                    elif isinstance(balance_data['info'], list):
-                        logger.info(f"🔍 Coinbase balance.info is a list with {len(balance_data['info'])} items")
-                        if len(balance_data['info']) > 0:
-                            logger.info(f"🔍 Coinbase balance.info[0] type: {type(balance_data['info'][0])}")
+                try:
+                    logger.info(f"🔍 Coinbase raw balance keys: {list(balance_data.keys())[:10] if balance_data else 'N/A'}")
+                    logger.info(f"🔍 Coinbase balance type: {type(balance_data)}")
+                    if 'info' in balance_data:
+                        logger.info(f"🔍 Coinbase balance.info type: {type(balance_data['info'])}")
+                        if isinstance(balance_data['info'], dict):
+                            logger.info(f"🔍 Coinbase balance.info keys: {list(balance_data['info'].keys())[:10]}")
+                        elif isinstance(balance_data['info'], list):
+                            info_length = len(balance_data['info'])
+                            logger.info(f"🔍 Coinbase balance.info is a list with {info_length} items")
+                            if info_length > 0:
+                                logger.info(f"🔍 Coinbase balance.info[0] type: {type(balance_data['info'][0])}")
+                            else:
+                                logger.warning(f"⚠️  Coinbase balance.info is an empty list")
+                except Exception as debug_error:
+                    logger.warning(f"⚠️  Error logging Coinbase debug info: {debug_error}")
             
             # DEBUG: Log raw balance structure for Bybit
             if exchange_info['ccxt_id'].lower() == 'bybit':
@@ -452,98 +441,111 @@ class BalanceService:
                 if 'info' in balance_data:
                     logger.debug(f"Bybit balance.info keys: {list(balance_data['info'].keys()) if isinstance(balance_data['info'], dict) else 'not a dict'}")
             
-            # Get list of currencies with balance > 0 first (optimization)
-            currencies_with_balance = set()
+            # Get list of currencies with balance > 0 first (optimization - ignore zero balances)
+            currencies_with_balance = {}
             for currency, amounts in balance_data.items():
                 if currency not in ['info', 'free', 'used', 'total', 'timestamp', 'datetime']:
                     if isinstance(amounts, dict):
                         total = float(amounts.get('total', 0))
-                        if total > 0:
-                            currencies_with_balance.add(currency)
+                        # ✅ OPTIMIZATION: Only process tokens with real balance (> 0.00)
+                        if total > 0.00:
+                            currencies_with_balance[currency] = total
                             # DEBUG: Log Bybit balances found
                             if exchange_info['ccxt_id'].lower() == 'bybit':
                                 logger.info(f"🔍 Bybit token found: {currency} = {total}")
             
-            logger.debug(f"{exchange_info['nome']}: Found {len(currencies_with_balance)} currencies with balance")
+            logger.debug(f"{exchange_info['nome']}: Found {len(currencies_with_balance)} currencies with balance > 0")
             
             # Fetch tickers to get current prices (OPTIMIZED - fetch only needed tickers)
             tickers = {}
             usd_brl_rate = None
             
             try:
-                # OPTIMIZATION: For ALL exchanges, only fetch tickers we need
-                # This drastically reduces API load and response time
-                
+                # ⚡ ULTRA-OPTIMIZATION: Fetch all tickers at once (batch) - MUCH FASTER!
                 if len(currencies_with_balance) > 0:
-                    logger.debug(f"{exchange_info['nome']}: Fetching only {len(currencies_with_balance)} needed tickers")
+                    logger.debug(f"{exchange_info['nome']}: Fetching tickers for {len(currencies_with_balance)} tokens")
                     
-                    for currency in currencies_with_balance:
-                        # Stablecoins don't need price lookup
+                    # Stablecoins don't need price lookup
+                    for currency in list(currencies_with_balance.keys()):
                         if currency in ['USDT', 'USDC', 'USD', 'BUSD']:
                             tickers[currency] = 1.0
-                            continue
+                    
+                    # ⚡ Try to fetch ALL tickers at once (much faster than individual calls)
+                    try:
+                        all_tickers = exchange.fetch_tickers()
+                        logger.debug(f"{exchange_info['nome']}: Fetched {len(all_tickers)} tickers in batch")
                         
-                        # Try common quote currencies in order of preference
-                        # NovaDAX: Try BRL first (it's a Brazilian exchange)
-                        if exchange_info.get('nome', '').lower() == 'novadax':
-                            quote_currencies = ['BRL', 'USDT', 'USDC', 'USD', 'BUSD', 'BTC', 'ETH']
-                        else:
-                            quote_currencies = ['USDT', 'USDC', 'USD', 'BUSD', 'BRL', 'BTC', 'ETH']
-                        
-                        for quote in quote_currencies:
-                            symbol = f"{currency}/{quote}"
-                            try:
-                                ticker = exchange.fetch_ticker(symbol)
-                                price = ticker.get('last', 0) or ticker.get('close', 0) or 0
-                                
-                                if not price:
+                        # Try to find prices for each currency in the batch
+                        for currency in list(currencies_with_balance.keys()):
+                            if currency in tickers:
+                                continue  # Already has price (stablecoin)
+                            
+                            # Try common quote currencies
+                            if exchange_info.get('nome', '').lower() == 'novadax':
+                                quote_currencies = ['BRL', 'USDT', 'USDC']
+                            else:
+                                quote_currencies = ['USDT', 'USDC', 'BRL']
+                            
+                            for quote in quote_currencies:
+                                symbol = f"{currency}/{quote}"
+                                if symbol in all_tickers:
+                                    ticker = all_tickers[symbol]
+                                    price = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                                    
+                                    if not price:
+                                        continue
+                                    
+                                    # Direct USD quotes
+                                    if quote in ['USDT', 'USDC', 'USD', 'BUSD']:
+                                        tickers[currency] = float(price)
+                                        break
+                                    
+                                    # BRL pairs - need conversion
+                                    elif quote == 'BRL':
+                                        if usd_brl_rate is None:
+                                            try:
+                                                price_feed = get_price_feed_service()
+                                                usd_brl_rate = price_feed.get_usd_brl_rate()
+                                            except:
+                                                usd_brl_rate = 5.5  # Fallback
+                                        tickers[currency] = float(price) / usd_brl_rate
+                                        break
+                    except Exception as batch_error:
+                        # Fallback: fetch individual tickers if batch fails
+                        logger.debug(f"{exchange_info['nome']}: Batch failed, using individual calls: {batch_error}")
+                        for currency in list(currencies_with_balance.keys()):
+                            if currency in tickers:
+                                continue
+                            
+                            # Only try USDT and BRL (faster)
+                            if exchange_info.get('nome', '').lower() == 'novadax':
+                                quote_currencies = ['BRL', 'USDT']
+                            else:
+                                quote_currencies = ['USDT', 'BRL']
+                            
+                            for quote in quote_currencies:
+                                symbol = f"{currency}/{quote}"
+                                try:
+                                    ticker = exchange.fetch_ticker(symbol)
+                                    price = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                                    
+                                    if not price:
+                                        continue
+                                    
+                                    if quote in ['USDT', 'USDC', 'USD', 'BUSD']:
+                                        tickers[currency] = float(price)
+                                        break
+                                    elif quote == 'BRL':
+                                        if usd_brl_rate is None:
+                                            try:
+                                                price_feed = get_price_feed_service()
+                                                usd_brl_rate = price_feed.get_usd_brl_rate()
+                                            except:
+                                                usd_brl_rate = 5.5
+                                        tickers[currency] = float(price) / usd_brl_rate
+                                        break
+                                except:
                                     continue
-                                
-                                # Direct USD quotes (USDT, USDC, USD, BUSD)
-                                if quote in ['USDT', 'USDC', 'USD', 'BUSD']:
-                                    tickers[currency] = float(price)
-                                    break
-                                
-                                # BRL pairs - need conversion to USD
-                                elif quote == 'BRL':
-                                    if usd_brl_rate is None:
-                                        try:
-                                            price_feed = get_price_feed_service()
-                                            usd_brl_rate = price_feed.get_usd_brl_rate()
-                                        except:
-                                            usd_brl_rate = 5.0  # Fallback rate
-                                    tickers[currency] = float(price) / usd_brl_rate
-                                    break
-                                
-                                # BTC pair - need BTC price in USD
-                                elif quote == 'BTC':
-                                    if 'BTC' not in tickers:
-                                        try:
-                                            btc_ticker = exchange.fetch_ticker('BTC/USDT')
-                                            btc_price = btc_ticker.get('last', 0) or btc_ticker.get('close', 0) or 0
-                                            if btc_price:
-                                                tickers['BTC'] = float(btc_price)
-                                        except:
-                                            pass
-                                    if 'BTC' in tickers and tickers['BTC'] > 0:
-                                        tickers[currency] = float(price) * tickers['BTC']
-                                        break
-                                
-                                # ETH pair - need ETH price in USD
-                                elif quote == 'ETH':
-                                    if 'ETH' not in tickers:
-                                        try:
-                                            eth_ticker = exchange.fetch_ticker('ETH/USDT')
-                                            eth_price = eth_ticker.get('last', 0) or eth_ticker.get('close', 0) or 0
-                                            if eth_price:
-                                                tickers['ETH'] = float(eth_price)
-                                        except:
-                                            pass
-                                    if 'ETH' in tickers and tickers['ETH'] > 0:
-                                        tickers[currency] = float(price) * tickers['ETH']
-                                        break
-                            except:
-                                continue  # Try next quote currency
                 
                 logger.debug(f"Fetched {len(tickers)} ticker prices from {exchange_info['nome']}")
                 
@@ -553,7 +555,7 @@ class BalanceService:
             # Collect all tokens that need prices (for CoinGecko fallback)
             tokens_needing_prices = []
             
-            # Process balances (only non-zero free + used)
+            # Process balances (ONLY non-zero balances - skip zero completely)
             processed_balances = {}
             total_usd = 0.0
             
@@ -566,7 +568,8 @@ class BalanceService:
                     used = float(amounts.get('used', 0))
                     total = float(amounts.get('total', 0))
                     
-                    if total > 0:
+                    # ✅ SKIP tokens with zero balance (no processing, no API calls, no CoinGecko)
+                    if total > 0.00:
                         # Get price from ticker
                         price_usd = 0.0
                         
@@ -614,20 +617,31 @@ class BalanceService:
                         
                         processed_balances[currency] = balance_data_entry
             
-            # FALLBACK: Use CoinGecko for tokens without prices
+            # FALLBACK: Use CoinGecko for tokens without prices (with additional filtering)
             if tokens_needing_prices:
                 # Filter out fiat currencies (BRL, EUR, etc) - they shouldn't go to CoinGecko
                 fiat_currencies = ['BRL', 'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'ARS', 'MXN']
                 tokens_for_coingecko = [t for t in tokens_needing_prices if t not in fiat_currencies]
                 
-                if tokens_for_coingecko:
+                # ✅ OPTIMIZATION: Only fetch prices for tokens that have meaningful balance
+                # Filter tokens where even if price is $0.01, value would be < $0.01
+                tokens_for_coingecko_filtered = []
+                for token in tokens_for_coingecko:
+                    if token in currencies_with_balance:
+                        # Only fetch if balance * $0.01 (minimum expected price) >= $0.01
+                        if currencies_with_balance[token] * 0.01 >= 0.01:
+                            tokens_for_coingecko_filtered.append(token)
+                        else:
+                            logger.debug(f"Skipping CoinGecko for {token}: balance too low ({currencies_with_balance[token]})")
+                
+                if tokens_for_coingecko_filtered:
                     try:
-                        logger.info(f"Fetching prices from CoinGecko for {len(tokens_for_coingecko)} tokens: {tokens_for_coingecko}")
+                        logger.info(f"Fetching prices from CoinGecko for {len(tokens_for_coingecko_filtered)} tokens: {tokens_for_coingecko_filtered}")
                         price_feed = get_price_feed_service()
-                        coingecko_prices = price_feed.fetch_prices_batch(tokens_for_coingecko)
+                        coingecko_prices = price_feed.fetch_prices_batch(tokens_for_coingecko_filtered)
                         
                         # Update balances with CoinGecko prices
-                        for currency in tokens_for_coingecko:
+                        for currency in tokens_for_coingecko_filtered:
                             if currency in processed_balances and currency in coingecko_prices:
                                 cg_price = coingecko_prices[currency]
                                 total_amount = processed_balances[currency]['total']
@@ -764,10 +778,10 @@ class BalanceService:
             for ex in self.db.exchanges.find({'_id': {'$in': exchange_ids}})
         }
         
-        # Fetch balances in parallel - OPTIMIZED: 20 workers, 30s timeout
+        # ⚡ ULTRA-PARALLEL: 30 workers, 15s global timeout - MAXIMUM SPEED!
         exchange_results = []
         
-        with ThreadPoolExecutor(max_workers=min(len(active_exchanges), 20)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(active_exchanges), 30)) as executor:
             futures = {
                 executor.submit(
                     self.fetch_single_exchange_balance,
@@ -778,22 +792,51 @@ class BalanceService:
                 for ex_data in active_exchanges
             }
             
-            for future in as_completed(futures, timeout=30):
-                try:
-                    result = future.result(timeout=15)  # 15s per exchange
-                    exchange_results.append(result)
-                except Exception as e:
-                    ex_data = futures[future]
-                    exchange_info = exchanges_info[ex_data['exchange_id']]
-                    exchange_results.append({
-                        'exchange_id': str(exchange_info['_id']),
-                        'exchange_name': exchange_info['nome'],
-                        'exchange_icon': exchange_info['icon'],
-                        'success': False,
-                        'error': f"Unexpected error: {str(e)}",
-                        'balances': {},
-                        'total_usd': 0.0
-                    })
+            # ⚡ Process completed futures with robust timeout handling
+            try:
+                for future in as_completed(futures, timeout=20):
+                    try:
+                        result = future.result(timeout=10)  # 10s per exchange
+                        exchange_results.append(result)
+                    except Exception as e:
+                        ex_data = futures[future]
+                        exchange_info = exchanges_info[ex_data['exchange_id']]
+                        logger.error(f"❌ {exchange_info['nome']}: Error - {str(e)}")
+                        exchange_results.append({
+                            'exchange_id': str(exchange_info['_id']),
+                            'exchange_name': exchange_info['nome'],
+                            'exchange_icon': exchange_info['icon'],
+                            'success': False,
+                            'error': f"Timeout or error: {str(e)[:50]}",
+                            'balances': {},
+                            'total_usd': 0.0
+                        })
+            except TimeoutError as timeout_error:
+                # Some futures didn't complete - add them as errors and continue
+                logger.warning(f"⚠️  Global timeout: Some exchanges didn't respond in 20s")
+                for future, ex_data in futures.items():
+                    if not future.done():
+                        exchange_info = exchanges_info[ex_data['exchange_id']]
+                        logger.error(f"❌ {exchange_info['nome']}: Global timeout")
+                        exchange_results.append({
+                            'exchange_id': str(exchange_info['_id']),
+                            'exchange_name': exchange_info['nome'],
+                            'exchange_icon': exchange_info['icon'],
+                            'success': False,
+                            'error': 'Request timeout (20s)',
+                            'balances': {},
+                            'total_usd': 0.0
+                        })
+                    elif future not in [f for f in as_completed([future], timeout=0)]:
+                        # Future completed but wasn't processed yet
+                        try:
+                            result = future.result(timeout=0)
+                            exchange_results.append(result)
+                        except:
+                            pass  # Already handled above
+            except Exception as e:
+                # Catch any other unexpected errors
+                logger.error(f"❌ Unexpected error in fetch_all_balances: {str(e)}")
         
         # Aggregate balances and prepare exchange summaries with tokens grouped
         exchanges_summary = []
@@ -811,6 +854,11 @@ class BalanceService:
                 # Use tokens directly from exchange_result (already sorted and formatted)
                 # Just remove internal fields (_value_raw, _price_raw) and rename 'total' to 'amount'
                 for currency, amounts in exchange_result['balances'].items():
+                    # ✅ FILTER: Skip tokens with value_usd = 0.00
+                    value_usd_str = amounts.get('value_usd', '0.00')
+                    if float(value_usd_str) <= 0.00:
+                        continue  # Skip tokens with zero or negative value
+                    
                     # Clean up and format: remove internal fields, rename total to amount
                     token_info = {}
                     for k, v in amounts.items():
@@ -1081,6 +1129,11 @@ class BalanceService:
         if result['success']:
             tokens = {}
             for currency, amounts in result['balances'].items():
+                # ✅ FILTER: Skip tokens with value_usd = 0.00
+                value_usd_str = amounts.get('value_usd', '0.00')
+                if float(value_usd_str) <= 0.00:
+                    continue  # Skip tokens with zero or negative value
+                
                 token_info = {}
                 for k, v in amounts.items():
                     if k.startswith('_'):

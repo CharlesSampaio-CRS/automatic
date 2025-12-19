@@ -1568,11 +1568,13 @@ def get_exchange_token_info(exchange_id, symbol):
     Query Parameters:
     - user_id: ID do usuário (opcional, para incluir dados do balanço)
     - quote: Moeda de cotação (USD ou USDT, padrão: USDT)
+    - include_variations: true para incluir variações 1h/4h (default: false, mais rápido)
     """
     try:
         symbol = symbol.upper()
         user_id = request.args.get('user_id')
         quote = request.args.get('quote', 'USDT').upper()
+        include_variations = request.args.get('include_variations', 'false').lower() == 'true'
         
         logger.debug(f"Fetching {symbol} info from exchange {exchange_id}")
         
@@ -1598,16 +1600,19 @@ def get_exchange_token_info(exchange_id, symbol):
                 'error': f'Exchange {ccxt_id} not supported by CCXT'
             }), 400
         
-        # Inicializar exchange
+        # Inicializar exchange com timeout (OTIMIZAÇÃO: Timeout de 3s)
         exchange_class = getattr(ccxt, ccxt_id)
-        exchange = exchange_class({'enableRateLimit': True})
+        exchange = exchange_class({
+            'enableRateLimit': True,
+            'timeout': 3000  # 3 segundos timeout
+        })
         
         # Carregar mercados
         exchange.load_markets()
         
-        # Tentar diferentes pares
+        # Tentar diferentes pares (incluindo BRL para exchanges brasileiras)
         pair = None
-        for q in [quote, 'USDT', 'USD', 'BTC']:
+        for q in [quote, 'USDT', 'USD', 'BRL', 'BTC']:
             test_pair = f"{symbol}/{q}"
             if test_pair in exchange.markets:
                 pair = test_pair
@@ -1623,30 +1628,65 @@ def get_exchange_token_info(exchange_id, symbol):
         
         logger.debug(f"Trading pair: {pair}")
         
-        # 1. Buscar ticker (preço atual, volume, high/low)
-        ticker = exchange.fetch_ticker(pair)
+        # OTIMIZAÇÃO: Paralelizar chamadas CCXT com ThreadPoolExecutor
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         
-        # 2. Buscar OHLCV para calcular variações
-        def calculate_price_change(timeframe, limit=2):
+        def fetch_ticker_data():
+            """Buscar ticker (preço atual, volume, high/low)"""
+            return exchange.fetch_ticker(pair)
+        
+        def fetch_ohlcv_data(timeframe):
+            """Buscar OHLCV para calcular variações"""
             try:
-                ohlcv = exchange.fetch_ohlcv(pair, timeframe, limit=limit)
+                ohlcv = exchange.fetch_ohlcv(pair, timeframe, limit=2)
                 if len(ohlcv) >= 2:
                     old_price = ohlcv[0][4]  # Close do período anterior
                     current_price = ohlcv[-1][4]  # Close atual
                     change = current_price - old_price
                     change_percent = (change / old_price * 100) if old_price > 0 else 0
                     return {
+                        'timeframe': timeframe,
                         'price_change': format_price(change),
                         'price_change_percent': format_percent(change_percent)
                     }
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Error fetching {timeframe} OHLCV: {e}")
             return None
         
-        ohlcv_1h = calculate_price_change('1h')
-        ohlcv_4h = calculate_price_change('4h')
-        ohlcv_24h = None
+        # Executar chamadas em paralelo
+        ticker = None
+        ohlcv_1h = None
+        ohlcv_4h = None
         
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {'ticker': executor.submit(fetch_ticker_data)}
+            
+            # Apenas buscar variações se solicitado (OTIMIZAÇÃO: Opcional)
+            if include_variations:
+                futures['ohlcv_1h'] = executor.submit(fetch_ohlcv_data, '1h')
+                futures['ohlcv_4h'] = executor.submit(fetch_ohlcv_data, '4h')
+            
+            # Coletar resultados com timeout de 4s total
+            for future_name, future in futures.items():
+                try:
+                    result = future.result(timeout=4)
+                    if future_name == 'ticker':
+                        ticker = result
+                    elif future_name == 'ohlcv_1h':
+                        ohlcv_1h = result
+                    elif future_name == 'ohlcv_4h':
+                        ohlcv_4h = result
+                except Exception as e:
+                    logger.warning(f"Error in {future_name}: {e}")
+        
+        if not ticker:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to fetch ticker data'
+            }), 500
+        
+        # Variação 24h vem do ticker (sempre disponível)
+        ohlcv_24h = None
         if ticker.get('percentage') is not None:
             ohlcv_24h = {
                 'price_change': format_price(ticker.get('change', 0)),
@@ -1681,40 +1721,38 @@ def get_exchange_token_info(exchange_id, symbol):
             if network:
                 contract_info['network'] = network
         
-        # 5. Buscar dados do balanço do usuário (se user_id fornecido)
+        # 5. Buscar dados do balanço do usuário do cache (OTIMIZAÇÃO: Apenas cache, sem refresh)
         user_balance = None
         if user_id:
-            user_doc = db.users.find_one({'user_id': user_id})
-            if user_doc and 'linked_exchanges' in user_doc:
-                for linked_ex in user_doc['linked_exchanges']:
-                    if str(linked_ex.get('exchange_id')) == exchange_id:
-                        # Buscar último balanço
-                        from src.services.balance_service import BalanceService
-                        balance_service = BalanceService()
-                        
-                        try:
-                            balances = balance_service.get_balances(user_id, force_refresh=False)
-                            for ex_balance in balances.get('exchanges', []):
-                                if str(ex_balance.get('exchange_id')) == exchange_id:
-                                    tokens = ex_balance.get('tokens', {})
-                                    if symbol in tokens:
-                                        token_data = tokens[symbol]
-                                        # Convert strings back to float if needed
-                                        amount_val = token_data.get('amount', 0)
-                                        if isinstance(amount_val, str):
-                                            amount_val = float(amount_val)
-                                        value_val = token_data.get('value_usd', 0)
-                                        if isinstance(value_val, str):
-                                            value_val = float(value_val)
-                                        
-                                        user_balance = {
-                                            'amount': format_price(amount_val),
-                                            'value_usd': format_usd(value_val),
-                                            'last_updated': balances.get('timestamp')
-                                        }
-                                    break
-                        except Exception as e:
-                            logger.warning(f"Could not fetch user balance: {e}")
+            try:
+                # Buscar apenas do cache MongoDB (muito mais rápido)
+                cached_balance = db.balance_cache.find_one(
+                    {'user_id': user_id},
+                    sort=[('timestamp', -1)]
+                )
+                
+                if cached_balance:
+                    for ex_balance in cached_balance.get('exchanges', []):
+                        if str(ex_balance.get('exchange_id')) == exchange_id:
+                            tokens = ex_balance.get('tokens', {})
+                            if symbol in tokens:
+                                token_data = tokens[symbol]
+                                # Convert strings back to float if needed
+                                amount_val = token_data.get('amount', 0)
+                                if isinstance(amount_val, str):
+                                    amount_val = float(amount_val)
+                                value_val = token_data.get('value_usd', 0)
+                                if isinstance(value_val, str):
+                                    value_val = float(value_val)
+                                
+                                user_balance = {
+                                    'amount': format_price(amount_val),
+                                    'value_usd': format_usd(value_val),
+                                    'last_updated': cached_balance.get('timestamp')
+                                }
+                            break
+            except Exception as e:
+                logger.warning(f"Could not fetch user balance from cache: {e}")
         
         # 6. Buscar ícone do token
         icon_url = None
