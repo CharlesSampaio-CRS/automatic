@@ -149,6 +149,143 @@ class BalanceService:
         
         return changes
     
+    def _mark_exchange_inactive(self, link: Dict, exchange_info: Dict, reason: str):
+        """
+        Mark exchange as inactive when credentials are missing or invalid
+        
+        Args:
+            link: User exchange link document (with exchange_id)
+            exchange_info: Exchange information document
+            reason: Reason for marking as inactive
+        """
+        try:
+            from datetime import datetime
+            
+            # Find user_id from link
+            user_doc = self.db.user_exchanges.find_one({
+                'exchanges.exchange_id': link['exchange_id']
+            })
+            
+            if not user_doc:
+                logger.warning(f"Could not find user for exchange {exchange_info['nome']} to mark inactive")
+                return
+            
+            user_id = user_doc['user_id']
+            
+            # Find exchange index in array
+            exchange_index = None
+            for i, ex in enumerate(user_doc['exchanges']):
+                if ex['exchange_id'] == link['exchange_id']:
+                    exchange_index = i
+                    break
+            
+            if exchange_index is not None:
+                # Mark as inactive
+                result = self.db.user_exchanges.update_one(
+                    {'user_id': user_id},
+                    {
+                        '$set': {
+                            f'exchanges.{exchange_index}.is_active': False,
+                            f'exchanges.{exchange_index}.inactive_at': datetime.utcnow(),
+                            f'exchanges.{exchange_index}.inactive_reason': reason
+                        }
+                    }
+                )
+                
+                if result.modified_count > 0:
+                    logger.warning(f"⚠️  {exchange_info['nome']}: Marked as inactive - {reason}")
+                        
+        except Exception as e:
+            logger.error(f"Error marking exchange as inactive: {e}")
+    
+    def _reactivate_exchange(self, link: Dict, exchange_info: Dict):
+        """
+        Reactivate exchange when connection is successful
+        Removes inactive_reason and inactive_at fields
+        
+        Args:
+            link: User exchange link document (with exchange_id)
+            exchange_info: Exchange information document
+        """
+        try:
+            # Only reactivate if it was previously inactive
+            if not link.get('is_active', True):
+                # Find user_id from link
+                user_doc = self.db.user_exchanges.find_one({
+                    'exchanges.exchange_id': link['exchange_id']
+                })
+                
+                if not user_doc:
+                    logger.warning(f"Could not find user for exchange {exchange_info['nome']} to reactivate")
+                    return
+                
+                user_id = user_doc['user_id']
+                
+                # Find exchange index in array
+                exchange_index = None
+                for i, ex in enumerate(user_doc['exchanges']):
+                    if ex['exchange_id'] == link['exchange_id']:
+                        exchange_index = i
+                        break
+                
+                if exchange_index is not None:
+                    # Reactivate and remove inactive fields
+                    result = self.db.user_exchanges.update_one(
+                        {'user_id': user_id},
+                        {
+                            '$set': {
+                                f'exchanges.{exchange_index}.is_active': True
+                            },
+                            '$unset': {
+                                f'exchanges.{exchange_index}.inactive_at': '',
+                                f'exchanges.{exchange_index}.inactive_reason': ''
+                            }
+                        }
+                    )
+                    
+                    if result.modified_count > 0:
+                        logger.info(f"✅ {exchange_info['nome']}: Reactivated - credentials are working again")
+                        
+        except Exception as e:
+            logger.error(f"Error reactivating exchange: {e}")
+    
+    def _auto_delete_exchange(self, link: Dict, exchange_info: Dict, reason: str):
+        """
+        Automatically DELETE exchange when credentials are invalid
+        
+        Args:
+            link: User exchange link document (with exchange_id)
+            exchange_info: Exchange information document
+            reason: Reason for deletion
+        """
+        try:
+            # Find user_id from link (we need to search for it)
+            user_doc = self.db.user_exchanges.find_one({
+                'exchanges.exchange_id': link['exchange_id']
+            })
+            
+            if not user_doc:
+                logger.warning(f"Could not find user for exchange {exchange_info['nome']} to delete")
+                return
+            
+            user_id = user_doc['user_id']
+            
+            # Delete exchange from array using $pull
+            result = self.db.user_exchanges.update_one(
+                {'user_id': user_id},
+                {
+                    '$pull': {
+                        'exchanges': {'exchange_id': link['exchange_id']}
+                    }
+                }
+            )
+            
+            if result.modified_count > 0:
+                logger.warning(f"🗑️  {exchange_info['nome']}: Auto-deleted - {reason}")
+                    
+        except Exception as e:
+            logger.error(f"Error auto-deleting exchange: {e}")
+    
     def fetch_exchange_total_only(self, link: Dict, exchange_info: Dict) -> Dict:
         """
         Fetch ONLY total balance from exchange (ultra-fast for listing)
@@ -173,12 +310,28 @@ class BalanceService:
         try:
             start_time = time.time()
             
-            # Decrypt credentials
+            # Decrypt credentials from database
             decrypted = self.encryption_service.decrypt_credentials({
                 'api_key': link['api_key_encrypted'],
                 'api_secret': link['api_secret_encrypted'],
                 'passphrase': link.get('passphrase_encrypted')
             })
+            
+            # ✅ COINBASE FIX: Convert literal \n to real newlines in PEM format
+            # Important: This MUST happen AFTER decryption and BEFORE using with CCXT
+            # Order: 1) Decrypt → 2) Fix PEM format → 3) Create exchange instance
+            if exchange_info['ccxt_id'].lower() == 'coinbase':
+                if decrypted.get('api_secret'):
+                    secret_before = decrypted['api_secret']
+                    literal_newline = '\\n'
+                    if literal_newline in secret_before:
+                        decrypted['api_secret'] = secret_before.replace(literal_newline, '\n')
+                        count = secret_before.count(literal_newline)
+                        logger.info(f"🔧 Coinbase: Converted {count} literal \\n to real newlines in PEM key (fetch_total)")
+                    else:
+                        logger.info(f"✅ Coinbase: PEM key already has real newlines (fetch_total)")
+                else:
+                    logger.warning(f"⚠️  Coinbase: No api_secret in decrypted credentials (fetch_total)")
             
             # Create exchange instance
             exchange_class = getattr(ccxt, exchange_info['ccxt_id'])
@@ -189,6 +342,11 @@ class BalanceService:
                 'timeout': 10000,
                 'options': {'defaultType': 'spot'}
             }
+            
+            # ✅ COINBASE specific configuration for Advanced Trade API
+            if exchange_info['ccxt_id'].lower() == 'coinbase':
+                config['timeout'] = 15000  # JWT signing requires more time
+                logger.debug(f"Coinbase: Advanced Trade API configuration applied (fetch_total)")
             
             # Bybit specific configuration
             if exchange_info['ccxt_id'].lower() == 'bybit':
@@ -365,18 +523,63 @@ class BalanceService:
             'error': None,
             'balances': {},
             'total_usd': 0.0,
-            'fetch_time': None
+            'fetch_time': None,
+            'credentials_status': None  # NEW: Indica status das credenciais
         }
         
         try:
             start_time = time.time()
             
-            # Decrypt credentials
+            # Check if credentials exist and are not empty
+            api_key_encrypted = link.get('api_key_encrypted', '').strip()
+            api_secret_encrypted = link.get('api_secret_encrypted', '').strip()
+            
+            missing_credentials = []
+            if not api_key_encrypted:
+                missing_credentials.append('api_key')
+            if not api_secret_encrypted:
+                missing_credentials.append('api_secret')
+            
+            if missing_credentials:
+                # Mark exchange as inactive due to missing credentials
+                self._mark_exchange_inactive(
+                    link, 
+                    exchange_info, 
+                    f"Missing credentials: {', '.join(missing_credentials)}"
+                )
+                
+                result['error'] = f"Missing credentials: {', '.join(missing_credentials)}"
+                result['credentials_status'] = {
+                    'valid': False,
+                    'missing_fields': missing_credentials,
+                    'action_required': 'update_credentials',
+                    'message': f'Please update {" and ".join(missing_credentials)} for {exchange_info["nome"]}'
+                }
+                logger.warning(f"⚠️  {exchange_info['nome']}: Missing credentials - {', '.join(missing_credentials)}")
+                return result
+            
+            # Decrypt credentials from database
             decrypted = self.encryption_service.decrypt_credentials({
-                'api_key': link['api_key_encrypted'],
-                'api_secret': link['api_secret_encrypted'],
+                'api_key': api_key_encrypted,
+                'api_secret': api_secret_encrypted,
                 'passphrase': link.get('passphrase_encrypted')
             })
+            
+            # ✅ COINBASE FIX: Convert literal \n to real newlines in PEM format
+            # Important: This MUST happen AFTER decryption and BEFORE using with CCXT
+            # Order: 1) Decrypt → 2) Fix PEM format → 3) Create exchange instance
+            if exchange_info['ccxt_id'].lower() == 'coinbase':
+                if decrypted.get('api_secret'):
+                    secret_before = decrypted['api_secret']
+                    literal_newline = '\\n'
+                    if literal_newline in secret_before:
+                        decrypted['api_secret'] = secret_before.replace(literal_newline, '\n')
+                        count = secret_before.count(literal_newline)
+                        logger.info(f"🔧 Coinbase: Converted {count} literal \\n to real newlines in PEM key")
+                    else:
+                        logger.info(f"✅ Coinbase: PEM key already has real newlines (no conversion needed)")
+                else:
+                    logger.warning(f"⚠️  Coinbase: No api_secret found in decrypted credentials")
             
             # Create exchange instance
             exchange_class = getattr(ccxt, exchange_info['ccxt_id'])
@@ -387,6 +590,16 @@ class BalanceService:
                 'timeout': 5000,  # ⚡ 5 second timeout for faster failures
                 'options': {'defaultType': 'spot'}
             }
+            
+            # ✅ COINBASE specific configuration for Advanced Trade API
+            if exchange_info['ccxt_id'].lower() == 'coinbase':
+                config['timeout'] = 15000  # JWT signing requires more time
+                logger.debug(f"Coinbase: Advanced Trade API configuration applied")
+            
+            
+            # OKX specific configuration - needs more time to load markets
+            if exchange_info['ccxt_id'].lower() == 'okx':
+                config['timeout'] = 15000  # 15 seconds for OKX (has many markets to load)
             
             # Bybit specific configuration for Unified Trading Account
             if exchange_info['ccxt_id'].lower() == 'bybit':
@@ -421,7 +634,7 @@ class BalanceService:
                 try:
                     logger.info(f"🔍 Coinbase raw balance keys: {list(balance_data.keys())[:10] if balance_data else 'N/A'}")
                     logger.info(f"🔍 Coinbase balance type: {type(balance_data)}")
-                    if 'info' in balance_data:
+                    if 'info' in balance_data and balance_data['info'] is not None:
                         logger.info(f"🔍 Coinbase balance.info type: {type(balance_data['info'])}")
                         if isinstance(balance_data['info'], dict):
                             logger.info(f"🔍 Coinbase balance.info keys: {list(balance_data['info'].keys())[:10]}")
@@ -432,6 +645,8 @@ class BalanceService:
                                 logger.info(f"🔍 Coinbase balance.info[0] type: {type(balance_data['info'][0])}")
                             else:
                                 logger.warning(f"⚠️  Coinbase balance.info is an empty list")
+                    else:
+                        logger.warning(f"⚠️  Coinbase balance.info is None or missing")
                 except Exception as debug_error:
                     logger.warning(f"⚠️  Error logging Coinbase debug info: {debug_error}")
             
@@ -490,15 +705,19 @@ class BalanceService:
                                 symbol = f"{currency}/{quote}"
                                 if symbol in all_tickers:
                                     ticker = all_tickers[symbol]
-                                    price = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                                    # ✅ FIX: Safely get price, handling None values
+                                    price = ticker.get('last') or ticker.get('close') or 0
                                     
-                                    if not price:
+                                    if not price or price == 0:
                                         continue
                                     
                                     # Direct USD quotes
                                     if quote in ['USDT', 'USDC', 'USD', 'BUSD']:
-                                        tickers[currency] = float(price)
-                                        break
+                                        try:
+                                            tickers[currency] = float(price)
+                                            break
+                                        except (TypeError, ValueError):
+                                            continue
                                     
                                     # BRL pairs - need conversion
                                     elif quote == 'BRL':
@@ -508,8 +727,11 @@ class BalanceService:
                                                 usd_brl_rate = price_feed.get_usd_brl_rate()
                                             except:
                                                 usd_brl_rate = 5.5  # Fallback
-                                        tickers[currency] = float(price) / usd_brl_rate
-                                        break
+                                        try:
+                                            tickers[currency] = float(price) / usd_brl_rate
+                                            break
+                                        except (TypeError, ValueError):
+                                            continue
                     except Exception as batch_error:
                         # Fallback: fetch individual tickers if batch fails
                         logger.debug(f"{exchange_info['nome']}: Batch failed, using individual calls: {batch_error}")
@@ -527,9 +749,10 @@ class BalanceService:
                                 symbol = f"{currency}/{quote}"
                                 try:
                                     ticker = exchange.fetch_ticker(symbol)
-                                    price = ticker.get('last', 0) or ticker.get('close', 0) or 0
+                                    # ✅ FIX: Safely get price, handling None values
+                                    price = ticker.get('last') or ticker.get('close') or 0
                                     
-                                    if not price:
+                                    if not price or price == 0:
                                         continue
                                     
                                     if quote in ['USDT', 'USDC', 'USD', 'BUSD']:
@@ -564,9 +787,14 @@ class BalanceService:
                     continue
                 
                 if isinstance(amounts, dict):
-                    free = float(amounts.get('free', 0))
-                    used = float(amounts.get('used', 0))
-                    total = float(amounts.get('total', 0))
+                    # ✅ FIX: Safely convert to float, handling None values
+                    try:
+                        free = float(amounts.get('free', 0) or 0)
+                        used = float(amounts.get('used', 0) or 0)
+                        total = float(amounts.get('total', 0) or 0)
+                    except (TypeError, ValueError) as e:
+                        logger.warning(f"⚠️  {exchange_info['nome']}: Invalid balance data for {currency}: {amounts}")
+                        continue
                     
                     # ✅ SKIP tokens with zero balance (no processing, no API calls, no CoinGecko)
                     if total > 0.00:
@@ -683,6 +911,9 @@ class BalanceService:
             
             fetch_time = time.time() - start_time
             
+            # ✅ Reactivate exchange if it was previously inactive (credentials are working now)
+            self._reactivate_exchange(link, exchange_info)
+            
             result.update({
                 'success': True,
                 'balances': processed_balances,
@@ -691,12 +922,49 @@ class BalanceService:
             })
             
         except ccxt.AuthenticationError as e:
-            result['error'] = f"Authentication failed: {str(e)}"
-            logger.error(f"❌ {exchange_info['nome']}: Authentication error - {str(e)}")
+            error_message = str(e)
+            result['error'] = f"Authentication failed: {error_message}"
+            result['credentials_status'] = {
+                'valid': False,
+                'missing_fields': ['api_key', 'api_secret'],  # Ambas precisam ser verificadas
+                'action_required': 'update_credentials',
+                'message': f'Invalid or expired credentials for {exchange_info["nome"]}. Please update your API key and secret.',
+                'error_details': error_message
+            }
+            logger.error(f"❌ {exchange_info['nome']}: Authentication error - {error_message}")
+            
+            # Mark exchange as inactive when API key is invalid/expired
+            self._mark_exchange_inactive(link, exchange_info, "Authentication failed - API key invalid or expired")
         except ccxt.ExchangeError as e:
             error_msg = str(e)
             result['error'] = f"Exchange error: {error_msg}"
             logger.error(f"❌ {exchange_info['nome']}: Exchange error - {error_msg}")
+        except IndexError as e:
+            # Coinbase JWT signature error - invalid credentials format
+            error_msg = "Invalid API credentials format. Please check your API key and secret."
+            if exchange_info['ccxt_id'].lower() == 'coinbase':
+                error_msg += " (Coinbase requires API key in specific format with private key in PEM format)"
+            result['error'] = error_msg
+            result['credentials_status'] = {
+                'valid': False,
+                'missing_fields': ['api_key', 'api_secret'],
+                'action_required': 'update_credentials',
+                'message': f'Invalid credentials format for {exchange_info["nome"]}. Please update your API key and secret.',
+                'error_details': error_msg
+            }
+            logger.error(f"❌ {exchange_info['nome']}: {error_msg}")
+            
+            # Mark exchange as inactive when credentials format is invalid
+            self._mark_exchange_inactive(link, exchange_info, f"Invalid credentials format - {error_msg}")
+        except TypeError as e:
+            error_msg = str(e)
+            # OKX parse_market error - CCXT library issue
+            if 'NoneType' in error_msg and exchange_info['ccxt_id'].lower() == 'okx':
+                result['error'] = "Exchange API returned invalid data. Please try again later or update CCXT library."
+                logger.error(f"❌ {exchange_info['nome']}: CCXT parsing error (possibly outdated library or API issue)")
+            else:
+                result['error'] = f"Type error: {error_msg}"
+                logger.error(f"❌ {exchange_info['nome']}: Type error - {error_msg}")
         except Exception as e:
             error_msg = str(e)
             
@@ -710,7 +978,7 @@ class BalanceService:
                 logger.error(f"❌ {exchange_info['nome']}: Unexpected error - {error_msg}")
                 # Log full traceback for debugging
                 import traceback
-                logger.debug(f"Full traceback for {exchange_info['nome']}: {traceback.format_exc()}")
+                logger.error(f"Full traceback for {exchange_info['nome']}: {traceback.format_exc()}")
         
         return result
     
@@ -754,10 +1022,11 @@ class BalanceService:
                 'timestamp': datetime.utcnow().isoformat()
             }
         
-        # Filter only active exchanges from the array
-        active_exchanges = [ex for ex in user_doc['exchanges'] if ex.get('is_active', True)]
+        # Try to connect to ALL exchanges (active and inactive)
+        # This allows automatic reactivation if credentials are fixed
+        all_exchanges = user_doc['exchanges']
         
-        if not active_exchanges:
+        if not all_exchanges:
             return {
                 'success': True,
                 'user_id': user_id,
@@ -771,8 +1040,8 @@ class BalanceService:
                 'timestamp': datetime.utcnow().isoformat()
             }
         
-        # Get exchange info for all active exchanges
-        exchange_ids = [ex['exchange_id'] for ex in active_exchanges]
+        # Get exchange info for all exchanges (active and inactive)
+        exchange_ids = [ex['exchange_id'] for ex in all_exchanges]
         exchanges_info = {
             ex['_id']: ex
             for ex in self.db.exchanges.find({'_id': {'$in': exchange_ids}})
@@ -781,7 +1050,7 @@ class BalanceService:
         # ⚡ ULTRA-PARALLEL: 30 workers, 15s global timeout - MAXIMUM SPEED!
         exchange_results = []
         
-        with ThreadPoolExecutor(max_workers=min(len(active_exchanges), 30)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(all_exchanges), 30)) as executor:
             futures = {
                 executor.submit(
                     self.fetch_single_exchange_balance,
@@ -789,7 +1058,7 @@ class BalanceService:
                     exchanges_info[ex_data['exchange_id']],
                     include_changes  # Pass include_changes parameter
                 ): ex_data
-                for ex_data in active_exchanges
+                for ex_data in all_exchanges
             }
             
             # ⚡ Process completed futures with robust timeout handling
@@ -882,6 +1151,10 @@ class BalanceService:
             
             if not exchange_result['success']:
                 exchange_summary['error'] = exchange_result.get('error')
+                
+            # Add credentials_status if present (for frontend to know if credentials need update)
+            if exchange_result.get('credentials_status'):
+                exchange_summary['credentials_status'] = exchange_result['credentials_status']
             
             exchanges_summary.append(exchange_summary)
         

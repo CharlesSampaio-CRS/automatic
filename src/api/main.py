@@ -616,6 +616,10 @@ def link_exchange():
                                     f'exchanges.{idx}.is_active': True,
                                     f'exchanges.{idx}.updated_at': datetime.utcnow(),
                                     'updated_at': datetime.utcnow()
+                                },
+                                '$unset': {
+                                    f'exchanges.{idx}.inactive_reason': '',
+                                    f'exchanges.{idx}.inactive_at': ''
                                 }
                             }
                         )
@@ -775,6 +779,20 @@ def get_linked_exchanges():
                     exchange_info['disconnected_at'] = ex_data['disconnected_at'].isoformat()
                 if 'reconnected_at' in ex_data:
                     exchange_info['reconnected_at'] = ex_data['reconnected_at'].isoformat()
+                
+                # Adiciona motivo da inativação e timestamp se exchange está inativa
+                if not is_active:
+                    if 'inactive_reason' in ex_data:
+                        exchange_info['inactive_reason'] = ex_data['inactive_reason']
+                    if 'inactive_at' in ex_data:
+                        exchange_info['inactive_at'] = ex_data['inactive_at'].isoformat()
+                    
+                    # Adiciona credentials_status para indicar que precisa atualizar credenciais
+                    exchange_info['credentials_status'] = {
+                        'valid': False,
+                        'action_required': 'update_credentials',
+                        'message': f'Please update your credentials for {exchange["nome"]}'
+                    }
                 
                 linked_exchanges.append(exchange_info)
         
