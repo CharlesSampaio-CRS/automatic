@@ -117,3 +117,52 @@ def get_encryption_service() -> EncryptionService:
     if _encryption_service is None:
         _encryption_service = EncryptionService()
     return _encryption_service
+
+
+# Helper functions for backward compatibility
+def encrypt_credentials(api_key: str, api_secret: str, passphrase: str = None) -> dict:
+    """
+    Helper function to encrypt credentials
+    
+    Args:
+        api_key: Exchange API key
+        api_secret: Exchange API secret
+        passphrase: Optional passphrase
+        
+    Returns:
+        Dictionary with encrypted credentials
+    """
+    service = get_encryption_service()
+    return service.encrypt_credentials(api_key, api_secret, passphrase)
+
+
+def decrypt_credentials(*args) -> dict:
+    """
+    Helper function to decrypt credentials (backward compatible)
+    
+    Can be called in two ways:
+    1. decrypt_credentials(encrypted_dict) - Returns dict with decrypted credentials
+    2. decrypt_credentials(api_key_enc, api_secret_enc) - Returns tuple (api_key, api_secret)
+    
+    Args:
+        *args: Either a dict or two strings
+        
+    Returns:
+        Dictionary with decrypted credentials or tuple
+    """
+    service = get_encryption_service()
+    
+    if len(args) == 1 and isinstance(args[0], dict):
+        # Dictionary mode
+        return service.decrypt_credentials(args[0])
+    elif len(args) >= 2:
+        # Individual strings mode (backward compatibility)
+        api_key_encrypted = args[0]
+        api_secret_encrypted = args[1]
+        
+        api_key = service.decrypt(api_key_encrypted)
+        api_secret = service.decrypt(api_secret_encrypted)
+        
+        return (api_key, api_secret)
+    else:
+        raise ValueError("decrypt_credentials requires either a dict or two strings")

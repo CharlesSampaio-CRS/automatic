@@ -1,13 +1,42 @@
-Flask==3.1.2
-flask-cors==6.0.2
-gunicorn==23.0.0
+# ============================================
+# FastAPI Dependencies (migrated from Flask)
+# ============================================
+
+# FastAPI framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Validation and settings
+pydantic==2.10.5
+pydantic-settings==2.7.1
+
+# MongoDB async driver
+motor==3.7.1
+
+# HTTP client async
+httpx==0.28.1
+
+# File I/O async
+aiofiles==24.1.0
+
+# Exchange integration (CCXT with async support)
 ccxt==4.4.33
-pymongo==4.15.5
-werkzeug==3.1.4
+
+# Security
+cryptography==46.0.3
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Scheduler
 apscheduler==3.11.1
 pytz==2025.2
-python-dotenv==1.0.0
-cryptography==46.0.3
-requests==2.32.3
-urllib3==2.6.2
+
+# Form data
+python-multipart==0.0.20
+
+# SSL certificates
 certifi==2025.11.12
+
+# CORS
+fastapi-cors==0.0.6

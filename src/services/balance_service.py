@@ -414,7 +414,13 @@ class BalanceService:
             exchange = exchange_class(config)
             
             # Fetch balance and tickers for prices
-            balance_data = exchange.fetch_balance()
+            try:
+                balance_data = exchange.fetch_balance()
+            except IndexError as e:
+                # Specific handling for Coinbase index errors
+                logger.error(f"❌ {exchange_info['nome']}: IndexError during fetch_balance - {str(e)}")
+                result['error'] = f"Index error fetching balance: {str(e)}"
+                return result
             
             # DEBUG: Log raw balance structure for Coinbase (with safe error handling)
             if exchange_info['ccxt_id'].lower() == 'coinbase':
@@ -564,9 +570,9 @@ class BalanceService:
                     continue
                 
                 if isinstance(amounts, dict):
-                    free = float(amounts.get('free', 0))
-                    used = float(amounts.get('used', 0))
-                    total = float(amounts.get('total', 0))
+                    free = float(amounts.get('free', 0) or 0)
+                    used = float(amounts.get('used', 0) or 0)
+                    total = float(amounts.get('total', 0) or 0)
                     
                     # ✅ SKIP tokens with zero balance (no processing, no API calls, no CoinGecko)
                     if total > 0.00:
@@ -585,7 +591,12 @@ class BalanceService:
                                     usd_brl_rate = 5.0
                             price_usd = 1.0 / usd_brl_rate
                         elif currency in tickers:
-                            price_usd = float(tickers[currency])
+                            ticker_price = tickers[currency]
+                            if ticker_price is not None:
+                                price_usd = float(ticker_price)
+                            else:
+                                # Ticker returned None - use CoinGecko fallback
+                                tokens_needing_prices.append(currency)
                         else:
                             # No ticker found - will use CoinGecko fallback
                             tokens_needing_prices.append(currency)
@@ -693,9 +704,14 @@ class BalanceService:
         except ccxt.AuthenticationError as e:
             result['error'] = f"Authentication failed: {str(e)}"
             logger.error(f"❌ {exchange_info['nome']}: Authentication error - {str(e)}")
+        except ccxt.NetworkError as e:
+            # Handle network errors (timeouts, connection refused, DNS errors, etc.)
+            error_msg = str(e)
+            result['error'] = f"Network error: Connection failed"
+            logger.error(f"❌ {exchange_info['nome']}: Network error - {error_msg}")
         except ccxt.ExchangeError as e:
             error_msg = str(e)
-            result['error'] = f"Exchange error: {error_msg}"
+            result['error'] = f"Exchange error: {error_msg[:100]}"
             logger.error(f"❌ {exchange_info['nome']}: Exchange error - {error_msg}")
         except Exception as e:
             error_msg = str(e)
@@ -706,7 +722,7 @@ class BalanceService:
                 logger.error(f"🌍 {exchange_info['nome']}: GEO-BLOCKED - Access denied from current region")
                 logger.info(f"💡 Solution: Set BYBIT_PROXY_URL in .env to use a proxy server")
             else:
-                result['error'] = f"Error: {error_msg}"
+                result['error'] = f"Error: {error_msg[:100]}"
                 logger.error(f"❌ {exchange_info['nome']}: Unexpected error - {error_msg}")
                 # Log full traceback for debugging
                 import traceback

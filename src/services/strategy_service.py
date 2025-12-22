@@ -23,6 +23,50 @@ from src.validators.strategy_rules_validator import StrategyRulesValidator
 logger = get_logger(__name__)
 
 
+# Strategy Templates (exportado para uso em routers)
+STRATEGY_TEMPLATES = {
+    "simple": {
+        "name": "Simple Strategy",
+        "description": "Estratégia básica com 1 take profit, stop loss fixo e sem DCA",
+        "risk_level": "low",
+        "recommended_for": "Iniciantes e traders conservadores",
+        "features": [
+            "1 nível de take profit (5%)",
+            "Stop loss fixo (2%)",
+            "Buy the dip (3%)",
+            "Sem trailing stop",
+            "Sem DCA"
+        ]
+    },
+    "conservative": {
+        "name": "Conservative Strategy",
+        "description": "Estratégia conservadora com proteção máxima e trailing stop",
+        "risk_level": "low-medium",
+        "recommended_for": "Traders que priorizam proteção de capital",
+        "features": [
+            "2 níveis de take profit (2% e 4%)",
+            "Trailing stop loss (1% com trailing 0.5%)",
+            "Buy the dip (2%)",
+            "Limites de perda diária ($200) e semanal ($500)",
+            "Cooldown entre trades (60min após venda)"
+        ]
+    },
+    "aggressive": {
+        "name": "Aggressive Strategy",
+        "description": "Estratégia agressiva com múltiplos take profits e DCA",
+        "risk_level": "high",
+        "recommended_for": "Traders experientes que buscam máximo lucro",
+        "features": [
+            "3 níveis de take profit (5%, 10%, 20%)",
+            "Trailing stop loss (3% com trailing 2%)",
+            "Buy the dip com DCA (5%, 8%)",
+            "Limites de perda diária ($1000) e semanal ($3000)",
+            "Cooldown rápido (15min após venda)"
+        ]
+    }
+}
+
+
 class StrategyService:
     """Service to manage trading strategies"""
     

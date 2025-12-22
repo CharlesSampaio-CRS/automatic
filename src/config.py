@@ -20,6 +20,11 @@ MONGODB_DATABASE = os.getenv('MONGODB_DATABASE', 'MultExchange')
 COLLECTION_EXCHANGES = 'exchanges'
 COLLECTION_USER_EXCHANGES = 'user_exchanges'
 COLLECTION_BALANCE_HISTORY = 'balance_history'
+COLLECTION_STRATEGIES = 'strategies'
+COLLECTION_ORDERS = 'orders'
+COLLECTION_POSITIONS = 'positions'
+COLLECTION_NOTIFICATIONS = 'notifications'
+COLLECTION_JOBS = 'jobs'
 
 
 # ============================================
@@ -31,18 +36,32 @@ BALANCE_CACHE_TTL = int(os.getenv('BALANCE_CACHE_TTL', '120'))
 # Price cache TTL in seconds (5 minutes)
 PRICE_CACHE_TTL = int(os.getenv('PRICE_CACHE_TTL', '300'))
 
+# Exchange info cache TTL in seconds (1 hour)
+EXCHANGE_INFO_CACHE_TTL = int(os.getenv('EXCHANGE_INFO_CACHE_TTL', '3600'))
+
+# Token info cache TTL in seconds (30 minutes)
+TOKEN_INFO_CACHE_TTL = int(os.getenv('TOKEN_INFO_CACHE_TTL', '1800'))
+
 
 # ============================================
-# API Configuration
+# FastAPI Configuration
 # ============================================
-# Flask server port
-API_PORT = int(os.getenv('PORT', '5000'))
+# API server port
+API_PORT = int(os.getenv('PORT', '8000'))
 
-# Flask debug mode
-API_DEBUG = os.getenv('FLASK_ENV', 'development') == 'development'
+# API debug mode
+API_DEBUG = os.getenv('ENV', 'development') == 'development'
 
 # API version
 API_VERSION = 'v1'
+API_PREFIX = f'/api/{API_VERSION}'
+
+# CORS origins (comma-separated in env)
+CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').split(',')
+
+# Rate limiting
+RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
+RATE_LIMIT_PER_HOUR = int(os.getenv('RATE_LIMIT_PER_HOUR', '1000'))
 
 
 # ============================================

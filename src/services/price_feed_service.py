@@ -204,6 +204,103 @@ class PriceFeedService:
         # No icon found
         return None
     
+    def get_token_info(self, exchange_id: str, symbol: str, user_id: str = None) -> dict:
+        """
+        Get detailed token information for a specific exchange
+        
+        Args:
+            exchange_id: Exchange CCXT ID (e.g., 'binance', 'bybit')
+            symbol: Token symbol (e.g., 'BTC', 'ETH')
+            user_id: Optional user ID for personalized data
+            
+        Returns:
+            Dictionary with token information including price, volume, icon, etc.
+        """
+        symbol = symbol.upper()
+        
+        try:
+            # Get price from CoinGecko
+            coingecko_id = self.get_coingecko_id(symbol)
+            
+            if not coingecko_id:
+                return {
+                    "error": f"Token {symbol} not found in supported tokens",
+                    "symbol": symbol,
+                    "supported": False
+                }
+            
+            # Fetch current price
+            cache_key = f"token_info_{symbol}"
+            is_cached, cached_data = _price_cache.get(cache_key)
+            
+            if is_cached:
+                return cached_data
+            
+            # Get detailed data from CoinGecko
+            url = f"{self.COINGECKO_API}/coins/{coingecko_id}"
+            params = {
+                'localization': 'false',
+                'tickers': 'false',
+                'market_data': 'true',
+                'community_data': 'false',
+                'developer_data': 'false',
+                'sparkline': 'false'
+            }
+            
+            response = self.session.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            market_data = data.get('market_data', {})
+            
+            token_info = {
+                "symbol": symbol,
+                "name": data.get('name', symbol),
+                "coingecko_id": coingecko_id,
+                "exchange_id": exchange_id,
+                "price_usd": market_data.get('current_price', {}).get('usd', 0.0),
+                "price_brl": market_data.get('current_price', {}).get('brl', 0.0),
+                "price_change_24h": market_data.get('price_change_percentage_24h', 0.0),
+                "price_change_7d": market_data.get('price_change_percentage_7d', 0.0),
+                "market_cap_usd": market_data.get('market_cap', {}).get('usd', 0.0),
+                "volume_24h_usd": market_data.get('total_volume', {}).get('usd', 0.0),
+                "circulating_supply": market_data.get('circulating_supply', 0.0),
+                "total_supply": market_data.get('total_supply', 0.0),
+                "ath_usd": market_data.get('ath', {}).get('usd', 0.0),
+                "ath_date": market_data.get('ath_date', {}).get('usd', None),
+                "atl_usd": market_data.get('atl', {}).get('usd', 0.0),
+                "atl_date": market_data.get('atl_date', {}).get('usd', None),
+                "icon": data.get('image', {}).get('large', None),
+                "categories": data.get('categories', []),
+                "description": data.get('description', {}).get('en', '')[:500],  # Limit description
+                "links": {
+                    "homepage": data.get('links', {}).get('homepage', [None])[0],
+                    "whitepaper": data.get('links', {}).get('whitepaper', None),
+                    "blockchain_site": data.get('links', {}).get('blockchain_site', []),
+                },
+                "supported": True,
+                "last_updated": datetime.utcnow().isoformat()
+            }
+            
+            # Cache for 5 minutes
+            _price_cache.set(cache_key, token_info)
+            
+            return token_info
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                return {
+                    "error": f"Token {symbol} not found on CoinGecko",
+                    "symbol": symbol,
+                    "supported": False
+                }
+            logger.error(f"HTTP error fetching token info for {symbol}: {e}")
+            return {"error": str(e), "symbol": symbol}
+            
+        except Exception as e:
+            logger.error(f"Error fetching token info for {symbol}: {e}")
+            return {"error": str(e), "symbol": symbol}
+    
     def fetch_prices_batch(self, tokens: List[str]) -> Dict[str, float]:
         """
         Fetch prices for multiple tokens in batch (more efficient)
