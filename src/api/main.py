@@ -4648,6 +4648,7 @@ def get_open_orders():
             if not hasattr(exchange, 'options'):
                 exchange.options = {}
             exchange.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
+            logger.debug(f"🔕 Binance warning suppressed: {exchange.options.get('warnOnFetchOpenOrdersWithoutSymbol')}")
         
         # Check if exchange supports fetching open orders
         if not exchange.has.get('fetchOpenOrders', False):
@@ -4664,6 +4665,7 @@ def get_open_orders():
             }), 200
         
         # Fetch open orders with timeout protection
+        logger.info(f"🔍 Fetching open orders from {exchange_info.get('nome')} (symbol: {symbol or 'all'})")
         try:
             if symbol:
                 open_orders = exchange.fetch_open_orders(symbol)
@@ -4726,7 +4728,34 @@ def get_open_orders():
             'message': 'Authentication failed - please check API credentials'
         }), 200
     except ccxt.ExchangeError as e:
-        logger.error(f"❌ Exchange error for {exchange_id}: {str(e)}")
+        error_msg = str(e)
+        
+        # Special case: Binance warning treated as error
+        if 'warnOnFetchOpenOrdersWithoutSymbol' in error_msg:
+            logger.warning(f"⚠️  Binance rate limit warning (non-blocking): {error_msg[:100]}...")
+            # Try to fetch anyway, this is just a warning
+            try:
+                if symbol:
+                    open_orders = exchange.fetch_open_orders(symbol)
+                else:
+                    open_orders = exchange.fetch_open_orders()
+                
+                response_data = {
+                    'success': True,
+                    'count': len(open_orders),
+                    'exchange': exchange_info.get('nome'),
+                    'exchange_id': exchange_id,
+                    'orders': open_orders,
+                    'from_cache': False,
+                    'cached_at': datetime.utcnow().isoformat()
+                }
+                
+                orders_cache.set(cache_key, response_data, ttl_seconds=30)
+                return jsonify(response_data), 200
+            except:
+                pass  # If retry fails, continue with graceful degradation below
+        
+        logger.error(f"❌ Exchange error for {exchange_id}: {error_msg}")
         # Return empty orders instead of error (graceful degradation)
         return jsonify({
             'success': True,
@@ -4735,7 +4764,7 @@ def get_open_orders():
             'orders': [],
             'from_cache': False,
             'exchange_error': True,
-            'message': f'Exchange error: {str(e)}'
+            'message': f'Exchange error: {error_msg}'
         }), 200
     except Exception as e:
         logger.error(f"❌ Unexpected error fetching open orders for {exchange_id}: {str(e)}")
