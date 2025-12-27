@@ -2847,6 +2847,8 @@ def invalidate_strategy_caches(user_id: str, strategy_id: str = None):
     logger.debug(f"Strategy cache invalidated for user {user_id}" + (f", strategy {strategy_id}" if strategy_id else ""))
 
 @app.route('/api/v1/strategies', methods=['POST'])
+@require_auth
+@require_params('user_id', 'exchange_id', 'token')
 def create_strategy():
     """
     Cria uma nova estratégia de trading para um token em uma exchange
@@ -2897,6 +2899,8 @@ def create_strategy():
     Returns:
         201: Estratégia criada
         400: Dados inválidos
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Erro interno
     
     Exemplos:
@@ -2926,15 +2930,14 @@ def create_strategy():
                 'error': 'Request body is required'
             }), 400
         
-        # Campos obrigatórios básicos
-        required_fields = ['user_id', 'exchange_id', 'token']
-        missing_fields = [field for field in required_fields if field not in data]
+        user_id = request.validated_params['user_id']
         
-        if missing_fields:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': f'Missing required fields: {", ".join(missing_fields)}'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         strategy_service = get_strategy_service(db)
         
@@ -2942,27 +2945,27 @@ def create_strategy():
         if 'template' in data:
             # Template Mode (RECOMENDADO)
             result = strategy_service.create_strategy(
-                user_id=data['user_id'],
-                exchange_id=data['exchange_id'],
-                token=data['token'],
+                user_id=request.validated_params['user_id'],
+                exchange_id=request.validated_params['exchange_id'],
+                token=request.validated_params['token'],
                 template=data['template'],
                 is_active=data.get('is_active', True)
             )
         elif 'rules' in data:
             # Custom Mode
             result = strategy_service.create_strategy(
-                user_id=data['user_id'],
-                exchange_id=data['exchange_id'],
-                token=data['token'],
+                user_id=request.validated_params['user_id'],
+                exchange_id=request.validated_params['exchange_id'],
+                token=request.validated_params['token'],
                 rules=data['rules'],
                 is_active=data.get('is_active', True)
             )
         elif 'take_profit_percent' in data:
             # Legacy Mode (DEPRECATED)
             result = strategy_service.create_strategy(
-                user_id=data['user_id'],
-                exchange_id=data['exchange_id'],
-                token=data['token'],
+                user_id=request.validated_params['user_id'],
+                exchange_id=request.validated_params['exchange_id'],
+                token=request.validated_params['token'],
                 take_profit_percent=data['take_profit_percent'],
                 stop_loss_percent=data['stop_loss_percent'],
                 buy_dip_percent=data.get('buy_dip_percent'),
@@ -2976,7 +2979,7 @@ def create_strategy():
         
         if result['success']:
             # Invalidate cache after creating strategy
-            invalidate_strategy_caches(data['user_id'])
+            invalidate_strategy_caches(user_id)
             return jsonify(result), 201
         else:
             return jsonify(result), 400
@@ -3052,6 +3055,7 @@ def update_strategy(strategy_id):
 
 
 @app.route('/api/v1/strategies/<strategy_id>', methods=['DELETE'])
+@require_auth
 def delete_strategy(strategy_id):
     """
     Deleta uma estratégia
@@ -3061,20 +3065,31 @@ def delete_strategy(strategy_id):
     
     Returns:
         200: Estratégia deletada
+        401: Token inválido ou ausente
+        403: Estratégia não pertence ao usuário autenticado
         404: Estratégia não encontrada
         500: Erro interno
     """
     try:
         strategy_service = get_strategy_service(db)
         
-        # Get strategy to find user_id for cache invalidation (before delete)
-        user_id_for_cache = None
-        try:
-            strategy = strategy_service.get_strategy(strategy_id)
-            if strategy:
-                user_id_for_cache = strategy.get('user_id')
-        except Exception as get_error:
-            logger.warning(f"Could not get strategy for cache invalidation: {get_error}")
+        # Get strategy to verify ownership
+        strategy = strategy_service.get_strategy(strategy_id)
+        
+        if not strategy:
+            return jsonify({
+                'success': False,
+                'error': 'Strategy not found'
+            }), 404
+        
+        # Verify that the strategy belongs to the authenticated user
+        if strategy.get('user_id') != request.user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Unauthorized: This strategy does not belong to you'
+            }), 403
+        
+        user_id_for_cache = strategy.get('user_id')
         
         result = strategy_service.delete_strategy(strategy_id)
         
@@ -3163,6 +3178,8 @@ def get_strategy(strategy_id):
 
 
 @app.route('/api/v1/strategies', methods=['GET'])
+@require_auth
+@require_params('user_id')
 def get_user_strategies():
     """
     Lista todas as estratégias de um usuário com filtros opcionais
@@ -3177,6 +3194,8 @@ def get_user_strategies():
     Returns:
         200: Lista de estratégias
         400: user_id não fornecido
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Erro interno
     
     Cache: 120 segundos (2 minutos)
@@ -3188,13 +3207,14 @@ def get_user_strategies():
         GET /api/v1/strategies?user_id=charles_test_user&force_refresh=true
     """
     try:
-        user_id = request.args.get('user_id')
+        user_id = request.validated_params['user_id']
         
-        if not user_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id is required as query parameter'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         exchange_id = request.args.get('exchange_id')
         token = request.args.get('token')
