@@ -4644,11 +4644,51 @@ def get_open_orders():
         if ccxt_id == 'binance':
             exchange.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
         
-        # Fetch open orders
-        if symbol:
-            open_orders = exchange.fetch_open_orders(symbol)
-        else:
-            open_orders = exchange.fetch_open_orders()
+        # Check if exchange supports fetching open orders
+        if not exchange.has.get('fetchOpenOrders', False):
+            logger.warning(f"⚠️  {exchange_info.get('nome')} does not support fetching open orders")
+            return jsonify({
+                'success': True,
+                'count': 0,
+                'exchange': exchange_info.get('nome'),
+                'exchange_id': exchange_id,
+                'orders': [],
+                'from_cache': False,
+                'not_supported': True,
+                'message': 'Exchange does not support fetching open orders'
+            }), 200
+        
+        # Fetch open orders with timeout protection
+        try:
+            if symbol:
+                open_orders = exchange.fetch_open_orders(symbol)
+            else:
+                open_orders = exchange.fetch_open_orders()
+        except ccxt.NotSupported as e:
+            logger.warning(f"⚠️  {exchange_info.get('nome')} does not support fetch_open_orders: {str(e)}")
+            return jsonify({
+                'success': True,
+                'count': 0,
+                'exchange': exchange_info.get('nome'),
+                'exchange_id': exchange_id,
+                'orders': [],
+                'from_cache': False,
+                'not_supported': True,
+                'message': f'Feature not supported: {str(e)}'
+            }), 200
+        except (ccxt.RequestTimeout, ccxt.NetworkError) as e:
+            logger.error(f"⚠️  Network/Timeout error for {exchange_info.get('nome')}: {str(e)}")
+            # Return empty orders instead of error (graceful degradation)
+            return jsonify({
+                'success': True,
+                'count': 0,
+                'exchange': exchange_info.get('nome'),
+                'exchange_id': exchange_id,
+                'orders': [],
+                'from_cache': False,
+                'network_error': True,
+                'message': 'Network error, will retry later'
+            }), 200
         
         logger.info(f"📋 Fetched {len(open_orders)} open orders from {exchange_info.get('nome')} for user {user_id}")
         
@@ -4669,28 +4709,43 @@ def get_open_orders():
         return jsonify(response_data), 200
         
     except ccxt.AuthenticationError as e:
-        logger.error(f"Authentication error: {str(e)}")
+        logger.error(f"❌ Authentication error for {exchange_id}: {str(e)}")
+        # Return empty orders with auth error flag (don't break the sync flow)
         return jsonify({
-            'success': False,
-            'error': 'Authentication failed',
-            'details': str(e)
-        }), 401
+            'success': True,  # Still "success" to not break frontend flow
+            'count': 0,
+            'exchange_id': exchange_id,
+            'orders': [],
+            'from_cache': False,
+            'auth_error': True,
+            'message': 'Authentication failed - please check API credentials'
+        }), 200
     except ccxt.ExchangeError as e:
-        logger.error(f"Exchange error: {str(e)}")
+        logger.error(f"❌ Exchange error for {exchange_id}: {str(e)}")
+        # Return empty orders instead of error (graceful degradation)
         return jsonify({
-            'success': False,
-            'error': 'Exchange API error',
-            'details': str(e)
-        }), 400
+            'success': True,
+            'count': 0,
+            'exchange_id': exchange_id,
+            'orders': [],
+            'from_cache': False,
+            'exchange_error': True,
+            'message': f'Exchange error: {str(e)}'
+        }), 200
     except Exception as e:
-        logger.error(f"Error fetching open orders: {str(e)}")
+        logger.error(f"❌ Unexpected error fetching open orders for {exchange_id}: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
+        # Return empty orders instead of 500 error (don't break frontend)
         return jsonify({
-            'success': False,
-            'error': 'Internal server error',
-            'details': str(e)
-        }), 500
+            'success': True,
+            'count': 0,
+            'exchange_id': exchange_id,
+            'orders': [],
+            'from_cache': False,
+            'error': True,
+            'message': 'Unexpected error - will retry later'
+        }), 200
 
 
 @app.route('/api/v1/orders/history', methods=['GET'])
