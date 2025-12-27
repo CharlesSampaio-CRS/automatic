@@ -13,7 +13,9 @@ from datetime import datetime
 
 # Import local modules
 from src.security.encryption import get_encryption_service
+from src.security.jwt_auth import require_auth, optional_auth
 from src.validators.exchange_validator import ExchangeValidator
+from src.validators.request_validator import require_params
 from src.services.balance_service import get_balance_service
 from src.services.balance_history_service import get_balance_history_service
 from src.services.strategy_service import get_strategy_service
@@ -711,6 +713,8 @@ def get_available_exchanges():
         }), 500
 
 @app.route('/api/v1/exchanges/link', methods=['POST'])
+@require_auth
+@require_params('user_id', 'exchange_id', 'api_key', 'api_secret')
 def link_exchange():
     """
     Vincula credenciais de uma exchange ao usuário
@@ -727,7 +731,8 @@ def link_exchange():
     Returns:
         201: Exchange vinculada com sucesso
         400: Dados inválidos
-        401: Credenciais inválidas ou sem permissão
+        401: Token inválido ou ausente / Credenciais inválidas ou sem permissão
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Erro interno
     """
     try:
@@ -740,20 +745,18 @@ def link_exchange():
                 'error': 'Request body is required'
             }), 400
         
-        # Campos obrigatórios
-        required_fields = ['user_id', 'exchange_id', 'api_key', 'api_secret']
-        missing_fields = [field for field in required_fields if not data.get(field)]
+        user_id = request.validated_params['user_id']
         
-        if missing_fields:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': f'Missing required fields: {", ".join(missing_fields)}'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
-        user_id = data['user_id']
-        exchange_id = data['exchange_id']
-        api_key = data['api_key'].strip()
-        api_secret = data['api_secret'].strip()
+        exchange_id = request.validated_params['exchange_id']
+        api_key = request.validated_params['api_key'].strip()
+        api_secret = request.validated_params['api_secret'].strip()
         passphrase = data.get('passphrase', '').strip() or None
         
         # Validar se a exchange existe
@@ -931,6 +934,8 @@ def link_exchange():
         }), 500
 
 @app.route('/api/v1/exchanges/linked', methods=['GET'])
+@require_auth
+@require_params('user_id')
 def get_linked_exchanges():
     """
     Lista exchanges vinculadas por um usuário (NOVA ESTRUTURA COM ARRAY)
@@ -944,18 +949,21 @@ def get_linked_exchanges():
     Returns:
         200: Lista de exchanges vinculadas com status (active/inactive)
         400: user_id não fornecido
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Erro ao buscar exchanges
     """
     try:
         from src.utils.cache import get_linked_exchanges_cache
         
-        user_id = request.args.get('user_id')
+        user_id = request.validated_params['user_id']
         
-        if not user_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id is required as query parameter'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Check cache
         force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
@@ -1515,6 +1523,8 @@ def connect_exchange():
 # ============================================
 
 @app.route('/api/v1/balances', methods=['GET'])
+@require_auth
+@require_params('user_id')
 def get_balances():
     """
     Busca saldos de todas as exchanges vinculadas ao usuário
@@ -1530,16 +1540,19 @@ def get_balances():
     Returns:
         200: Balances agregados
         400: user_id não fornecido
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Erro ao buscar balances
     """
     try:
-        user_id = request.args.get('user_id')
+        user_id = request.validated_params['user_id']
         
-        if not user_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id is required as query parameter'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Check if force refresh
         force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
@@ -1575,6 +1588,8 @@ def get_balances():
             'details': str(e)
         }), 500
 @app.route('/api/v1/balances/summary', methods=['GET'])
+@require_auth
+@require_params('user_id')
 def get_balances_summary():
     """
     🚀 FAST: Get only totals from all exchanges (no token details)
@@ -1587,16 +1602,19 @@ def get_balances_summary():
     Returns:
         200: Exchange summaries with totals only
         400: user_id não fornecido
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Erro ao buscar balances
     """
     try:
-        user_id = request.args.get('user_id')
+        user_id = request.validated_params['user_id']
         
-        if not user_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id is required as query parameter'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
         use_cache = not force_refresh
@@ -1621,6 +1639,8 @@ def get_balances_summary():
         }), 500
 
 @app.route('/api/v1/balances/exchange/<exchange_id>', methods=['GET'])
+@require_auth
+@require_params('user_id')
 def get_exchange_details(exchange_id):
     """
     📊 LAZY LOAD: Get detailed token list for ONE exchange
@@ -1636,17 +1656,20 @@ def get_exchange_details(exchange_id):
     Returns:
         200: Detailed token list for exchange
         400: user_id não fornecido
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         404: Exchange not found
         500: Erro ao buscar detalhes
     """
     try:
-        user_id = request.args.get('user_id')
+        user_id = request.validated_params['user_id']
         
-        if not user_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id is required as query parameter'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         include_changes = request.args.get('include_changes', 'false').lower() == 'true'
         
@@ -1673,6 +1696,7 @@ def get_exchange_details(exchange_id):
         }), 500
 
 @app.route('/api/v1/balances/clear-cache', methods=['POST'])
+@require_auth
 def clear_balance_cache():
     """
     Limpa o cache de balances
@@ -1684,11 +1708,12 @@ def clear_balance_cache():
     
     Returns:
         200: Cache cleared
+        401: Token inválido ou ausente
         500: Error clearing cache
     """
     try:
         data = request.get_json() or {}
-        user_id = data.get('user_id')
+        user_id = data.get('user_id', request.user_id)  # Use user_id from JWT if not provided
         
         balance_service = get_balance_service(db)
         balance_service.clear_cache(user_id)
@@ -1719,6 +1744,8 @@ def clear_balance_cache():
 # ============================================================================
 
 @app.route('/api/v1/orders/create', methods=['POST'])
+@require_auth
+@require_params('user_id', 'exchange_id', 'symbol', 'side', 'type', 'amount')
 def create_order():
     """
     Create a new trading order
@@ -1738,31 +1765,31 @@ def create_order():
     Returns:
         201: Order created successfully
         400: Invalid parameters or insufficient funds
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Internal server error
     """
     try:
         data = request.get_json()
+        user_id = request.validated_params['user_id']
         
-        # Validate required fields
-        required_fields = ['user_id', 'exchange_id', 'symbol', 'side', 'type', 'amount']
-        missing_fields = [field for field in required_fields if field not in data]
-        
-        if missing_fields:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': f'Missing required fields: {", ".join(missing_fields)}'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Create order
         dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
         order_service = get_order_execution_service(db, dry_run=dry_run)
         result = order_service.create_order(
-            user_id=data['user_id'],
-            exchange_id=data['exchange_id'],
-            symbol=data['symbol'],
-            side=data['side'],
-            order_type=data['type'],
-            amount=float(data['amount']),
+            user_id=request.validated_params['user_id'],
+            exchange_id=request.validated_params['exchange_id'],
+            symbol=request.validated_params['symbol'],
+            side=request.validated_params['side'],
+            order_type=request.validated_params['type'],
+            amount=float(request.validated_params['amount']),
             price=float(data['price']) if data.get('price') else None,
             params=data.get('params', {})
         )
@@ -4758,6 +4785,8 @@ def check_token_balance(exchange_id, token):
 
 
 @app.route('/api/v1/orders/open', methods=['GET'])
+@require_auth
+@require_params('user_id', 'exchange_id')
 def get_open_orders():
     """
     Consulta ordens abertas diretamente na exchange via CCXT
@@ -4773,6 +4802,8 @@ def get_open_orders():
     Returns:
         200: Lista de ordens abertas
         400: Parâmetros inválidos
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         429: Too many requests (rate limit)
         500: Erro interno
         
@@ -4780,15 +4811,16 @@ def get_open_orders():
         - ~1-3s (depende da exchange, sempre busca dados frescos)
     """
     try:
-        user_id = request.args.get('user_id')
-        exchange_id = request.args.get('exchange_id')
+        user_id = request.validated_params['user_id']
+        exchange_id = request.validated_params['exchange_id']
         symbol = request.args.get('symbol')
         
-        if not user_id or not exchange_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id and exchange_id are required'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # 🛡️  RATE LIMIT: Evita chamadas excessivas (máx 1 por segundo por user+exchange)
         rate_limit_key = f"rate_limit:open_orders:{user_id}:{exchange_id}"

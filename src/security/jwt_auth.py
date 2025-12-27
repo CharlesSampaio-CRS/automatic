@@ -19,7 +19,7 @@ from flask import request, jsonify
 from typing import Dict, Optional, Tuple
 
 # Secret key para assinar tokens (em produção, usar variável de ambiente)
-JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key-change-in-production')
+JWT_SECRET = os.getenv('JWT_SECRET', 'nQv?J/&dNnB*qni@@KonG')
 JWT_ALGORITHM = 'HS256'
 JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)  # Token expira em 24h
 JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)  # Refresh expira em 30 dias
