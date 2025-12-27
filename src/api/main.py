@@ -321,6 +321,241 @@ def index():
 
 
 # ============================================
+# AUTHENTICATION ENDPOINTS (JWT)
+# ============================================
+
+from src.security.jwt_auth import (
+    generate_access_token,
+    generate_refresh_token,
+    verify_token,
+    require_auth
+)
+
+@app.route('/api/v1/auth/login', methods=['POST'])
+def login():
+    """
+    🔐 Login com OAuth (Google ou Apple)
+    
+    Request Body:
+        {
+            "provider": "google" | "apple",
+            "id_token": "string",  // Token OAuth do provedor
+            "email": "string",
+            "name": "string",
+            "picture": "string" (optional)
+        }
+    
+    Returns:
+        200: {
+            "success": true,
+            "access_token": "jwt_token",
+            "refresh_token": "jwt_refresh_token",
+            "user": {
+                "id": "user_id",
+                "email": "email",
+                "name": "name",
+                "provider": "google|apple"
+            }
+        }
+        400: Dados inválidos
+        500: Erro interno
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        provider = data.get('provider')
+        email = data.get('email')
+        name = data.get('name')
+        
+        # Validações
+        if not provider or provider not in ['google', 'apple']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid provider. Must be "google" or "apple"'
+            }), 400
+        
+        if not email or not name:
+            return jsonify({
+                'success': False,
+                'error': 'Email and name are required'
+            }), 400
+        
+        # TODO: Verificar id_token com Google/Apple (em produção)
+        # Por enquanto, aceita qualquer token para desenvolvimento
+        
+        # Busca ou cria usuário no MongoDB
+        users_collection = db.users
+        user = users_collection.find_one({'email': email})
+        
+        if not user:
+            # Cria novo usuário
+            user_id = f"{provider}_{email.split('@')[0]}_{datetime.utcnow().timestamp()}"
+            user_doc = {
+                'user_id': user_id,
+                'email': email,
+                'name': name,
+                'picture': data.get('picture'),
+                'provider': provider,
+                'created_at': datetime.utcnow(),
+                'last_login': datetime.utcnow()
+            }
+            users_collection.insert_one(user_doc)
+            user = user_doc
+        else:
+            # Atualiza last_login
+            user_id = user['user_id']
+            users_collection.update_one(
+                {'_id': user['_id']},
+                {'$set': {'last_login': datetime.utcnow()}}
+            )
+        
+        # Gera tokens JWT
+        access_token = generate_access_token(user_id, email, provider)
+        refresh_token = generate_refresh_token(user_id)
+        
+        return jsonify({
+            'success': True,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': {
+                'id': user_id,
+                'email': email,
+                'name': name,
+                'picture': user.get('picture'),
+                'provider': provider
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in login: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/auth/refresh', methods=['POST'])
+def refresh_token_endpoint():
+    """
+    🔄 Renova access token usando refresh token
+    
+    Request Body:
+        {
+            "refresh_token": "jwt_refresh_token"
+        }
+    
+    Returns:
+        200: {
+            "success": true,
+            "access_token": "new_jwt_token"
+        }
+        401: Token inválido ou expirado
+        500: Erro interno
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'refresh_token' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Refresh token is required'
+            }), 400
+        
+        refresh_token = data['refresh_token']
+        
+        # Verifica refresh token
+        is_valid, payload, error = verify_token(refresh_token)
+        
+        if not is_valid:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid refresh token',
+                'message': error
+            }), 401
+        
+        # Verifica se é refresh token
+        if payload.get('type') != 'refresh':
+            return jsonify({
+                'success': False,
+                'error': 'Invalid token type',
+                'message': 'Must be a refresh token'
+            }), 401
+        
+        user_id = payload['user_id']
+        
+        # Busca usuário para pegar email e provider
+        users_collection = db.users
+        user = users_collection.find_one({'user_id': user_id})
+        
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'User not found'
+            }), 404
+        
+        # Gera novo access token
+        new_access_token = generate_access_token(
+            user_id,
+            user['email'],
+            user.get('provider', 'email')
+        )
+        
+        return jsonify({
+            'success': True,
+            'access_token': new_access_token
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error refreshing token: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/auth/verify', methods=['GET'])
+@require_auth
+def verify_token_endpoint():
+    """
+    ✅ Verifica se token JWT é válido
+    
+    Headers:
+        Authorization: Bearer <jwt_token>
+    
+    Returns:
+        200: {
+            "success": true,
+            "user_id": "user_id",
+            "email": "email",
+            "provider": "google|apple"
+        }
+        401: Token inválido ou expirado
+    """
+    try:
+        # Se chegou aqui, token é válido (decorador @require_auth)
+        return jsonify({
+            'success': True,
+            'user_id': request.user_id,
+            'email': request.user_email,
+            'provider': request.auth_provider
+        }), 200
+    except Exception as e:
+        logger.error(f"Error verifying token: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
+
+# ============================================
 # SCHEDULER STATUS ENDPOINT
 # ============================================
 

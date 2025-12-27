@@ -11,3 +11,4 @@ cryptography==46.0.3
 requests==2.32.3
 urllib3==2.6.2
 certifi==2025.11.12
+PyJWT==2.8.0
