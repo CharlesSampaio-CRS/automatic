@@ -437,6 +437,171 @@ class OrderExecutionService:
                 'success': False,
                 'error': str(e)
             }
+    
+    def cancel_order(
+        self,
+        user_id: str,
+        order_id: str,
+        exchange_id: Optional[str] = None,
+        symbol: Optional[str] = None
+    ) -> Dict:
+        """
+        Cancel an open order
+        
+        Args:
+            user_id: User ID
+            order_id: Order ID to cancel
+            exchange_id: (Optional) Exchange ID for faster lookup
+            symbol: (Optional) Trading pair symbol (e.g., "PEPE/USDT") for faster cancellation
+            
+        Returns:
+            Dict with success status and order details
+        """
+        try:
+            from bson import ObjectId
+            user_doc = self.db.user_exchanges.find_one({'user_id': user_id})
+            
+            if not user_doc or 'exchanges' not in user_doc:
+                raise Exception(f"User {user_id} has no linked exchanges")
+            
+            # If exchange_id and symbol provided, use direct cancellation (FAST PATH)
+            if exchange_id and symbol:
+                logger.info(f"🎯 Fast cancel: {order_id} on {symbol}")
+                
+                # DRY-RUN mode
+                if self.dry_run:
+                    logger.info(f"🔴 [DRY-RUN] Would cancel order: {order_id} ({symbol})")
+                    return {
+                        'success': True,
+                        'dry_run': True,
+                        'order': {
+                            'id': order_id,
+                            'symbol': symbol,
+                            'status': 'simulated_cancel',
+                            'timestamp': datetime.now().isoformat()
+                        }
+                    }
+                
+                # Get exchange instance
+                exchange = self._get_exchange_instance(user_id, exchange_id)
+                
+                if not hasattr(exchange, 'cancel_order'):
+                    raise Exception(f"Exchange does not support order cancellation")
+                
+                # Cancel directly
+                logger.info(f"🔴 Canceling order: {order_id} ({symbol})")
+                canceled_order = exchange.cancel_order(order_id, symbol)
+                
+                return {
+                    'success': True,
+                    'dry_run': False,
+                    'order': {
+                        'id': canceled_order.get('id', order_id),
+                        'symbol': canceled_order.get('symbol', symbol),
+                        'status': canceled_order.get('status', 'canceled'),
+                        'timestamp': canceled_order.get('timestamp'),
+                        'info': canceled_order.get('info')
+                    }
+                }
+            
+            # SLOW PATH: Search for the order across all exchanges
+            logger.info(f"🔍 Searching for order {order_id} across all exchanges...")
+            order_found = None
+            found_exchange_id = None
+            found_symbol = None
+            
+            for ex in user_doc['exchanges']:
+                if not ex.get('is_active', True):
+                    continue
+                
+                # If exchange_id provided, skip others
+                if exchange_id and str(ex['exchange_id']) != exchange_id:
+                    continue
+                    
+                try:
+                    exchange = self._get_exchange_instance(user_id, str(ex['exchange_id']))
+                    
+                    # Try fetching open orders with symbol if provided
+                    if hasattr(exchange, 'fetch_open_orders'):
+                        try:
+                            open_orders = exchange.fetch_open_orders(symbol) if symbol else exchange.fetch_open_orders()
+                            for order in open_orders:
+                                if str(order.get('id')) == str(order_id):
+                                    order_found = order
+                                    found_exchange_id = str(ex['exchange_id'])
+                                    found_symbol = order.get('symbol')
+                                    break
+                            if order_found:
+                                break
+                        except Exception as e:
+                            logger.debug(f"Could not fetch open orders: {e}")
+                            continue
+                    
+                    # Try to fetch the order directly
+                    if hasattr(exchange, 'fetch_order'):
+                        try:
+                            order_info = exchange.fetch_order(order_id, symbol)
+                            if order_info:
+                                order_found = order_info
+                                found_exchange_id = str(ex['exchange_id'])
+                                found_symbol = order_info.get('symbol')
+                                break
+                        except Exception as e:
+                            logger.debug(f"Could not fetch order: {e}")
+                            continue
+                            
+                except Exception as e:
+                    logger.debug(f"Could not check exchange {ex.get('exchange_id')}: {e}")
+                    continue
+            
+            if not order_found or not found_exchange_id or not found_symbol:
+                return {
+                    'success': False,
+                    'error': f'Order {order_id} not found in any exchange'
+                }
+            
+            # DRY-RUN mode
+            if self.dry_run:
+                logger.info(f"🔴 [DRY-RUN] Would cancel order: {order_id} ({found_symbol})")
+                return {
+                    'success': True,
+                    'dry_run': True,
+                    'order': {
+                        'id': order_id,
+                        'symbol': found_symbol,
+                        'status': 'simulated_cancel',
+                        'timestamp': datetime.now().isoformat()
+                    }
+                }
+            
+            # Cancel the order
+            exchange = self._get_exchange_instance(user_id, found_exchange_id)
+            
+            if not hasattr(exchange, 'cancel_order'):
+                raise Exception(f"Exchange does not support order cancellation")
+            
+            logger.info(f"🔴 Canceling order: {order_id} ({found_symbol})")
+            canceled_order = exchange.cancel_order(order_id, found_symbol)
+            
+            return {
+                'success': True,
+                'dry_run': False,
+                'order': {
+                    'id': canceled_order.get('id', order_id),
+                    'symbol': canceled_order.get('symbol', found_symbol),
+                    'status': canceled_order.get('status', 'canceled'),
+                    'timestamp': canceled_order.get('timestamp'),
+                    'original_order': order_found
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error canceling order: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
 
 
 def get_order_execution_service(db, dry_run: bool = False):

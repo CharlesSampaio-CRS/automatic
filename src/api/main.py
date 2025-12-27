@@ -23,6 +23,7 @@ from src.services.notification_service import get_notification_service
 from src.services.strategy_worker import get_strategy_worker
 from src.utils.formatting import format_price, format_usd, format_percent
 from src.utils.logger import get_logger
+from src.utils.cache import get_orders_cache, get_ccxt_instances_cache
 from src.config import MONGODB_URI, MONGODB_DATABASE, API_PORT
 
 # Scheduler imports
@@ -1476,6 +1477,605 @@ def clear_balance_cache():
             'error': 'Internal server error',
             'details': str(e)
         }), 500
+
+
+# ============================================================================
+# TRADING ENDPOINTS - Order Management
+# ============================================================================
+
+@app.route('/api/v1/orders/create', methods=['POST'])
+def create_order():
+    """
+    Create a new trading order
+    
+    Request Body:
+        {
+            "user_id": "string",
+            "exchange_id": "string",
+            "symbol": "BTC/USDT",
+            "side": "buy" | "sell",
+            "type": "market" | "limit" | "stop_loss" | "stop_limit" | "take_profit",
+            "amount": 0.001,
+            "price": 50000.0,  // Optional for market orders
+            "params": {}  // Optional additional parameters
+        }
+    
+    Returns:
+        201: Order created successfully
+        400: Invalid parameters or insufficient funds
+        500: Internal server error
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['user_id', 'exchange_id', 'symbol', 'side', 'type', 'amount']
+        missing_fields = [field for field in required_fields if field not in data]
+        
+        if missing_fields:
+            return jsonify({
+                'success': False,
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }), 400
+        
+        # Create order
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        order_service = get_order_execution_service(db, dry_run=dry_run)
+        result = order_service.create_order(
+            user_id=data['user_id'],
+            exchange_id=data['exchange_id'],
+            symbol=data['symbol'],
+            side=data['side'],
+            order_type=data['type'],
+            amount=float(data['amount']),
+            price=float(data['price']) if data.get('price') else None,
+            params=data.get('params', {})
+        )
+        
+        if result['success']:
+            logger.info(f"✅ Order created: {result['order_id']} - {data['symbol']} {data['side']} {data['amount']}")
+            return jsonify(result), 201
+        else:
+            logger.warning(f"⚠️  Order creation failed: {result.get('error')}")
+            return jsonify(result), 400
+            
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid number format: {str(e)}'
+        }), 400
+    except Exception as e:
+        logger.error(f"Error creating order: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/orders/cancel', methods=['POST'])
+def cancel_order():
+    """
+    Cancel an existing order
+    
+    Request Body:
+        {
+            "user_id": "string",
+            "order_id": "string",
+            "exchange_id": "string" (optional, recommended for faster cancellation),
+            "symbol": "string" (optional, e.g. "PEPE/USDT", recommended for faster cancellation)
+        }
+    
+    Returns:
+        200: Order canceled successfully
+        400: Order not found or already canceled
+        500: Internal server error
+    """
+    try:
+        data = request.get_json()
+        
+        if 'user_id' not in data or 'order_id' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields: user_id, order_id'
+            }), 400
+        
+        # Get order execution service (use env var for dry_run)
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        order_service = get_order_execution_service(db, dry_run=dry_run)
+        result = order_service.cancel_order(
+            user_id=data['user_id'],
+            order_id=data['order_id'],
+            exchange_id=data.get('exchange_id'),
+            symbol=data.get('symbol')
+        )
+        
+        if result['success']:
+            logger.info(f"✅ Order canceled: {data['order_id']}")
+            return jsonify(result), 200
+        else:
+            logger.warning(f"⚠️  Order cancellation failed: {result.get('error')}")
+            return jsonify(result), 400
+            
+    except Exception as e:
+        logger.error(f"Error canceling order: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/orders/cancel-all', methods=['POST'])
+def cancel_all_orders():
+    """
+    Cancel all open orders for a user on a specific exchange
+    
+    Request Body:
+        {
+            "user_id": "string" (required),
+            "exchange_id": "string" (required),
+            "symbol": "string" (optional, e.g. "PEPE/USDT" - cancel only for this pair)
+        }
+    
+    Returns:
+        200: All orders canceled successfully
+        400: Invalid request
+        500: Internal server error
+    """
+    try:
+        data = request.get_json()
+        
+        if 'user_id' not in data or 'exchange_id' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields: user_id, exchange_id'
+            }), 400
+        
+        user_id = data['user_id']
+        exchange_id = data['exchange_id']
+        symbol = data.get('symbol')
+        
+        # Get user exchange credentials
+        user_exchange = db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_exchange or 'exchanges' not in user_exchange:
+            return jsonify({
+                'success': False,
+                'error': 'User has no linked exchanges'
+            }), 404
+        
+        # Find specific exchange
+        user_ex = None
+        for ex in user_exchange['exchanges']:
+            if str(ex['exchange_id']) == exchange_id:
+                user_ex = ex
+                break
+        
+        if not user_ex:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found for this user'
+            }), 404
+        
+        # Get exchange info
+        exchange_info = db.exchanges.find_one({'_id': ObjectId(exchange_id)})
+        
+        if not exchange_info:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found in database'
+            }), 404
+        
+        ccxt_id = exchange_info.get('ccxt_id', '').lower()
+        
+        # Decrypt credentials
+        encryption_service = get_encryption_service()
+        decrypted = encryption_service.decrypt_credentials({
+            'api_key': user_ex['api_key_encrypted'],
+            'api_secret': user_ex['api_secret_encrypted'],
+            'passphrase': user_ex.get('passphrase_encrypted')
+        })
+        
+        # Create CCXT exchange instance
+        exchange_class = getattr(ccxt, ccxt_id)
+        exchange = exchange_class({
+            'apiKey': decrypted['api_key'],
+            'secret': decrypted['api_secret'],
+            'password': decrypted.get('passphrase'),
+            'enableRateLimit': True
+        })
+        
+        # Suppress Binance warning
+        if ccxt_id == 'binance':
+            exchange.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
+        
+        # Check if DRY-RUN mode
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        
+        # Fetch open orders
+        if symbol:
+            open_orders = exchange.fetch_open_orders(symbol)
+        else:
+            open_orders = exchange.fetch_open_orders()
+        
+        if not open_orders:
+            return jsonify({
+                'success': True,
+                'message': 'No open orders to cancel',
+                'canceled_count': 0,
+                'orders': []
+            }), 200
+        
+        # DRY-RUN mode
+        if dry_run:
+            logger.info(f"🔴 [DRY-RUN] Would cancel {len(open_orders)} orders on {exchange_info.get('nome')}")
+            return jsonify({
+                'success': True,
+                'dry_run': True,
+                'message': f'Would cancel {len(open_orders)} orders (DRY-RUN mode)',
+                'canceled_count': len(open_orders),
+                'orders': [{'id': order['id'], 'symbol': order['symbol'], 'status': 'simulated_cancel'} for order in open_orders]
+            }), 200
+        
+        # Cancel all orders
+        canceled_orders = []
+        failed_orders = []
+        
+        for order in open_orders:
+            try:
+                order_id = order['id']
+                order_symbol = order['symbol']
+                
+                logger.info(f"🔴 Canceling order: {order_id} ({order_symbol})")
+                canceled = exchange.cancel_order(order_id, order_symbol)
+                
+                canceled_orders.append({
+                    'id': order_id,
+                    'symbol': order_symbol,
+                    'status': 'canceled',
+                    'amount': order.get('amount'),
+                    'price': order.get('price')
+                })
+                
+            except Exception as e:
+                logger.error(f"Failed to cancel order {order.get('id')}: {e}")
+                failed_orders.append({
+                    'id': order.get('id'),
+                    'symbol': order.get('symbol'),
+                    'error': str(e)
+                })
+        
+        logger.info(f"✅ Canceled {len(canceled_orders)} orders on {exchange_info.get('nome')}")
+        
+        return jsonify({
+            'success': True,
+            'dry_run': False,
+            'message': f'Canceled {len(canceled_orders)} of {len(open_orders)} orders',
+            'canceled_count': len(canceled_orders),
+            'failed_count': len(failed_orders),
+            'exchange': exchange_info.get('nome'),
+            'canceled_orders': canceled_orders,
+            'failed_orders': failed_orders
+        }), 200
+        
+    except ccxt.AuthenticationError as e:
+        logger.error(f"Authentication error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Authentication failed',
+            'details': str(e)
+        }), 401
+    except ccxt.ExchangeError as e:
+        logger.error(f"Exchange error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Exchange API error',
+            'details': str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"Error canceling all orders: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/orders/list', methods=['GET'])
+def list_orders():
+    """
+    List orders with optional filters
+    
+    Query Parameters:
+        - user_id: string (required)
+        - exchange_id: string (optional)
+        - symbol: string (optional, e.g., BTC/USDT)
+        - status: string (optional, e.g., open, closed, canceled)
+        - limit: int (optional, default 50, max 100)
+    
+    Returns:
+        200: List of orders
+        400: Missing required parameters
+        500: Internal server error
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required parameter: user_id'
+            }), 400
+        
+        exchange_id = request.args.get('exchange_id')
+        symbol = request.args.get('symbol')
+        status = request.args.get('status')
+        limit = min(int(request.args.get('limit', 50)), 100)
+        
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        order_service = get_order_execution_service(db, dry_run=dry_run)
+        result = order_service.list_orders(
+            user_id=user_id,
+            exchange_id=exchange_id,
+            symbol=symbol,
+            status=status,
+            limit=limit
+        )
+        
+        logger.info(f"📋 Listed {result.get('count', 0)} orders for user {user_id}")
+        return jsonify(result), 200
+        
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid parameter format: {str(e)}'
+        }), 400
+    except Exception as e:
+        logger.error(f"Error listing orders: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/trades/history', methods=['GET'])
+def get_trades_history():
+    """
+    Get completed trades history
+    
+    Query Parameters:
+        - user_id: string (required)
+        - exchange_id: string (optional)
+        - symbol: string (optional)
+        - limit: int (optional, default 50, max 100)
+    
+    Returns:
+        200: Trades history
+        400: Missing required parameters
+        500: Internal server error
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required parameter: user_id'
+            }), 400
+        
+        exchange_id = request.args.get('exchange_id')
+        symbol = request.args.get('symbol')
+        limit = min(int(request.args.get('limit', 50)), 100)
+        
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        order_service = get_order_execution_service(db, dry_run=dry_run)
+        result = order_service.get_trades_history(
+            user_id=user_id,
+            exchange_id=exchange_id,
+            symbol=symbol,
+            limit=limit
+        )
+        
+        logger.info(f"📊 Retrieved {result.get('count', 0)} trades for user {user_id}")
+        return jsonify(result), 200
+        
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid parameter format: {str(e)}'
+        }), 400
+    except Exception as e:
+        logger.error(f"Error getting trades history: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/orders/monitor', methods=['POST'])
+def monitor_orders():
+    """
+    Manually trigger order status monitoring
+    
+    Request Body (optional):
+        {
+            "user_id": "string",      // Monitor only this user's orders
+            "exchange_id": "string",  // Monitor only orders from this exchange
+            "order_id": "string"      // Monitor specific order
+        }
+    
+    Returns:
+        200: Monitoring results
+        500: Internal server error
+    """
+    try:
+        data = request.get_json() or {}
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        order_service = get_order_execution_service(db, dry_run=dry_run)
+        
+        # If specific order_id is provided, monitor only that order
+        if data.get('order_id'):
+            order_id = data['order_id']
+            logger.info(f"🔍 Manual monitoring triggered for order {order_id}")
+            
+            result = order_service.monitor_order_status(order_id)
+            
+            return jsonify(result), 200
+        
+        # Monitor by user_id and/or exchange_id
+        else:
+            user_id = data.get('user_id')
+            exchange_id = data.get('exchange_id')
+            
+            # Build query filter
+            from bson import ObjectId
+            query = {'status': {'$in': ['open', 'partially_filled']}}
+            
+            if user_id:
+                query['user_id'] = user_id
+            
+            if exchange_id:
+                query['exchange_id'] = ObjectId(exchange_id)
+            
+            # Get filtered orders
+            open_orders = list(db.orders.find(query))
+            
+            filter_desc = []
+            if user_id:
+                filter_desc.append(f"user {user_id}")
+            if exchange_id:
+                filter_desc.append(f"exchange {exchange_id}")
+            
+            filter_text = " and ".join(filter_desc) if filter_desc else "all open orders"
+            logger.info(f"🔍 Manual monitoring triggered for {filter_text} ({len(open_orders)} orders)")
+            
+            # Monitor each order
+            results = {
+                'total': len(open_orders),
+                'updated': 0,
+                'errors': 0,
+                'closed': 0,
+                'orders': []
+            }
+            
+            for order in open_orders:
+                result = order_service.monitor_order_status(str(order['_id']))
+                
+                if result.get('success'):
+                    if result.get('updated'):
+                        results['updated'] += 1
+                        if result.get('new_status') in ['closed', 'filled']:
+                            results['closed'] += 1
+                    
+                    results['orders'].append({
+                        'order_id': str(order['_id']),
+                        'symbol': order['symbol'],
+                        'status': result.get('new_status') or result.get('status'),
+                        'updated': result.get('updated', False)
+                    })
+                else:
+                    results['errors'] += 1
+                    results['orders'].append({
+                        'order_id': str(order['_id']),
+                        'symbol': order['symbol'],
+                        'error': result.get('error')
+                    })
+            
+            logger.info(f"✅ Monitoring complete: {results['updated']} updated, {results['closed']} closed, {results['errors']} errors")
+            
+            return jsonify({
+                'success': True,
+                **results
+            }), 200
+        
+    except Exception as e:
+        logger.error(f"Error monitoring orders: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/orders/status/<order_id>', methods=['GET'])
+def get_order_status(order_id):
+    """
+    Get current status of a specific order
+    
+    Path Parameters:
+        - order_id: string (MongoDB ObjectId)
+    
+    Query Parameters:
+        - refresh: boolean (optional) - Force refresh from exchange (default: false)
+    
+    Returns:
+        200: Order status
+        404: Order not found
+        500: Internal server error
+    """
+    try:
+        refresh = request.args.get('refresh', 'false').lower() == 'true'
+        dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
+        order_service = get_order_execution_service(db, dry_run=dry_run)
+        
+        # If refresh requested, update from exchange first
+        if refresh:
+            logger.info(f"🔄 Refreshing order status from exchange: {order_id}")
+            monitor_result = order_service.monitor_order_status(order_id)
+            
+            if not monitor_result.get('success'):
+                return jsonify({
+                    'success': False,
+                    'error': monitor_result.get('error', 'Failed to refresh order status')
+                }), 500
+        
+        # Get order from database
+        from bson import ObjectId
+        order_doc = db.orders.find_one({'_id': ObjectId(order_id)})
+        
+        if not order_doc:
+            return jsonify({
+                'success': False,
+                'error': 'Order not found'
+            }), 404
+        
+        # Format response
+        order_data = {
+            'success': True,
+            'order': {
+                'order_id': str(order_doc['_id']),
+                'exchange_order_id': order_doc['exchange_order_id'],
+                'exchange_name': order_doc['exchange_name'],
+                'symbol': order_doc['symbol'],
+                'side': order_doc['side'],
+                'type': order_doc['type'],
+                'amount': order_doc['amount'],
+                'price': order_doc.get('price'),
+                'filled': order_doc.get('filled', 0),
+                'remaining': order_doc.get('remaining', 0),
+                'status': order_doc['status'],
+                'created_at': order_doc['created_at'].isoformat(),
+                'updated_at': order_doc['updated_at'].isoformat(),
+                'last_checked_at': order_doc.get('last_checked_at').isoformat() if order_doc.get('last_checked_at') else None
+            }
+        }
+        
+        logger.info(f"📊 Order status retrieved: {order_id} - {order_doc['status']}")
+        return jsonify(order_data), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting order status: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
 
 # ======================
 # BALANCE HISTORY
@@ -3597,6 +4197,637 @@ def execute_buy_order():
         return jsonify({
             'success': False,
             'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/exchanges/<exchange_id>/markets', methods=['GET'])
+def get_exchange_markets(exchange_id):
+    """
+    Lista todos os pares de trading disponíveis na exchange
+    
+    Query Parameters:
+        user_id: string (required) - ID do usuário
+        quote: string (optional) - Filtrar por moeda de cotação (ex: USDT, BTC)
+        search: string (optional) - Buscar por token (ex: DOGE, ETH)
+    
+    Returns:
+        200: Lista de mercados disponíveis
+        400: Parâmetros inválidos
+        500: Erro interno
+    """
+    try:
+        user_id = request.args.get('user_id')
+        quote_filter = request.args.get('quote', 'USDT')  # Default USDT
+        search_term = request.args.get('search', '').upper()
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id is required'
+            }), 400
+        
+        # Get user exchange credentials
+        user_exchange = db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_exchange or 'exchanges' not in user_exchange:
+            return jsonify({
+                'success': False,
+                'error': 'User has no linked exchanges'
+            }), 404
+        
+        # Find specific exchange
+        user_ex = None
+        for ex in user_exchange['exchanges']:
+            if str(ex['exchange_id']) == exchange_id:
+                user_ex = ex
+                break
+        
+        if not user_ex:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found for this user'
+            }), 404
+        
+        # Get exchange info
+        exchange_info = db.exchanges.find_one({'_id': ObjectId(exchange_id)})
+        
+        if not exchange_info:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found in database'
+            }), 404
+        
+        ccxt_id = exchange_info.get('ccxt_id', '').lower()
+        
+        # Decrypt credentials
+        encryption_service = get_encryption_service()
+        decrypted = encryption_service.decrypt_credentials({
+            'api_key': user_ex['api_key_encrypted'],
+            'api_secret': user_ex['api_secret_encrypted'],
+            'passphrase': user_ex.get('passphrase_encrypted')
+        })
+        
+        # Fix PEM format for Coinbase (decrypt → fix \n → use)
+        if ccxt_id == 'coinbase':
+            if decrypted['api_secret'] and '\\n' in decrypted['api_secret']:
+                decrypted['api_secret'] = decrypted['api_secret'].replace('\\n', '\n')
+                logger.info("🔧 Fixed PEM format for Coinbase (replaced \\n with real newlines)")
+        
+        # Create CCXT exchange instance
+        exchange_class = getattr(ccxt, ccxt_id)
+        exchange = exchange_class({
+            'apiKey': decrypted['api_key'],
+            'secret': decrypted['api_secret'],
+            'password': decrypted.get('passphrase'),
+            'enableRateLimit': True
+        })
+        
+        # Load markets
+        markets = exchange.load_markets()
+        
+        # Filter markets
+        filtered_markets = []
+        for symbol, market in markets.items():
+            # Filter by quote currency (USDT, BTC, etc)
+            if quote_filter and not symbol.endswith(f'/{quote_filter}'):
+                continue
+            
+            # Filter by search term
+            if search_term and search_term not in symbol:
+                continue
+            
+            # Only active markets
+            if not market.get('active', True):
+                continue
+            
+            filtered_markets.append({
+                'symbol': symbol,
+                'base': market['base'],
+                'quote': market['quote'],
+                'active': market.get('active', True),
+                'limits': {
+                    'amount': {
+                        'min': market['limits']['amount'].get('min'),
+                        'max': market['limits']['amount'].get('max')
+                    },
+                    'price': {
+                        'min': market['limits']['price'].get('min'),
+                        'max': market['limits']['price'].get('max')
+                    },
+                    'cost': {
+                        'min': market['limits']['cost'].get('min'),
+                        'max': market['limits']['cost'].get('max')
+                    }
+                }
+            })
+        
+        # Sort by symbol
+        filtered_markets.sort(key=lambda x: x['symbol'])
+        
+        logger.info(f"📊 Listed {len(filtered_markets)} markets from {exchange_info.get('nome')} (quote: {quote_filter})")
+        
+        return jsonify({
+            'success': True,
+            'count': len(filtered_markets),
+            'exchange': exchange_info.get('nome'),
+            'exchange_id': exchange_id,
+            'quote_filter': quote_filter,
+            'markets': filtered_markets
+        }), 200
+        
+    except ccxt.AuthenticationError as e:
+        logger.error(f"Authentication error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Authentication failed',
+            'details': str(e)
+        }), 401
+    except ccxt.ExchangeError as e:
+        logger.error(f"Exchange error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Exchange API error',
+            'details': str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"Error fetching markets: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/exchanges/<exchange_id>/balance/<token>', methods=['GET'])
+def check_token_balance(exchange_id, token):
+    """
+    Verifica o saldo disponível de um token específico para venda
+    
+    Parameters:
+        exchange_id: string (path) - ID da exchange no MongoDB
+        token: string (path) - Símbolo do token (ex: BTC, ETH, DOGE)
+    
+    Query Parameters:
+        user_id: string (required) - ID do usuário
+    
+    Returns:
+        JSON com saldo disponível, bloqueado e total do token
+        
+    Example:
+        GET /api/v1/exchanges/693481148b0a41e8b6acb07b/balance/DOGE?user_id=charles_test_user
+    """
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id é obrigatório'
+            }), 400
+        
+        logger.info(f"Checking balance for token {token} on exchange {exchange_id} for user {user_id}")
+        
+        # Buscar informações da exchange no MongoDB
+        try:
+            exchange_obj_id = ObjectId(exchange_id)
+        except:
+            return jsonify({
+                'success': False,
+                'error': 'exchange_id inválido'
+            }), 400
+        
+        exchange_info = db.exchanges.find_one({'_id': exchange_obj_id})
+        
+        if not exchange_info:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange não encontrada'
+            }), 404
+        
+        # Buscar credenciais do usuário
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_doc or 'exchanges' not in user_doc:
+            return jsonify({
+                'success': False,
+                'error': 'Usuário não possui exchanges vinculadas'
+            }), 404
+        
+        # Encontrar a exchange específica
+        exchange_link = None
+        for ex in user_doc['exchanges']:
+            if str(ex['exchange_id']) == exchange_id:
+                exchange_link = ex
+                break
+        
+        if not exchange_link:
+            return jsonify({
+                'success': False,
+                'error': f'Exchange {exchange_info["nome"]} não está vinculada a este usuário'
+            }), 404
+        
+        ccxt_id = exchange_info.get('ccxt_id', '').lower()
+        
+        # Descriptografar credenciais
+        encryption_service = get_encryption_service()
+        decrypted = encryption_service.decrypt_credentials({
+            'api_key': exchange_link['api_key_encrypted'],
+            'api_secret': exchange_link['api_secret_encrypted'],
+            'password': exchange_link.get('passphrase_encrypted')
+        })
+        
+        # Fix para Coinbase: substituir \n por quebra de linha real
+        if ccxt_id == 'coinbase':
+            if decrypted['api_secret'] and '\\n' in decrypted['api_secret']:
+                decrypted['api_secret'] = decrypted['api_secret'].replace('\\n', '\n')
+        
+        # Criar instância da exchange
+        exchange_class = getattr(ccxt, ccxt_id)
+        exchange = exchange_class({
+            'apiKey': decrypted['api_key'],
+            'secret': decrypted['api_secret'],
+            'password': decrypted.get('password'),
+            'enableRateLimit': True,
+        })
+        
+        # Buscar saldo completo da exchange
+        balance = exchange.fetch_balance()
+        
+        # Normalizar o símbolo do token (uppercase)
+        token = token.upper()
+        
+        # Verificar se o token existe no saldo
+        if token not in balance:
+            return jsonify({
+                'success': True,
+                'token': token,
+                'exchange': exchange_info.get('nome'),
+                'exchange_id': exchange_id,
+                'available': 0.0,
+                'used': 0.0,
+                'total': 0.0,
+                'can_sell': False,
+                'message': f'Você não possui {token} nesta exchange'
+            }), 200
+        
+        token_balance = balance[token]
+        
+        # Obter valores de saldo
+        total = float(token_balance.get('total', 0))
+        free = float(token_balance.get('free', 0))
+        used = float(token_balance.get('used', 0))
+        
+        # Determinar se pode vender (tem saldo livre disponível)
+        can_sell = free > 0
+        
+        return jsonify({
+            'success': True,
+            'token': token,
+            'exchange': exchange_info.get('nome'),
+            'exchange_id': exchange_id,
+            'balance': {
+                'available': free,      # Disponível para trading
+                'used': used,           # Bloqueado em ordens
+                'total': total          # Total (available + used)
+            },
+            'can_sell': can_sell,
+            'message': f'Você possui {free} {token} disponível para venda' if can_sell else f'Sem saldo disponível de {token}'
+        }), 200
+        
+    except ccxt.AuthenticationError as e:
+        logger.error(f"Authentication error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Falha na autenticação',
+            'details': str(e)
+        }), 401
+    except ccxt.ExchangeError as e:
+        logger.error(f"Exchange error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Erro na API da exchange',
+            'details': str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"Error checking token balance: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': 'Erro interno do servidor',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/orders/open', methods=['GET'])
+def get_open_orders():
+    """
+    Consulta ordens abertas diretamente na exchange via CCXT
+    
+    🚀 OPTIMIZADO com cache de 10 segundos para reduzir latência
+    
+    Query Parameters:
+        user_id: string (required) - ID do usuário
+        exchange_id: string (required) - ID da exchange
+        symbol: string (optional) - Par específico (ex: ETH/USDT)
+        force_refresh: boolean (optional) - Força buscar da exchange ignorando cache
+    
+    Returns:
+        200: Lista de ordens abertas
+        400: Parâmetros inválidos
+        500: Erro interno
+    """
+    try:
+        user_id = request.args.get('user_id')
+        exchange_id = request.args.get('exchange_id')
+        symbol = request.args.get('symbol')
+        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
+        
+        if not user_id or not exchange_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id and exchange_id are required'
+            }), 400
+        
+        # Cache key: user + exchange + symbol
+        cache_key = f"open_orders:{user_id}:{exchange_id}:{symbol or 'all'}"
+        orders_cache = get_orders_cache()
+        
+        # Check cache first (unless force_refresh=true)
+        if not force_refresh:
+            cached_data = orders_cache.get(cache_key)
+            if cached_data:
+                logger.info(f"⚡ Returning {len(cached_data.get('orders', []))} cached open orders for {exchange_id}")
+                # Add cache indicator
+                cached_data['from_cache'] = True
+                return jsonify(cached_data), 200
+        
+        # Get user exchange credentials
+        user_exchange = db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_exchange or 'exchanges' not in user_exchange:
+            return jsonify({
+                'success': False,
+                'error': 'User has no linked exchanges'
+            }), 404
+        
+        # Find specific exchange
+        user_ex = None
+        for ex in user_exchange['exchanges']:
+            if str(ex['exchange_id']) == exchange_id:
+                user_ex = ex
+                break
+        
+        if not user_ex:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found for this user'
+            }), 404
+        
+        # Get exchange info
+        exchange_info = db.exchanges.find_one({'_id': ObjectId(exchange_id)})
+        
+        if not exchange_info:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange not found in database'
+            }), 404
+        
+        ccxt_id = exchange_info.get('ccxt_id', '').lower()
+        
+        # Try to get CCXT instance from cache to avoid re-decryption
+        ccxt_cache_key = f"ccxt_instance:{user_id}:{exchange_id}"
+        ccxt_cache = get_ccxt_instances_cache()
+        exchange = ccxt_cache.get(ccxt_cache_key)
+        
+        if not exchange:
+            # Decrypt credentials only if not cached
+            encryption_service = get_encryption_service()
+            decrypted = encryption_service.decrypt_credentials({
+                'api_key': user_ex['api_key_encrypted'],
+                'api_secret': user_ex['api_secret_encrypted'],
+                'passphrase': user_ex.get('passphrase_encrypted')
+            })
+            
+            # Fix PEM format for Coinbase (decrypt → fix \n → use)
+            if ccxt_id == 'coinbase':
+                if decrypted['api_secret'] and '\\n' in decrypted['api_secret']:
+                    decrypted['api_secret'] = decrypted['api_secret'].replace('\\n', '\n')
+                    logger.info("🔧 Fixed PEM format for Coinbase (replaced \\n with real newlines)")
+            
+            # Create CCXT exchange instance
+            exchange_class = getattr(ccxt, ccxt_id)
+            exchange = exchange_class({
+                'apiKey': decrypted['api_key'],
+                'secret': decrypted['api_secret'],
+                'password': decrypted.get('passphrase'),
+                'enableRateLimit': True
+            })
+            
+            # Cache the CCXT instance for 5 minutes
+            ccxt_cache.set(ccxt_cache_key, exchange)
+            logger.info(f"🔒 Cached CCXT instance for {ccxt_id}")
+        else:
+            logger.info(f"⚡ Reusing cached CCXT instance for {ccxt_id}")
+        
+        # Suppress Binance warning about fetching all open orders
+        if ccxt_id == 'binance':
+            exchange.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
+        
+        # Fetch open orders
+        if symbol:
+            open_orders = exchange.fetch_open_orders(symbol)
+        else:
+            open_orders = exchange.fetch_open_orders()
+        
+        logger.info(f"📋 Fetched {len(open_orders)} open orders from {exchange_info.get('nome')} for user {user_id}")
+        
+        response_data = {
+            'success': True,
+            'count': len(open_orders),
+            'exchange': exchange_info.get('nome'),
+            'exchange_id': exchange_id,
+            'orders': open_orders,
+            'from_cache': False,
+            'cached_at': datetime.utcnow().isoformat()
+        }
+        
+        # Cache the result for 10 seconds (orders change frequently)
+        orders_cache.set(cache_key, response_data, ttl_seconds=10)
+        
+        return jsonify(response_data), 200
+        
+    except ccxt.AuthenticationError as e:
+        logger.error(f"Authentication error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Authentication failed',
+            'details': str(e)
+        }), 401
+    except ccxt.ExchangeError as e:
+        logger.error(f"Exchange error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Exchange API error',
+            'details': str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"Error fetching open orders: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/orders/history', methods=['GET'])
+def get_orders_history():
+    """
+    Consulta histórico de ordens (fechadas/canceladas) diretamente na exchange via CCXT
+    
+    Query Parameters:
+        user_id: string (required) - ID do usuário
+        exchange_id: string (required) - ID da exchange
+        symbol: string (required) - Par específico (ex: BTC/USDT, DOGE/USDT)
+        limit: int (optional, default: 100, max: 500) - Número de ordens
+    
+    Returns:
+        200: Lista de ordens históricas
+        400: Parâmetros inválidos
+        500: Erro interno
+    
+    Example:
+        GET /api/v1/orders/history?user_id=charles_test_user&exchange_id=693481148b0a41e8b6acb07b&symbol=DOGE/USDT&limit=50
+    """
+    try:
+        user_id = request.args.get('user_id')
+        exchange_id = request.args.get('exchange_id')
+        symbol = request.args.get('symbol')
+        limit = min(int(request.args.get('limit', 100)), 500)
+        
+        if not user_id or not exchange_id:
+            return jsonify({
+                'success': False,
+                'error': 'user_id e exchange_id são obrigatórios'
+            }), 400
+        
+        if not symbol:
+            return jsonify({
+                'success': False,
+                'error': 'symbol é obrigatório (ex: BTC/USDT, DOGE/USDT). A MEXC exige um par específico para buscar histórico.'
+            }), 400
+        
+        logger.info(f"Fetching order history from exchange {exchange_id} for user {user_id}")
+        
+        # Buscar informações da exchange
+        try:
+            exchange_obj_id = ObjectId(exchange_id)
+        except:
+            return jsonify({
+                'success': False,
+                'error': 'exchange_id inválido'
+            }), 400
+        
+        exchange_info = db.exchanges.find_one({'_id': exchange_obj_id})
+        
+        if not exchange_info:
+            return jsonify({
+                'success': False,
+                'error': 'Exchange não encontrada'
+            }), 404
+        
+        # Buscar credenciais do usuário
+        user_doc = db.user_exchanges.find_one({'user_id': user_id})
+        
+        if not user_doc or 'exchanges' not in user_doc:
+            return jsonify({
+                'success': False,
+                'error': 'Usuário não possui exchanges vinculadas'
+            }), 404
+        
+        # Encontrar a exchange específica
+        exchange_link = None
+        for ex in user_doc['exchanges']:
+            if str(ex['exchange_id']) == exchange_id:
+                exchange_link = ex
+                break
+        
+        if not exchange_link:
+            return jsonify({
+                'success': False,
+                'error': f'Exchange {exchange_info["nome"]} não está vinculada a este usuário'
+            }), 404
+        
+        ccxt_id = exchange_info.get('ccxt_id', '').lower()
+        
+        # Descriptografar credenciais
+        encryption_service = get_encryption_service()
+        decrypted = encryption_service.decrypt_credentials({
+            'api_key': exchange_link['api_key_encrypted'],
+            'api_secret': exchange_link['api_secret_encrypted'],
+            'password': exchange_link.get('passphrase_encrypted')
+        })
+        
+        # Fix PEM format for Coinbase
+        if ccxt_id == 'coinbase':
+            if decrypted['api_secret'] and '\\n' in decrypted['api_secret']:
+                decrypted['api_secret'] = decrypted['api_secret'].replace('\\n', '\n')
+        
+        # Criar instância CCXT
+        exchange_class = getattr(ccxt, ccxt_id)
+        exchange = exchange_class({
+            'apiKey': decrypted['api_key'],
+            'secret': decrypted['api_secret'],
+            'password': decrypted.get('passphrase'),
+            'enableRateLimit': True
+        })
+        
+        # Buscar ordens fechadas
+        if symbol:
+            closed_orders = exchange.fetch_closed_orders(symbol, limit=limit)
+        else:
+            closed_orders = exchange.fetch_closed_orders(limit=limit)
+        
+        logger.info(f"📋 Fetched {len(closed_orders)} closed orders from {exchange_info.get('nome')}")
+        
+        response_data = {
+            'success': True,
+            'count': len(closed_orders),
+            'exchange': exchange_info.get('nome'),
+            'exchange_id': exchange_id,
+            'symbol': symbol,
+            'limit': limit,
+            'orders': closed_orders
+        }
+        
+        return jsonify(response_data), 200
+        
+    except ccxt.AuthenticationError as e:
+        logger.error(f"Authentication error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Falha na autenticação',
+            'details': str(e)
+        }), 401
+    except ccxt.ExchangeError as e:
+        logger.error(f"Exchange error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Erro na API da exchange',
+            'details': str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"Error fetching orders history: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': 'Erro interno do servidor',
             'details': str(e)
         }), 500
 
