@@ -4631,7 +4631,10 @@ def get_open_orders():
                 'apiKey': decrypted['api_key'],
                 'secret': decrypted['api_secret'],
                 'password': decrypted.get('passphrase'),
-                'enableRateLimit': True
+                'enableRateLimit': True,
+                'options': {
+                    'warnOnFetchOpenOrdersWithoutSymbol': False  # Suppress warning for Binance
+                }
             })
             
             # Cache the CCXT instance for 5 minutes
@@ -4640,8 +4643,10 @@ def get_open_orders():
         else:
             logger.info(f"⚡ Reusing cached CCXT instance for {ccxt_id}")
         
-        # Suppress Binance warning about fetching all open orders
+        # Always ensure Binance warning is suppressed (in case it was reset)
         if ccxt_id == 'binance':
+            if not hasattr(exchange, 'options'):
+                exchange.options = {}
             exchange.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
         
         # Check if exchange supports fetching open orders
