@@ -61,7 +61,7 @@ nano .env  # ou vim, code, etc
 **Variáveis OBRIGATÓRIAS**:
 ```env
 # MongoDB Atlas
-MONGO_URI=mongodb+srv://usuario:senha@cluster.mongodb.net/crypto_exchange
+MONGODB_URI=mongodb+srv://usuario:senha@cluster.mongodb.net/crypto_exchange
 
 # JWT Secret (gere uma nova)
 JWT_SECRET=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
@@ -215,14 +215,14 @@ volumes:
    - Copiar string: `mongodb+srv://...`
 6. **Adicionar no .env**:
    ```env
-   MONGO_URI=mongodb+srv://crypto_admin:sua_senha@cluster0.xxxxx.mongodb.net/crypto_exchange?retryWrites=true&w=majority
+   MONGODB_URI=mongodb+srv://crypto_admin:sua_senha@cluster0.xxxxx.mongodb.net/crypto_exchange?retryWrites=true&w=majority
    ```
 
 ### Testar conexão
 
 ```bash
 # Via Docker
-docker-compose exec backend python -c "from pymongo import MongoClient; client = MongoClient('$MONGO_URI'); print(client.server_info())"
+docker-compose exec backend python -c "from pymongo import MongoClient; client = MongoClient('$MONGODB_URI'); print(client.server_info())"
 
 # Via curl (API)
 curl http://localhost:5000/api/v1/health
@@ -329,14 +329,14 @@ ports:
 ### Erro: "MongoDB connection failed"
 
 ```bash
-# Verificar MONGO_URI no .env
-cat .env | grep MONGO_URI
+# Verificar MONGODB_URI no .env
+cat .env | grep MONGODB_URI
 
 # Testar conexão manualmente
 docker-compose exec backend python -c "
 from pymongo import MongoClient
 import os
-uri = os.getenv('MONGO_URI')
+uri = os.getenv('MONGODB_URI')
 print(f'Tentando conectar: {uri[:30]}...')
 client = MongoClient(uri)
 print('Conectado!', client.server_info()['version'])
@@ -350,7 +350,7 @@ print('Conectado!', client.server_info()['version'])
 docker-compose logs backend
 
 # Erros comuns:
-# - MONGO_URI incorreto → Verificar .env
+# - MONGODB_URI incorreto → Verificar .env
 # - requirements.txt com erro → Rebuild: docker-compose up --build
 # - JWT_SECRET ausente → Adicionar no .env
 ```
@@ -398,7 +398,7 @@ FLASK_ENV=production
 FLASK_DEBUG=0
 CORS_ORIGINS=https://app.seudominio.com
 JWT_SECRET=$(openssl rand -hex 32)
-MONGO_URI=mongodb+srv://...  # Apenas IPs específicos no Atlas
+MONGODB_URI=mongodb+srv://...  # Apenas IPs específicos no Atlas
 ```
 
 **Checklist**:
@@ -463,8 +463,8 @@ services:
   - name: backend
     dockerfile_path: Dockerfile
     envs:
-      - key: MONGO_URI
-        value: ${MONGO_URI}
+      - key: MONGODB_URI
+        value: ${MONGODB_URI}
       - key: JWT_SECRET
         value: ${JWT_SECRET}
 ```
@@ -489,7 +489,7 @@ services:
 
 - [ ] Docker Desktop instalado
 - [ ] Copiar `.env.example` → `.env`
-- [ ] Configurar `MONGO_URI` (MongoDB Atlas)
+- [ ] Configurar `MONGODB_URI` (MongoDB Atlas)
 - [ ] Gerar `JWT_SECRET` e `ENCRYPTION_KEY`
 - [ ] `docker-compose up --build`
 - [ ] Testar: `curl http://localhost:5000/api/v1/health`

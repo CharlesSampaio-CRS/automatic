@@ -20,7 +20,7 @@ services:
       - FLASK_DEBUG=1
       
       # MongoDB Atlas (remoto)
-      - MONGO_URI=${MONGO_URI}
+      - MONGODB_URI=${MONGODB_URI}
       
       # JWT
       - JWT_SECRET=${JWT_SECRET}
