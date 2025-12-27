@@ -3022,6 +3022,7 @@ def create_strategy():
 
 
 @app.route('/api/v1/strategies/<strategy_id>', methods=['PUT'])
+@require_auth
 def update_strategy(strategy_id):
     """
     Atualiza uma estratégia existente
@@ -3040,10 +3041,30 @@ def update_strategy(strategy_id):
     Returns:
         200: Estratégia atualizada
         400: Dados inválidos
+        401: Token inválido ou ausente
+        403: Estratégia não pertence ao usuário autenticado
         404: Estratégia não encontrada
         500: Erro interno
     """
     try:
+        strategy_service = get_strategy_service(db)
+        
+        # Get strategy to verify ownership
+        strategy = strategy_service.get_strategy(strategy_id)
+        
+        if not strategy:
+            return jsonify({
+                'success': False,
+                'error': 'Strategy not found'
+            }), 404
+        
+        # Verify that the strategy belongs to the authenticated user
+        if strategy.get('user_id') != request.user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Unauthorized: This strategy does not belong to you'
+            }), 403
+        
         data = request.get_json()
         
         if not data:
@@ -3140,6 +3161,7 @@ def delete_strategy(strategy_id):
 
 
 @app.route('/api/v1/strategies/<strategy_id>', methods=['GET'])
+@require_auth
 def get_strategy(strategy_id):
     """
     Busca uma estratégia por ID
@@ -3152,6 +3174,8 @@ def get_strategy(strategy_id):
     
     Returns:
         200: Estratégia encontrada
+        401: Token inválido ou ausente
+        403: Estratégia não pertence ao usuário autenticado
         404: Estratégia não encontrada
         500: Erro interno
     
@@ -3168,6 +3192,13 @@ def get_strategy(strategy_id):
         if not force_refresh:
             is_valid, cached_data = single_cache.get(cache_key)
             if is_valid:
+                # Verify ownership even for cached data
+                if cached_data.get('strategy', {}).get('user_id') != request.user_id:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Unauthorized: This strategy does not belong to you'
+                    }), 403
+                
                 logger.debug(f"Cache HIT for strategy: {strategy_id}")
                 response_data = cached_data.copy()
                 response_data['from_cache'] = True
@@ -3180,6 +3211,13 @@ def get_strategy(strategy_id):
         strategy = strategy_service.get_strategy(strategy_id)
         
         if strategy:
+            # Verify that the strategy belongs to the authenticated user
+            if strategy.get('user_id') != request.user_id:
+                return jsonify({
+                    'success': False,
+                    'error': 'Unauthorized: This strategy does not belong to you'
+                }), 403
+            
             response_data = {
                 'success': True,
                 'strategy': strategy,
