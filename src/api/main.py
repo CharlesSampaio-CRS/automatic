@@ -1836,6 +1836,8 @@ def create_order():
 
 
 @app.route('/api/v1/orders/cancel', methods=['POST'])
+@require_auth
+@require_params('user_id', 'order_id')
 def cancel_order():
     """
     Cancel an existing order
@@ -1851,23 +1853,27 @@ def cancel_order():
     Returns:
         200: Order canceled successfully
         400: Order not found or already canceled
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Internal server error
     """
     try:
         data = request.get_json()
+        user_id = request.validated_params['user_id']
         
-        if 'user_id' not in data or 'order_id' not in data:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'Missing required fields: user_id, order_id'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Get order execution service (use env var for dry_run)
         dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
         order_service = get_order_execution_service(db, dry_run=dry_run)
         result = order_service.cancel_order(
-            user_id=data['user_id'],
-            order_id=data['order_id'],
+            user_id=request.validated_params['user_id'],
+            order_id=request.validated_params['order_id'],
             exchange_id=data.get('exchange_id'),
             symbol=data.get('symbol')
         )
@@ -4328,6 +4334,8 @@ def delete_notification(notification_id):
 # ============================================
 
 @app.route('/api/v1/orders/sell', methods=['POST'])
+@require_auth
+@require_params('user_id', 'exchange_id', 'token', 'amount', 'order_type')
 def execute_sell_order():
     """
     Executa ordem de venda manualmente
@@ -4345,31 +4353,33 @@ def execute_sell_order():
     Returns:
         200: Ordem executada
         400: Dados inválidos
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Erro interno
     """
     try:
         data = request.get_json()
+        user_id = request.validated_params['user_id']
         
-        required_fields = ['user_id', 'exchange_id', 'token', 'amount', 'order_type']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({
-                    'success': False,
-                    'error': f'{field} is required'
-                }), 400
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Get order execution service (use env var for dry_run)
         dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
         order_service = get_order_execution_service(db, dry_run=dry_run)
         
-        if data['order_type'] == 'market':
+        if request.validated_params['order_type'] == 'market':
             result = order_service.execute_market_sell(
-                user_id=data['user_id'],
-                exchange_id=data['exchange_id'],
-                token=data['token'],
-                amount=float(data['amount'])
+                user_id=request.validated_params['user_id'],
+                exchange_id=request.validated_params['exchange_id'],
+                token=request.validated_params['token'],
+                amount=float(request.validated_params['amount'])
             )
-        elif data['order_type'] == 'limit':
+        elif request.validated_params['order_type'] == 'limit':
             if 'price' not in data:
                 return jsonify({
                     'success': False,
@@ -4377,10 +4387,10 @@ def execute_sell_order():
                 }), 400
             
             result = order_service.execute_limit_sell(
-                user_id=data['user_id'],
-                exchange_id=data['exchange_id'],
-                token=data['token'],
-                amount=float(data['amount']),
+                user_id=request.validated_params['user_id'],
+                exchange_id=request.validated_params['exchange_id'],
+                token=request.validated_params['token'],
+                amount=float(request.validated_params['amount']),
                 price=float(data['price'])
             )
         else:
@@ -4396,9 +4406,9 @@ def execute_sell_order():
             
             if order.get('filled'):
                 position_service.record_sell(
-                    user_id=data['user_id'],
-                    exchange_id=data['exchange_id'],
-                    token=data['token'],
+                    user_id=user_id,
+                    exchange_id=request.validated_params['exchange_id'],
+                    token=request.validated_params['token'],
                     amount=order['filled'],
                     price=order.get('average', order.get('price')),
                     total_received=order.get('cost'),
@@ -4417,6 +4427,8 @@ def execute_sell_order():
 
 
 @app.route('/api/v1/orders/buy', methods=['POST'])
+@require_auth
+@require_params('user_id', 'exchange_id', 'token', 'amount', 'order_type')
 def execute_buy_order():
     """
     Executa ordem de compra manualmente
@@ -4434,31 +4446,33 @@ def execute_buy_order():
     Returns:
         200: Ordem executada
         400: Dados inválidos
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Erro interno
     """
     try:
         data = request.get_json()
+        user_id = request.validated_params['user_id']
         
-        required_fields = ['user_id', 'exchange_id', 'token', 'amount', 'order_type']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({
-                    'success': False,
-                    'error': f'{field} is required'
-                }), 400
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Get order execution service (use env var for dry_run)
         dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
         order_service = get_order_execution_service(db, dry_run=dry_run)
         
-        if data['order_type'] == 'market':
+        if request.validated_params['order_type'] == 'market':
             result = order_service.execute_market_buy(
-                user_id=data['user_id'],
-                exchange_id=data['exchange_id'],
-                token=data['token'],
-                amount=float(data['amount'])
+                user_id=request.validated_params['user_id'],
+                exchange_id=request.validated_params['exchange_id'],
+                token=request.validated_params['token'],
+                amount=float(request.validated_params['amount'])
             )
-        elif data['order_type'] == 'limit':
+        elif request.validated_params['order_type'] == 'limit':
             if 'price' not in data:
                 return jsonify({
                     'success': False,
@@ -4466,10 +4480,10 @@ def execute_buy_order():
                 }), 400
             
             result = order_service.execute_limit_buy(
-                user_id=data['user_id'],
-                exchange_id=data['exchange_id'],
-                token=data['token'],
-                amount=float(data['amount']),
+                user_id=request.validated_params['user_id'],
+                exchange_id=request.validated_params['exchange_id'],
+                token=request.validated_params['token'],
+                amount=float(request.validated_params['amount']),
                 price=float(data['price'])
             )
         else:
@@ -4485,9 +4499,9 @@ def execute_buy_order():
             
             if order.get('filled'):
                 position_service.record_buy(
-                    user_id=data['user_id'],
-                    exchange_id=data['exchange_id'],
-                    token=data['token'],
+                    user_id=user_id,
+                    exchange_id=request.validated_params['exchange_id'],
+                    token=request.validated_params['token'],
                     amount=order['filled'],
                     price=order.get('average', order.get('price')),
                     total_cost=order.get('cost'),
@@ -5092,6 +5106,8 @@ def get_open_orders():
 
 
 @app.route('/api/v1/orders/history', methods=['GET'])
+@require_auth
+@require_params('user_id', 'exchange_id', 'symbol')
 def get_orders_history():
     """
     Consulta histórico de ordens (fechadas/canceladas) diretamente na exchange via CCXT
@@ -5105,28 +5121,25 @@ def get_orders_history():
     Returns:
         200: Lista de ordens históricas
         400: Parâmetros inválidos
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         500: Erro interno
     
     Example:
         GET /api/v1/orders/history?user_id=charles_test_user&exchange_id=693481148b0a41e8b6acb07b&symbol=DOGE/USDT&limit=50
     """
     try:
-        user_id = request.args.get('user_id')
-        exchange_id = request.args.get('exchange_id')
-        symbol = request.args.get('symbol')
+        user_id = request.validated_params['user_id']
+        exchange_id = request.validated_params['exchange_id']
+        symbol = request.validated_params['symbol']
         limit = min(int(request.args.get('limit', 100)), 500)
         
-        if not user_id or not exchange_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id e exchange_id são obrigatórios'
-            }), 400
-        
-        if not symbol:
-            return jsonify({
-                'success': False,
-                'error': 'symbol é obrigatório (ex: BTC/USDT, DOGE/USDT). A MEXC exige um par específico para buscar histórico.'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         logger.info(f"Fetching order history from exchange {exchange_id} for user {user_id}")
         
