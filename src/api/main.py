@@ -4527,29 +4527,27 @@ def get_open_orders():
     """
     Consulta ordens abertas diretamente na exchange via CCXT
     
-    🚀 ULTRA-OPTIMIZADO: Cache de 30s + CCXT instance reuse
+    ⚡ SEM CACHE: Dados sempre frescos e em tempo real
+    🛡️  RATE LIMIT: Máximo 1 consulta por segundo por user+exchange
     
     Query Parameters:
         user_id: string (required) - ID do usuário
         exchange_id: string (required) - ID da exchange
         symbol: string (optional) - Par específico (ex: ETH/USDT)
-        force_refresh: boolean (optional) - Força buscar da exchange ignorando cache
     
     Returns:
         200: Lista de ordens abertas
         400: Parâmetros inválidos
+        429: Too many requests (rate limit)
         500: Erro interno
         
     Performance:
-        - Cache hit: ~50-100ms (retorno instantâneo)
-        - Cache miss: ~1-3s (depende da exchange)
-        - Cache TTL: 30 segundos (ordens não mudam tão rápido)
+        - ~1-3s (depende da exchange, sempre busca dados frescos)
     """
     try:
         user_id = request.args.get('user_id')
         exchange_id = request.args.get('exchange_id')
         symbol = request.args.get('symbol')
-        force_refresh = request.args.get('force_refresh', 'false').lower() == 'true'
         
         if not user_id or not exchange_id:
             return jsonify({
@@ -4557,20 +4555,27 @@ def get_open_orders():
                 'error': 'user_id and exchange_id are required'
             }), 400
         
-        # Cache key: user + exchange + symbol
-        cache_key = f"open_orders:{user_id}:{exchange_id}:{symbol or 'all'}"
+        # 🛡️  RATE LIMIT: Evita chamadas excessivas (máx 1 por segundo por user+exchange)
+        rate_limit_key = f"rate_limit:open_orders:{user_id}:{exchange_id}"
         orders_cache = get_orders_cache()
         
-        # Check cache first (unless force_refresh=true)
-        if not force_refresh:
-            cached_data = orders_cache.get(cache_key)
-            if cached_data:
-                logger.info(f"⚡ INSTANT: Returning {len(cached_data.get('orders', []))} cached open orders for {exchange_id}")
-                # Add cache indicator
-                cached_data['from_cache'] = True
-                return jsonify(cached_data), 200
+        is_valid, last_request_time = orders_cache.get(rate_limit_key)
+        if is_valid and last_request_time:
+            time_since_last = datetime.utcnow().timestamp() - last_request_time
+            if time_since_last < 1.0:  # Menos de 1 segundo desde última requisição
+                wait_time = 1.0 - time_since_last
+                logger.warning(f"⚠️  Rate limit hit for {exchange_id} - wait {wait_time:.2f}s")
+                return jsonify({
+                    'success': False,
+                    'error': 'Rate limit exceeded',
+                    'message': f'Please wait {wait_time:.1f}s before next request',
+                    'retry_after': wait_time
+                }), 429
         
-        logger.info(f"🔄 SLOW PATH: Cache miss, fetching from exchange API for {exchange_id}")
+        # Marca timestamp da requisição atual
+        orders_cache.set(rate_limit_key, datetime.utcnow().timestamp(), ttl_seconds=2)
+        
+        logger.info(f"🔄 Fetching fresh open orders from exchange API for {exchange_id}")
         
         # Get user exchange credentials
         user_exchange = db.user_exchanges.find_one({'user_id': user_id})
@@ -4608,9 +4613,9 @@ def get_open_orders():
         # Try to get CCXT instance from cache to avoid re-decryption
         ccxt_cache_key = f"ccxt_instance:{user_id}:{exchange_id}"
         ccxt_cache = get_ccxt_instances_cache()
-        exchange = ccxt_cache.get(ccxt_cache_key)
+        is_cached, exchange = ccxt_cache.get(ccxt_cache_key)
         
-        if not exchange:
+        if not is_cached or not exchange:
             # Decrypt credentials only if not cached
             encryption_service = get_encryption_service()
             decrypted = encryption_service.decrypt_credentials({
@@ -4709,10 +4714,6 @@ def get_open_orders():
             'cached_at': datetime.utcnow().isoformat()
         }
         
-        # Cache the result for 30 seconds (balanced: fresh enough but reduces API calls)
-        orders_cache.set(cache_key, response_data, ttl_seconds=30)
-        logger.info(f"💾 Cached {len(open_orders)} orders for 30 seconds")
-        
         return jsonify(response_data), 200
         
     except ccxt.AuthenticationError as e:
@@ -4750,7 +4751,6 @@ def get_open_orders():
                     'cached_at': datetime.utcnow().isoformat()
                 }
                 
-                orders_cache.set(cache_key, response_data, ttl_seconds=30)
                 return jsonify(response_data), 200
             except:
                 pass  # If retry fails, continue with graceful degradation below
