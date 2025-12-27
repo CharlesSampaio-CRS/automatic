@@ -1,0 +1,71 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crypto-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      # Hot-reload: monta código local no container
+      - ./src:/app/src
+      - ./run.py:/app/run.py
+      - ./wsgi.py:/app/wsgi.py
+      # Persiste logs localmente
+      - ./logs:/app/logs
+    environment:
+      # Flask
+      - FLASK_APP=run.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      
+      # MongoDB Atlas (remoto)
+      - MONGO_URI=${MONGO_URI}
+      
+      # JWT
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ACCESS_TOKEN_EXPIRES=${JWT_ACCESS_TOKEN_EXPIRES:-86400}
+      - JWT_REFRESH_TOKEN_EXPIRES=${JWT_REFRESH_TOKEN_EXPIRES:-2592000}
+      
+      # Security
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      
+      # CORS (permite React Native local)
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      
+      # Timezone
+      - TZ=America/Sao_Paulo
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - crypto-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  crypto-network:
+    driver: bridge
+
+# Opcional: adicionar MongoDB local para desenvolvimento
+# Descomente se quiser usar MongoDB local em vez do Atlas
+#
+#  mongodb:
+#    image: mongo:7.0
+#    container_name: crypto-mongo
+#    ports:
+#      - "27017:27017"
+#    environment:
+#      - MONGO_INITDB_ROOT_USERNAME=admin
+#      - MONGO_INITDB_ROOT_PASSWORD=admin123
+#    volumes:
+#      - mongo_data:/data/db
+#    networks:
+#      - crypto-network
+#
+#volumes:
+#  mongo_data:
