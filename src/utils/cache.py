@@ -112,6 +112,8 @@ _strategies_cache = SimpleCache(default_ttl_seconds=120)  # 2 minutes for strate
 _single_strategy_cache = SimpleCache(default_ttl_seconds=180)  # 3 minutes for single strategy
 _token_search_cache = SimpleCache(default_ttl_seconds=60)  # 1 minute for token search/prices
 _ccxt_instances_cache = SimpleCache(default_ttl_seconds=300)  # 5 minutes for CCXT exchange instances
+_portfolio_evolution_cache = SimpleCache(default_ttl_seconds=300)  # 5 minutes for portfolio evolution
+_orders_cache = SimpleCache(default_ttl_seconds=300)  # 5 minutes for orders history
 
 
 def get_exchanges_cache() -> SimpleCache:
@@ -142,3 +144,54 @@ def get_token_search_cache() -> SimpleCache:
 def get_ccxt_instances_cache() -> SimpleCache:
     """Get global CCXT exchange instances cache (with load_markets already done)"""
     return _ccxt_instances_cache
+
+
+def get_portfolio_evolution_cache() -> SimpleCache:
+    """Get global portfolio evolution cache instance"""
+    return _portfolio_evolution_cache
+
+
+def get_orders_cache() -> SimpleCache:
+    """Get global orders history cache instance"""
+    return _orders_cache
+
+
+def invalidate_user_caches(user_id: str, cache_type: str = 'all'):
+    """
+    Invalidate all caches related to a specific user
+    
+    Args:
+        user_id: User ID to invalidate caches for
+        cache_type: Type of cache to invalidate ('all', 'balances', 'strategies', 'exchanges', 'portfolio')
+    """
+    from src.services.balance_service import _balance_cache
+    from src.utils.logger import get_logger
+    
+    logger = get_logger(__name__)
+    logger.info(f"🗑️ Invalidating {cache_type} caches for user: {user_id}")
+    
+    if cache_type in ['all', 'balances']:
+        # Invalidate balance caches
+        _balance_cache.delete(f"summary_{user_id}")
+        _balance_cache.delete(f"full_{user_id}")
+        logger.debug(f"  ✅ Cleared balance caches for {user_id}")
+    
+    if cache_type in ['all', 'strategies']:
+        # Invalidate all strategy caches for this user
+        _strategies_cache.clear_pattern(f"strategies_{user_id}")
+        _single_strategy_cache.clear_pattern(user_id)
+        logger.debug(f"  ✅ Cleared strategy caches for {user_id}")
+    
+    if cache_type in ['all', 'exchanges']:
+        # Invalidate exchange caches
+        _exchanges_cache.delete(f"available_{user_id}")
+        _linked_exchanges_cache.delete(f"linked_{user_id}")
+        logger.debug(f"  ✅ Cleared exchange caches for {user_id}")
+    
+    if cache_type in ['all', 'portfolio']:
+        # Invalidate portfolio evolution caches
+        _portfolio_evolution_cache.clear_pattern(f"evolution_{user_id}")
+        logger.debug(f"  ✅ Cleared portfolio caches for {user_id}")
+    
+    logger.info(f"✅ Cache invalidation completed for user: {user_id}")
+
