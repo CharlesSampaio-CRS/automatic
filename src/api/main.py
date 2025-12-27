@@ -1061,6 +1061,8 @@ def get_linked_exchanges():
         }), 500
 
 @app.route('/api/v1/exchanges/unlink', methods=['DELETE'])
+@require_auth
+@require_params('user_id', 'exchange_id')
 def unlink_exchange():
     """
     Remove vínculo de uma exchange (NOVA ESTRUTURA COM ARRAY)
@@ -1074,6 +1076,8 @@ def unlink_exchange():
     Returns:
         200: Exchange desvinculada com sucesso
         400: Dados inválidos
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         404: Vínculo não encontrado
         500: Erro ao desvincular
     """
@@ -1086,14 +1090,15 @@ def unlink_exchange():
                 'error': 'Request body is required'
             }), 400
         
-        user_id = data.get('user_id')
-        exchange_id = data.get('exchange_id')
+        user_id = request.validated_params['user_id']
+        exchange_id = request.validated_params['exchange_id']
         
-        if not user_id or not exchange_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id and exchange_id are required'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Validar ObjectId
         try:
@@ -1165,6 +1170,8 @@ def unlink_exchange():
 
 
 @app.route('/api/v1/exchanges/disconnect', methods=['POST'])
+@require_auth
+@require_params('user_id', 'exchange_id')
 def disconnect_exchange():
     """
     Desconecta uma exchange (soft delete - marca como inativa)
@@ -1179,6 +1186,8 @@ def disconnect_exchange():
     Returns:
         200: Exchange desconectada com sucesso
         400: Dados inválidos
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         404: Exchange não encontrada
         500: Erro ao desconectar
     """
@@ -1191,14 +1200,15 @@ def disconnect_exchange():
                 'error': 'Request body is required'
             }), 400
         
-        user_id = data.get('user_id')
-        exchange_id = data.get('exchange_id')
+        user_id = request.validated_params['user_id']
+        exchange_id = request.validated_params['exchange_id']
         
-        if not user_id or not exchange_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id and exchange_id are required'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Validar ObjectId
         try:
@@ -1287,6 +1297,8 @@ def disconnect_exchange():
 
 
 @app.route('/api/v1/exchanges/delete', methods=['DELETE'])
+@require_auth
+@require_params('user_id', 'exchange_id')
 def delete_exchange():
     """
     Deleta permanentemente uma conexão de exchange (hard delete)
@@ -1301,6 +1313,8 @@ def delete_exchange():
     Returns:
         200: Exchange deletada com sucesso
         400: Dados inválidos
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         404: Exchange não encontrada
         500: Erro ao deletar
     """
@@ -1313,14 +1327,15 @@ def delete_exchange():
                 'error': 'Request body is required'
             }), 400
         
-        user_id = data.get('user_id')
-        exchange_id = data.get('exchange_id')
+        user_id = request.validated_params['user_id']
+        exchange_id = request.validated_params['exchange_id']
         
-        if not user_id or not exchange_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id and exchange_id are required'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Validar ObjectId
         try:
@@ -1395,6 +1410,8 @@ def delete_exchange():
 
 
 @app.route('/api/v1/exchanges/connect', methods=['POST'])
+@require_auth
+@require_params('user_id', 'exchange_id')
 def connect_exchange():
     """
     Conecta/Reativa uma exchange desconectada (usando credenciais já salvas)
@@ -1408,6 +1425,8 @@ def connect_exchange():
     Returns:
         200: Exchange conectada com sucesso
         400: Dados inválidos ou exchange já está ativa
+        401: Token inválido ou ausente
+        403: user_id do token não corresponde ao user_id do parâmetro
         404: Exchange não encontrada
         500: Erro ao conectar
     """
@@ -1420,14 +1439,15 @@ def connect_exchange():
                 'error': 'Request body is required'
             }), 400
         
-        user_id = data.get('user_id')
-        exchange_id = data.get('exchange_id')
+        user_id = request.validated_params['user_id']
+        exchange_id = request.validated_params['exchange_id']
         
-        if not user_id or not exchange_id:
+        # Verify user_id from token matches user_id in params
+        if request.user_id != user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id and exchange_id are required'
-            }), 400
+                'error': 'Unauthorized: user_id mismatch'
+            }), 403
         
         # Validar ObjectId
         try:
@@ -2705,6 +2725,7 @@ def get_exchange_token_info(exchange_id, symbol):
         }), 500
 
 @app.route('/api/v1/exchanges/<exchange_id>', methods=['GET'])
+@require_auth
 def get_exchange_info(exchange_id):
     """
     Busca informações detalhadas de uma exchange específica.
@@ -2719,6 +2740,7 @@ def get_exchange_info(exchange_id):
     Returns:
         200: Informações da exchange
         400: exchange_id inválido
+        401: Token inválido ou ausente
         404: Exchange não encontrada
         500: Erro interno
     
