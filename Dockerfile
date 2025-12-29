@@ -29,9 +29,13 @@ RUN mkdir -p logs
 EXPOSE 5000
 
 # Define variáveis de ambiente padrão
-ENV FLASK_APP=run.py
-ENV FLASK_ENV=development
+ENV FLASK_APP=wsgi.py
+ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 
-# Comando para rodar a aplicação
-CMD ["python", "run.py"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:5000/health', timeout=5)" || exit 1
+
+# Comando para rodar a aplicação com gunicorn (produção)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "--access-logfile", "logs/access.log", "--error-logfile", "logs/error.log", "wsgi:application"]
