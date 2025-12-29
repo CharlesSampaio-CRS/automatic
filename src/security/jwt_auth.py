@@ -6,7 +6,7 @@ Baseado no padrão Kong para geração e validação de tokens
 
 Funcionalidades:
 - Geração de JWT tokens
-- Validação de tokens
+- Validação de tokens RS256 (Kong)
 - Refresh tokens
 - OAuth integration (Google/Apple)
 """
@@ -23,6 +23,16 @@ JWT_SECRET = os.getenv('JWT_SECRET', 'nQv?J/&dNnB*qni@@KonG')
 JWT_ALGORITHM = 'HS256'
 JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)  # Token expira em 24h
 JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)  # Refresh expira em 30 dias
+
+# Carregar chave pública RSA do Kong para validar tokens RS256
+KONG_PUBLIC_KEY_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'public.pem')
+try:
+    with open(KONG_PUBLIC_KEY_PATH, 'r') as f:
+        KONG_PUBLIC_KEY = f.read()
+    print(f"✅ Kong public key loaded from {KONG_PUBLIC_KEY_PATH}")
+except Exception as e:
+    print(f"⚠️ Warning: Could not load Kong public key: {e}")
+    KONG_PUBLIC_KEY = None
 
 
 def generate_access_token(user_id: str, email: str, provider: str = 'email') -> str:
@@ -74,6 +84,7 @@ def generate_refresh_token(user_id: str) -> str:
 def verify_token(token: str) -> Tuple[bool, Optional[Dict], Optional[str]]:
     """
     Verifica e decodifica token JWT
+    Suporta tanto HS256 (tokens internos) quanto RS256 (tokens do Kong OAuth)
     
     Args:
         token: Token JWT string
@@ -81,8 +92,28 @@ def verify_token(token: str) -> Tuple[bool, Optional[Dict], Optional[str]]:
     Returns:
         Tuple (is_valid, payload, error_message)
     """
+    # Primeiro tenta validar com RS256 (Kong OAuth)
+    if KONG_PUBLIC_KEY:
+        try:
+            payload = jwt.decode(
+                token, 
+                KONG_PUBLIC_KEY, 
+                algorithms=['RS256'],
+                options={'verify_aud': False}  # Kong não usa 'aud' claim
+            )
+            print(f"✅ Token RS256 validated successfully for user: {payload.get('sub')}")
+            return True, payload, None
+        except jwt.ExpiredSignatureError:
+            return False, None, 'Token expired'
+        except jwt.InvalidTokenError as e:
+            # Se falhar RS256, tenta HS256
+            print(f"⚠️ RS256 validation failed: {e}, trying HS256...")
+            pass
+    
+    # Tenta validar com HS256 (tokens internos/legado)
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        print(f"✅ Token HS256 validated successfully for user: {payload.get('user_id')}")
         return True, payload, None
     except jwt.ExpiredSignatureError:
         return False, None, 'Token expired'
@@ -139,7 +170,8 @@ def require_auth(f):
             }), 401
         
         # Adiciona user_id ao request para uso na rota
-        request.user_id = payload['user_id']
+        # Kong usa 'sub' claim, tokens internos usam 'user_id'
+        request.user_id = payload.get('sub') or payload.get('user_id')
         request.user_email = payload.get('email')
         request.auth_provider = payload.get('provider')
         

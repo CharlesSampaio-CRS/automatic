@@ -333,6 +333,87 @@ from src.security.jwt_auth import (
     require_auth
 )
 
+@app.route('/api/v1/auth/dev-login', methods=['POST'])
+def dev_login():
+    """
+    🔧 DEV ONLY - Login simplificado para testes locais
+    
+    Request Body:
+        {
+            "email": "string",
+            "name": "string" (optional)
+        }
+    
+    Returns:
+        200: {
+            "success": true,
+            "access_token": "jwt_token",
+            "refresh_token": "jwt_refresh_token",
+            "user": {
+                "id": "user_id",
+                "email": "email",
+                "name": "name"
+            }
+        }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get('email'):
+            return jsonify({
+                'success': False,
+                'error': 'Email is required'
+            }), 400
+        
+        email = data['email']
+        name = data.get('name', email.split('@')[0])
+        
+        # Busca ou cria usuário
+        users_collection = db.users
+        user = users_collection.find_one({'email': email})
+        
+        if not user:
+            user_id = f"dev_{email.split('@')[0]}_{int(datetime.utcnow().timestamp())}"
+            user_doc = {
+                'user_id': user_id,
+                'email': email,
+                'name': name,
+                'provider': 'dev',
+                'created_at': datetime.utcnow(),
+                'last_login': datetime.utcnow()
+            }
+            users_collection.insert_one(user_doc)
+            user = user_doc
+        else:
+            user_id = user['user_id']
+            users_collection.update_one(
+                {'_id': user['_id']},
+                {'$set': {'last_login': datetime.utcnow()}}
+            )
+        
+        # Gera tokens
+        access_token = generate_access_token(user_id, email, 'dev')
+        refresh_token = generate_refresh_token(user_id)
+        
+        return jsonify({
+            'success': True,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': {
+                'id': user_id,
+                'email': email,
+                'name': name
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in dev-login: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/v1/auth/login', methods=['POST'])
 def login():
     """
@@ -5030,38 +5111,88 @@ def get_open_orders():
                 'message': 'Exchange does not support fetching open orders'
             }), 200
         
-        # Fetch open orders with timeout protection
-        logger.info(f"🔍 Fetching open orders from {exchange_info.get('nome')} (symbol: {symbol or 'all'})")
-        try:
-            if symbol:
-                open_orders = exchange.fetch_open_orders(symbol)
-            else:
-                open_orders = exchange.fetch_open_orders()
-        except ccxt.NotSupported as e:
-            logger.warning(f"⚠️  {exchange_info.get('nome')} does not support fetch_open_orders: {str(e)}")
-            return jsonify({
-                'success': True,
-                'count': 0,
-                'exchange': exchange_info.get('nome'),
-                'exchange_id': exchange_id,
-                'orders': [],
-                'from_cache': False,
-                'not_supported': True,
-                'message': f'Feature not supported: {str(e)}'
-            }), 200
-        except (ccxt.RequestTimeout, ccxt.NetworkError) as e:
-            logger.error(f"⚠️  Network/Timeout error for {exchange_info.get('nome')}: {str(e)}")
-            # Return empty orders instead of error (graceful degradation)
-            return jsonify({
-                'success': True,
-                'count': 0,
-                'exchange': exchange_info.get('nome'),
-                'exchange_id': exchange_id,
-                'orders': [],
-                'from_cache': False,
-                'network_error': True,
-                'message': 'Network error, will retry later'
-            }), 200
+        # Special handling for MEXC: requires symbol for spot market
+        if ccxt_id == 'mexc' and not symbol:
+            logger.info(f"🔍 MEXC detected - fetching open orders per symbol")
+            try:
+                # Fetch balance to get active symbols
+                balance = exchange.fetch_balance()
+                open_orders = []
+                
+                # Get all non-zero balances
+                active_symbols = []
+                for currency, amounts in balance.get('total', {}).items():
+                    if isinstance(amounts, (int, float)) and amounts > 0:
+                        # Try common quote currencies
+                        for quote in ['USDT', 'USDC', 'BTC', 'ETH']:
+                            symbol_pair = f"{currency}/{quote}"
+                            try:
+                                # Check if market exists
+                                if symbol_pair in exchange.markets:
+                                    active_symbols.append(symbol_pair)
+                                    break
+                            except:
+                                continue
+                
+                logger.info(f"📊 MEXC: Found {len(active_symbols)} active symbols: {active_symbols[:5]}...")
+                
+                # Fetch orders for each symbol (max 20 to avoid rate limits)
+                for symbol_pair in active_symbols[:20]:
+                    try:
+                        symbol_orders = exchange.fetch_open_orders(symbol_pair)
+                        open_orders.extend(symbol_orders)
+                        logger.debug(f"  ✓ {symbol_pair}: {len(symbol_orders)} orders")
+                    except Exception as e:
+                        logger.debug(f"  ✗ {symbol_pair}: {str(e)[:50]}")
+                        continue
+                
+                logger.info(f"✅ MEXC: Collected {len(open_orders)} total open orders")
+                
+            except Exception as e:
+                logger.warning(f"⚠️  MEXC special handling failed: {str(e)}")
+                # Return empty on failure (graceful degradation)
+                return jsonify({
+                    'success': True,
+                    'count': 0,
+                    'exchange': exchange_info.get('nome'),
+                    'exchange_id': exchange_id,
+                    'orders': [],
+                    'from_cache': False,
+                    'message': 'MEXC requires symbol parameter for spot market'
+                }), 200
+        else:
+            # Standard fetch for other exchanges or when symbol is provided
+            logger.info(f"🔍 Fetching open orders from {exchange_info.get('nome')} (symbol: {symbol or 'all'})")
+            try:
+                if symbol:
+                    open_orders = exchange.fetch_open_orders(symbol)
+                else:
+                    open_orders = exchange.fetch_open_orders()
+            except ccxt.NotSupported as e:
+                logger.warning(f"⚠️  {exchange_info.get('nome')} does not support fetch_open_orders: {str(e)}")
+                return jsonify({
+                    'success': True,
+                    'count': 0,
+                    'exchange': exchange_info.get('nome'),
+                    'exchange_id': exchange_id,
+                    'orders': [],
+                    'from_cache': False,
+                    'not_supported': True,
+                    'message': f'Feature not supported: {str(e)}'
+                }), 200
+            except (ccxt.RequestTimeout, ccxt.NetworkError) as e:
+                logger.error(f"⚠️  Network/Timeout error for {exchange_info.get('nome')}: {str(e)}")
+                # Return empty orders instead of error (graceful degradation)
+                return jsonify({
+                    'success': True,
+                    'count': 0,
+                    'exchange': exchange_info.get('nome'),
+                    'exchange_id': exchange_id,
+                    'orders': [],
+                    'from_cache': False,
+                    'network_error': True,
+                    'message': 'Network error, will retry later'
+                }), 200
         
         logger.info(f"📋 Fetched {len(open_orders)} open orders from {exchange_info.get('nome')} for user {user_id}")
         
