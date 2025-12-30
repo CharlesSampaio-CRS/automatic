@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+.env.local
+.DS_Store
+*.log
+target
+**/.pytest_cache
+Dockerfile
+docker-compose.yml
+README.md
