@@ -4,7 +4,7 @@ API Principal - Sistema de Trading Multi-Exchange
 
 import os
 import ccxt
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, redirect, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -62,15 +62,27 @@ def get_database():
     client = MongoClient(MONGODB_URI)
     return client[MONGODB_DATABASE]
 
+def get_kong_database():
+    """Retorna conexão com MongoDB do Kong Security"""
+    kong_uri = os.getenv('KONG_MONGODB_URI', MONGODB_URI)
+    kong_db = os.getenv('KONG_MONGODB_DATABASE', 'kong_security')
+    client = MongoClient(kong_uri)
+    return client[kong_db]
+
 # Teste de conexão
 try:
     db = get_database()
     # Testa conexão
     db.command('ping')
     logger.info("MongoDB conectado com sucesso!")
+    
+    kong_db = get_kong_database()
+    kong_db.command('ping')
+    logger.info("Kong MongoDB conectado com sucesso!")
 except Exception as e:
     logger.error(f"Erro ao conectar MongoDB: {e}")
     db = None
+    kong_db = None
 
 
 # ============================================================================
@@ -333,6 +345,325 @@ from src.security.jwt_auth import (
     require_auth
 )
 
+import urllib.parse
+import secrets
+
+@app.route('/api/v1/auth/google', methods=['GET'])
+def google_auth():
+    """
+    🔐 Inicia fluxo OAuth do Google
+    
+    Returns:
+        200: {
+            "auth_url": "https://accounts.google.com/o/oauth2/v2/auth?..."
+        }
+        500: Erro interno
+    """
+    try:
+        # Lê configurações do ambiente
+        client_id = os.getenv('GOOGLE_CLIENT_ID')
+        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:3000/auth/callback')
+        
+        if not client_id:
+            return jsonify({
+                'success': False,
+                'error': 'Google OAuth not configured'
+            }), 500
+        
+        # Gera state para CSRF protection
+        state = secrets.token_urlsafe(32)
+        
+        # Constrói URL de autenticação do Google
+        params = {
+            'client_id': client_id,
+            'redirect_uri': redirect_uri,
+            'response_type': 'code',
+            'scope': 'openid email profile',
+            'state': state,
+            'access_type': 'offline',
+            'prompt': 'consent'
+        }
+        
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+        
+        logger.info(f"📤 Generated Google OAuth URL for state={state}")
+        
+        return jsonify({
+            'success': True,
+            'auth_url': auth_url
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error generating Google auth URL: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
+        }), 500
+
+
+@app.route('/api/v1/auth/callback', methods=['GET'])
+def auth_callback():
+    """
+    🔐 Callback do OAuth (Google ou Apple)
+    
+    Query Parameters:
+        code: Authorization code do provedor OAuth
+        state: CSRF token
+        
+    Returns:
+        Redirect para frontend com tokens nos query params
+    """
+    try:
+        code = request.args.get('code')
+        state = request.args.get('state')
+        error = request.args.get('error')
+        
+        if error:
+            logger.error(f"❌ OAuth error: {error}")
+            return redirect(f"http://localhost:3000/auth/callback?error={error}")
+        
+        if not code:
+            return jsonify({
+                'success': False,
+                'error': 'No authorization code provided'
+            }), 400
+        
+        # TODO: Verificar state para CSRF protection
+        
+        # Troca código por tokens do Google
+        client_id = os.getenv('GOOGLE_CLIENT_ID')
+        client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:3000/auth/callback')
+        
+        import requests
+        
+        # Troca code por access_token
+        token_response = requests.post('https://oauth2.googleapis.com/token', data={
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code'
+        })
+        
+        if not token_response.ok:
+            logger.error(f"❌ Failed to exchange code: {token_response.text}")
+            return redirect(f"http://localhost:3000/auth/callback?error=token_exchange_failed")
+        
+        tokens = token_response.json()
+        google_access_token = tokens.get('access_token')
+        id_token = tokens.get('id_token')
+        
+        # Busca informações do usuário
+        user_info_response = requests.get(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            headers={'Authorization': f'Bearer {google_access_token}'}
+        )
+        
+        if not user_info_response.ok:
+            logger.error(f"❌ Failed to get user info: {user_info_response.text}")
+            return redirect(f"http://localhost:3000/auth/callback?error=user_info_failed")
+        
+        user_info = user_info_response.json()
+        email = user_info.get('email')
+        name = user_info.get('name')
+        picture = user_info.get('picture')
+        
+        if not email or not name:
+            return redirect(f"http://localhost:3000/auth/callback?error=missing_user_data")
+        
+        # 🔐 Busca usuário no MongoDB do Kong pelo email
+        kong_users_collection = kong_db.users
+        kong_user = kong_users_collection.find_one({'email': email})
+        
+        if kong_user:
+            # Usuário existe no Kong - usa o _id como user_id
+            user_id = str(kong_user['_id'])
+            logger.info(f"✅ User found in Kong DB: {user_id} ({email})")
+            
+            # Atualiza last_login no Kong
+            kong_users_collection.update_one(
+                {'_id': kong_user['_id']},
+                {'$set': {
+                    'last_login': datetime.utcnow(),
+                    'picture': picture,
+                    'name': name
+                }}
+            )
+        else:
+            # Novo usuário - cria no Kong MongoDB primeiro
+            logger.info(f"🆕 Creating new user in Kong DB: {email}")
+            kong_user_doc = {
+                'tenant_id': 'default',
+                'email': email,
+                'oauth_provider': 'google',
+                'oauth_id': user_info.get('sub'),  # Google user ID
+                'name': name,
+                'picture': picture,
+                'roles': ['user'],
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow(),
+                'is_active': True,
+                'email_verified': True,
+                'refresh_tokens': [],
+                'last_login': datetime.utcnow(),
+                'password': None
+            }
+            result = kong_users_collection.insert_one(kong_user_doc)
+            user_id = str(result.inserted_id)
+            logger.info(f"✅ New user created in Kong DB: {user_id}")
+        
+        # Sincroniza referência no MongoDB Python (para exchanges/balances)
+        users_collection = db.users
+        python_user = users_collection.find_one({'email': email})
+        
+        if not python_user:
+            user_doc = {
+                'user_id': user_id,  # Mesmo ID do Kong
+                'email': email,
+                'name': name,
+                'picture': picture,
+                'provider': 'google',
+                'created_at': datetime.utcnow(),
+                'last_login': datetime.utcnow()
+            }
+            users_collection.insert_one(user_doc)
+            logger.info(f"✅ User reference synced to Python DB: {user_id}")
+        else:
+            users_collection.update_one(
+                {'_id': python_user['_id']},
+                {'$set': {
+                    'user_id': user_id,  # Atualiza para o ID do Kong
+                    'last_login': datetime.utcnow(),
+                    'picture': picture,
+                    'name': name
+                }}
+            )
+            logger.info(f"✅ User reference updated in Python DB: {user_id}")
+        
+        # Gera tokens JWT do Python
+        access_token = generate_access_token(user_id, email, 'google')
+        refresh_token = generate_refresh_token(user_id)
+        
+        logger.info(f"✅ Google OAuth successful for {email}")
+        
+        # Retorna página HTML que envia postMessage para window.opener (popup parent)
+        html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login Successful</title>
+    <style>
+        body {{
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: white;
+        }}
+        .container {{
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }}
+        h1 {{ margin: 0 0 1rem 0; font-size: 2rem; }}
+        p {{ margin: 0; opacity: 0.9; }}
+        .spinner {{
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 1rem auto;
+        }}
+        @keyframes spin {{
+            0% {{ transform: rotate(0deg); }}
+            100% {{ transform: rotate(360deg); }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✅ Login Successful!</h1>
+        <div class="spinner"></div>
+        <p>Closing window...</p>
+    </div>
+    
+    <script>
+        console.log('🔐 OAuth Callback - Sending postMessage to opener...');
+        
+        const data = {{
+            type: 'OAUTH_SUCCESS',
+            access_token: '{access_token}',
+            refresh_token: '{refresh_token}',
+            user_id: '{user_id}',
+            email: '{email}',
+            name: '{name}'
+        }};
+        
+        // Envia mensagem para a janela pai (opener)
+        if (window.opener) {{
+            console.log('✅ window.opener found, sending message...');
+            window.opener.postMessage(data, 'http://localhost:8081');
+            
+            // Fecha a janela após 2 segundos
+            setTimeout(() => {{
+                console.log('🚪 Closing popup window...');
+                window.close();
+            }}, 2000);
+        }} else {{
+            console.error('❌ No window.opener found!');
+            document.querySelector('.container').innerHTML = '<h1>❌ Error</h1><p>Please close this window and try again</p>';
+        }}
+    </script>
+</body>
+</html>
+        """
+        
+        return html, 200
+        
+    except Exception as e:
+        logger.error(f"Error in OAuth callback: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        error_html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login Failed</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: white;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>❌ Login Failed</h1>
+        <p>An error occurred. Please close this window and try again.</p>
+    </div>
+</body>
+</html>
+        """
+        return error_html, 500
+
+
 @app.route('/api/v1/auth/dev-login', methods=['POST'])
 def dev_login():
     """
@@ -373,7 +704,10 @@ def dev_login():
         user = users_collection.find_one({'email': email})
         
         if not user:
-            user_id = f"dev_{email.split('@')[0]}_{int(datetime.utcnow().timestamp())}"
+            # Cria com ID consistente
+            email_username = email.split('@')[0].replace('.', '').replace('-', '').replace('_', '').lower()
+            user_id = f"dev_{email_username}"
+            
             user_doc = {
                 'user_id': user_id,
                 'email': email,
@@ -384,12 +718,18 @@ def dev_login():
             }
             users_collection.insert_one(user_doc)
             user = user_doc
+            logger.info(f"✅ New dev user created: {user_id} ({email})")
         else:
+            # Usa ID existente
             user_id = user['user_id']
             users_collection.update_one(
                 {'_id': user['_id']},
-                {'$set': {'last_login': datetime.utcnow()}}
+                {'$set': {
+                    'last_login': datetime.utcnow(),
+                    'name': name
+                }}
             )
+            logger.info(f"✅ Existing dev user logged in: {user_id} ({email})")
         
         # Gera tokens
         access_token = generate_access_token(user_id, email, 'dev')
@@ -477,8 +817,10 @@ def login():
         user = users_collection.find_one({'email': email})
         
         if not user:
-            # Cria novo usuário
-            user_id = f"{provider}_{email.split('@')[0]}_{datetime.utcnow().timestamp()}"
+            # Cria novo usuário com ID consistente baseado no email
+            email_username = email.split('@')[0].replace('.', '').replace('-', '').replace('_', '').lower()
+            user_id = f"{provider}_{email_username}"
+            
             user_doc = {
                 'user_id': user_id,
                 'email': email,
@@ -490,13 +832,19 @@ def login():
             }
             users_collection.insert_one(user_doc)
             user = user_doc
+            logger.info(f"✅ New user created via {provider}: {user_id} ({email})")
         else:
-            # Atualiza last_login
+            # Usa user_id existente do banco
             user_id = user['user_id']
             users_collection.update_one(
                 {'_id': user['_id']},
-                {'$set': {'last_login': datetime.utcnow()}}
+                {'$set': {
+                    'last_login': datetime.utcnow(),
+                    'name': name,
+                    'picture': data.get('picture')
+                }}
             )
+            logger.info(f"✅ Existing user logged in via {provider}: {user_id} ({email})")
         
         # Gera tokens JWT
         access_token = generate_access_token(user_id, email, provider)
@@ -635,6 +983,74 @@ def verify_token_endpoint():
         return jsonify({
             'success': False,
             'error': 'Internal server error'
+        }), 500
+
+
+@app.route('/api/v1/auth/me', methods=['GET'])
+@require_auth
+def get_current_user():
+    """
+    👤 Busca dados completos do usuário autenticado do banco de dados
+    
+    Headers:
+        Authorization: Bearer <jwt_token>
+    
+    Returns:
+        200: {
+            "success": true,
+            "user": {
+                "id": "user_id",
+                "email": "email",
+                "name": "name",
+                "picture": "url",
+                "provider": "google|apple",
+                "created_at": "iso_date",
+                "last_login": "iso_date"
+            }
+        }
+        401: Token inválido ou ausente
+        404: Usuário não encontrado
+        500: Erro interno
+    """
+    try:
+        # Pega user_id do token (validado pelo decorador @require_auth)
+        user_id = request.user_id
+        
+        # Busca usuário no MongoDB
+        users_collection = db.users
+        user = users_collection.find_one({'user_id': user_id})
+        
+        if not user:
+            logger.warning(f"User not found in database: {user_id}")
+            return jsonify({
+                'success': False,
+                'error': 'User not found'
+            }), 404
+        
+        # Retorna dados do usuário
+        user_data = {
+            'id': user['user_id'],
+            'email': user['email'],
+            'name': user.get('name', user['email'].split('@')[0]),
+            'picture': user.get('picture'),
+            'provider': user.get('provider', 'email'),
+            'created_at': user.get('created_at', datetime.utcnow()).isoformat() if isinstance(user.get('created_at'), datetime) else user.get('created_at'),
+            'last_login': user.get('last_login', datetime.utcnow()).isoformat() if isinstance(user.get('last_login'), datetime) else user.get('last_login')
+        }
+        
+        return jsonify({
+            'success': True,
+            'user': user_data
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching user data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'details': str(e)
         }), 500
 
 
