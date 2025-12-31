@@ -2464,25 +2464,65 @@ def cancel_all_orders():
         
         # Create CCXT exchange instance
         exchange_class = getattr(ccxt, ccxt_id)
-        exchange = exchange_class({
+        exchange_config = {
             'apiKey': decrypted['api_key'],
             'secret': decrypted['api_secret'],
             'password': decrypted.get('passphrase'),
             'enableRateLimit': True
-        })
+        }
+        
+        # Bybit specific configuration for Unified Trading Account
+        if ccxt_id == 'bybit':
+            exchange_config['options'] = {
+                'defaultType': 'spot',  # Use spot market
+                'accountType': 'UNIFIED'  # Unified Trading Account
+            }
+            
+            # Add proxy if configured (for geo-restrictions)
+            proxy_url = os.getenv('BYBIT_PROXY_URL')
+            if proxy_url:
+                exchange_config['proxies'] = {
+                    'http': proxy_url,
+                    'https': proxy_url
+                }
+                logger.debug(f"Bybit: Using proxy to bypass geo-restrictions")
+            
+            logger.debug("Bybit: Using unified account configuration for order cancellation")
+        
+        exchange = exchange_class(exchange_config)
         
         # Suppress Binance warning
         if ccxt_id == 'binance':
+            if not hasattr(exchange, 'options'):
+                exchange.options = {}
             exchange.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
         
         # Check if DRY-RUN mode
         dry_run = os.getenv('STRATEGY_DRY_RUN', 'true').lower() == 'true'
         
         # Fetch open orders
-        if symbol:
-            open_orders = exchange.fetch_open_orders(symbol)
-        else:
-            open_orders = exchange.fetch_open_orders()
+        try:
+            if symbol:
+                open_orders = exchange.fetch_open_orders(symbol)
+            else:
+                open_orders = exchange.fetch_open_orders()
+        except Exception as e:
+            error_str = str(e)
+            # Exchanges como MEXC exigem símbolo específico
+            if 'requires a symbol argument' in error_str or 'symbol argument' in error_str:
+                return jsonify({
+                    'success': False,
+                    'error': 'Exchange API error',
+                    'details': f"{exchange_info.get('nome')} requer que você especifique um par de trading específico (symbol) para cancelar ordens. Esta exchange não permite cancelar todas as ordens de uma vez.",
+                    'exchange_limitation': True
+                }), 400
+            # Outro erro genérico
+            logger.error(f"Error fetching open orders: {e}")
+            return jsonify({
+                'success': False,
+                'error': 'Exchange API error',
+                'details': error_str
+            }), 500
         
         if not open_orders:
             return jsonify({
@@ -5490,7 +5530,7 @@ def get_open_orders():
             
             # Create CCXT exchange instance
             exchange_class = getattr(ccxt, ccxt_id)
-            exchange = exchange_class({
+            exchange_config = {
                 'apiKey': decrypted['api_key'],
                 'secret': decrypted['api_secret'],
                 'password': decrypted.get('passphrase'),
@@ -5498,7 +5538,27 @@ def get_open_orders():
                 'options': {
                     'warnOnFetchOpenOrdersWithoutSymbol': False  # Suppress warning for Binance
                 }
-            })
+            }
+            
+            # Bybit specific configuration for Unified Trading Account
+            if ccxt_id == 'bybit':
+                exchange_config['options'].update({
+                    'defaultType': 'spot',  # Use spot market
+                    'accountType': 'UNIFIED'  # Unified Trading Account
+                })
+                
+                # Add proxy if configured (for geo-restrictions)
+                proxy_url = os.getenv('BYBIT_PROXY_URL')
+                if proxy_url:
+                    exchange_config['proxies'] = {
+                        'http': proxy_url,
+                        'https': proxy_url
+                    }
+                    logger.debug(f"Bybit: Using proxy to bypass geo-restrictions")
+                
+                logger.debug("Bybit: Using unified account configuration for orders")
+            
+            exchange = exchange_class(exchange_config)
             
             # Cache the CCXT instance for 5 minutes
             ccxt_cache.set(ccxt_cache_key, exchange)
@@ -5579,11 +5639,23 @@ def get_open_orders():
         else:
             # Standard fetch for other exchanges or when symbol is provided
             logger.info(f"🔍 Fetching open orders from {exchange_info.get('nome')} (symbol: {symbol or 'all'})")
+            
+            # Bybit: Log account configuration for debugging
+            if ccxt_id == 'bybit':
+                logger.info(f"🔍 Bybit config: defaultType={exchange.options.get('defaultType')}, accountType={exchange.options.get('accountType')}")
+            
             try:
                 if symbol:
                     open_orders = exchange.fetch_open_orders(symbol)
                 else:
                     open_orders = exchange.fetch_open_orders()
+                
+                # Bybit: Log raw response for debugging
+                if ccxt_id == 'bybit':
+                    logger.info(f"🔍 Bybit returned {len(open_orders)} orders")
+                    if len(open_orders) > 0:
+                        logger.debug(f"🔍 Bybit first order: {open_orders[0]}")
+
             except ccxt.NotSupported as e:
                 logger.warning(f"⚠️  {exchange_info.get('nome')} does not support fetch_open_orders: {str(e)}")
                 return jsonify({

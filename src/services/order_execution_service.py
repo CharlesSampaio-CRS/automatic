@@ -76,6 +76,8 @@ class OrderExecutionService:
             
             # Create CCXT exchange instance
             exchange_class = getattr(ccxt, exchange_info['ccxt_id'])
+            ccxt_id = exchange_info['ccxt_id'].lower()
+            
             config = {
                 'apiKey': decrypted['api_key'],
                 'secret': decrypted['api_secret'],
@@ -85,6 +87,25 @@ class OrderExecutionService:
             
             if decrypted.get('passphrase'):
                 config['password'] = decrypted['passphrase']
+            
+            # Bybit specific configuration for Unified Trading Account
+            if ccxt_id == 'bybit':
+                config['options'].update({
+                    'defaultType': 'spot',  # Use spot market
+                    'accountType': 'UNIFIED'  # Unified Trading Account
+                })
+                
+                # Add proxy if configured (for geo-restrictions)
+                import os
+                proxy_url = os.getenv('BYBIT_PROXY_URL')
+                if proxy_url:
+                    config['proxies'] = {
+                        'http': proxy_url,
+                        'https': proxy_url
+                    }
+                    logger.debug(f"Bybit: Using proxy to bypass geo-restrictions")
+                
+                logger.debug("Bybit: Using unified account configuration for order execution")
             
             exchange = exchange_class(config)
             
@@ -485,12 +506,25 @@ class OrderExecutionService:
                 # Get exchange instance
                 exchange = self._get_exchange_instance(user_id, exchange_id)
                 
+                # Get exchange info for logging
+                from bson import ObjectId
+                exchange_info = self.db.exchanges.find_one({'_id': ObjectId(exchange_id)})
+                ccxt_id = exchange_info.get('ccxt_id', '').lower() if exchange_info else 'unknown'
+                
                 if not hasattr(exchange, 'cancel_order'):
                     raise Exception(f"Exchange does not support order cancellation")
                 
+                # Bybit: Log configuration for debugging
+                if ccxt_id == 'bybit':
+                    logger.info(f"🔍 Bybit cancel config: defaultType={exchange.options.get('defaultType')}, accountType={exchange.options.get('accountType')}")
+                
                 # Cancel directly
-                logger.info(f"🔴 Canceling order: {order_id} ({symbol})")
+                logger.info(f"🔴 Canceling order: {order_id} ({symbol}) on {ccxt_id}")
                 canceled_order = exchange.cancel_order(order_id, symbol)
+                
+                # Bybit: Log result for debugging
+                if ccxt_id == 'bybit':
+                    logger.info(f"✅ Bybit order canceled: {canceled_order.get('id')} - status: {canceled_order.get('status')}")
                 
                 return {
                     'success': True,

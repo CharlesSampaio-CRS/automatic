@@ -996,12 +996,17 @@ class BalanceService:
             Dict with aggregated balance data
         """
         # Check cache first
+        cache_key = f"balances_{user_id}"
+        
         if use_cache:
-            cache_key = f"balances_{user_id}"
             is_valid, cached_data = _balance_cache.get(cache_key)
             if is_valid:
                 cached_data['from_cache'] = True
                 return cached_data
+        else:
+            # ⚡ CRITICAL: Clear cache when force_refresh to prevent stale data
+            _balance_cache.clear(cache_key)
+            logger.info(f"🔄 Cache cleared for user {user_id} (force_refresh=True)")
         
         start_time = time.time()
         
